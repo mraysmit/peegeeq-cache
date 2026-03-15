@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Applies all V001–V006 migration SQL files against a real PostgreSQL instance
+ * Applies the V001 migration SQL file against a real PostgreSQL instance
  * and verifies the resulting schema objects.
  * <p>
  * Starts a disposable PostgreSQL container via the Docker CLI to work around
@@ -65,21 +65,11 @@ class MigrationSmokeTest {
         // Wait for PostgreSQL to become ready
         waitForPostgres();
 
-        // Apply migrations
-        String[] migrations = {
-                "V001__create_schema.sql",
-                "V002__create_cache_entries.sql",
-                "V003__create_cache_counters.sql",
-                "V004__create_cache_locks.sql",
-                "V005__create_lock_fencing_sequence.sql",
-                "V006__create_indexes.sql"
-        };
+        // Apply migration
         try (Connection conn = connect()) {
-            for (String file : migrations) {
-                String sql = readMigration(file);
-                try (Statement stmt = conn.createStatement()) {
-                    stmt.execute(sql);
-                }
+            String sql = readMigration("V001__create_peegee_cache_schema.sql");
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(sql);
             }
         }
     }

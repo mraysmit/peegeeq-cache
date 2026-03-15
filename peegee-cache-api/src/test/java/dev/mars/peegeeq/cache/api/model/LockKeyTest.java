@@ -20,13 +20,13 @@ class LockKeyTest {
     }
 
     @Test
-    void nullNamespaceThrowsIllegalArgument() {
-        assertThrows(IllegalArgumentException.class, () -> new LockKey(null, "k"));
+    void nullNamespaceThrowsNullPointerException() {
+        assertThrows(NullPointerException.class, () -> new LockKey(null, "k"));
     }
 
     @Test
-    void nullKeyThrowsIllegalArgument() {
-        assertThrows(IllegalArgumentException.class, () -> new LockKey("ns", null));
+    void nullKeyThrowsNullPointerException() {
+        assertThrows(NullPointerException.class, () -> new LockKey("ns", null));
     }
 
     @Test

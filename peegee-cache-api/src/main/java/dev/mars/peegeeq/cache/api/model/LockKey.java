@@ -1,12 +1,17 @@
 package dev.mars.peegeeq.cache.api.model;
 
+import java.util.Objects;
+
 public record LockKey(String namespace, String key) {
 
     public LockKey {
-        if (namespace == null || namespace.isBlank()) {
+        Objects.requireNonNull(namespace, "namespace must not be null");
+        Objects.requireNonNull(key, "key must not be null");
+
+        if (namespace.isBlank()) {
             throw new IllegalArgumentException("namespace must not be blank");
         }
-        if (key == null || key.isBlank()) {
+        if (key.isBlank()) {
             throw new IllegalArgumentException("key must not be blank");
         }
     }

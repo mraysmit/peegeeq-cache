@@ -417,7 +417,6 @@ dev.mars.peegeeq.cache.api.counter
 dev.mars.peegeeq.cache.api.pubsub
 dev.mars.peegeeq.cache.api.scan
 dev.mars.peegeeq.cache.api.model
-dev.mars.peegeeq.cache.api.options
 dev.mars.peegeeq.cache.api.exception
 ```
 
