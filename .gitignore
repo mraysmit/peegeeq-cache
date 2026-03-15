@@ -5,9 +5,6 @@ target/
 
 ### Log Files ###
 logs/
-peegeeq-db/logs/
-peegeeq-examples/logs/
-peegeeq-native/logs/
 target/test-logs/
 */target/test-logs/
 *.log
@@ -20,8 +17,8 @@ target/test-logs/
 !package-lock.json
 
 ### TestContainers auto-generated files ###
-peegeeq-management-ui/testcontainers-db.json
-peegeeq-management-ui/.testcontainers-state.json
+**/testcontainers-db.json
+**/.testcontainers-state.json
 
 ### Prevent test files in root directory ###
 # Test SQL files should go in test resources
@@ -29,12 +26,7 @@ peegeeq-management-ui/.testcontainers-state.json
 # Test log files are already covered by *.log above
 
 ### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/AugmentWebviewStateStore.xml
-.idea/encodings.xml
-.idea/libraries/
+.idea/
 *.iws
 *.iml
 *.ipr
@@ -59,9 +51,12 @@ build/
 !**/src/test/**/build/
 
 ### VS Code ###
+.history/
 .vscode/
 
-### Mac OS ###
+### OS ###
+Thumbs.db
+Desktop.ini
 .DS_Store
 
 ### Node.js ###
@@ -90,9 +85,4 @@ notes.txt
 TODO.txt
 
 ### OS Generated Files ###
-Thumbs.db
 ehthumbs.db
-Desktop.ini
-
-### IDE history/backups ###
-/.history/

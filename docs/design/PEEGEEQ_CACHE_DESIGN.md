@@ -137,11 +137,6 @@ These are the features that provide real value and map well to PostgreSQL:
   - release only if owner matches
   - fencing tokens
 
-- Rate limiting primitives
-  - fixed window
-  - sliding window
-  - token bucket / leaky bucket style support later
-
 - Pub/sub
   - lightweight channel publish/subscribe
   - cache invalidation fan-out
@@ -149,6 +144,7 @@ These are the features that provide real value and map well to PostgreSQL:
 
 ### Tier 2 — High-value, but later
 
+- Rate limiting primitives (fixed window, sliding window, token bucket / leaky bucket)
 - Hashes
 - Sorted sets
 - Durable job queues
@@ -196,10 +192,10 @@ These are the features that provide real value and map well to PostgreSQL:
 | Atomic counters | INCR, DECR, INCRBY | High | Low | Excellent | V1 Core | Very common real use case |
 | Namespaces | Prefix/grouping | High | Low | Excellent | V1 Core | Operational sanity |
 | Locking | Lease lock, owner token, renew, release | High | Medium | Excellent | V1 Core | Strong PostgreSQL fit |
-| Bulk key/value | MGET, MSET, multi-delete | High | Low | Excellent | V1 | Needed for efficiency |
+| Bulk key/value | MGET, MSET, multi-delete | High | Low | Excellent | V1 Core | Needed for efficiency; included in CacheService interface from day one |
 | Scan / iteration | SCAN-like listing | Medium | Medium | Good | V1 | Needed for admin/debug/migration |
 | Key metadata | Created time, updated time, hit count, expiry, version | High | Medium | Excellent | V1 | Needed for observability and CAS |
-| Compare-and-set | Versioned optimistic updates | High | Medium | Excellent | V1.5 / V2 | Very useful in real systems |
+| Compare-and-set | Versioned optimistic updates | High | Medium | Excellent | V2 | Very useful in real systems |
 | Hashes | HSET, HGET, HMGET, HINCRBY | High | Medium | Good | V2 | Strong business value |
 | Sorted sets | ZADD, ZRANGE, score queries | High | Medium | Excellent | V2 | Great PostgreSQL fit |
 | Sets | SADD, SREM, SISMEMBER | Medium | Medium | Good | V2 | Useful but not first priority |
@@ -224,6 +220,7 @@ These are the features that provide real value and map well to PostgreSQL:
 ### V1 core shortlist
 
 - key/value get/set/delete
+- bulk get/set/delete
 - TTL and expiry
 - atomic conditional write support
 - atomic counters
@@ -232,7 +229,6 @@ These are the features that provide real value and map well to PostgreSQL:
 
 ### Remaining V1 shortlist
 
-- bulk get/set/delete
 - scan/list by namespace and prefix
 - metadata/versioning
 - lightweight pub/sub
@@ -570,6 +566,8 @@ public interface CounterService {
 }
 ```
 
+**Design note on `CacheKey` reuse:** `CounterService` uses `CacheKey` rather than introducing a separate `CounterKey` type. This is intentional. `CacheKey` is structurally just `(namespace, key)` — a general-purpose composite identifier. Counters and cache entries live in separate tables, so there is no key-space collision. Introducing `CounterKey` with an identical `(namespace, key)` structure would add a type without adding meaning. If counter identity diverges structurally from cache identity in a later phase, a dedicated key type can be introduced then.
+
 ### 8.3 `LockService`
 
 ```java
@@ -614,6 +612,8 @@ public interface ScanService {
 }
 ```
 
+**Scope note:** `ScanService` in Phase 1 covers `cache_entries` only. Scanning counters and locks is deferred to V1 completion (Phase 6) since operational inspection of those tables is lower-frequency. If needed earlier, direct SQL reads against `cache_counters` and `cache_locks` are explicitly supported (see section 25).
+
 ### 8.5 `PubSubService`
 
 ```java
@@ -621,7 +621,7 @@ package dev.mars.peegeeq.cache.api.pubsub;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.api.model.PubSubMessage;
-import dev.mars.peegeeq.cache.api.model.Subscription;
+import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import io.vertx.core.Future;
 
 import java.util.function.Consumer;
@@ -641,8 +641,11 @@ public record PubSubMessage(
         String channel,
         String payload,
         String contentType,
-        long publishedAtEpochMillis
+        long receivedAtEpochMillis
 ) {}
+```
+
+**Timestamp semantics:** `receivedAtEpochMillis` is stamped by the subscriber when the `NOTIFY` payload arrives, using `System.currentTimeMillis()` on the receiving JVM. PostgreSQL `NOTIFY` does not include a server-side timestamp in the payload. The field was renamed from `publishedAtEpochMillis` to `receivedAtEpochMillis` to avoid implying publisher-clock accuracy.
 ```
 
 ### Aggregated façade: `PeeGeeCache`
@@ -884,14 +887,14 @@ public record CacheSetRequest(
 ```java
 package dev.mars.peegeeq.cache.api.model;
 
-import java.util.Optional;
-
 public record CacheSetResult(
         boolean applied,
         long newVersion,
-        Optional<CacheEntry> previousEntry
+        CacheEntry previousEntry
 ) {}
 ```
+
+`previousEntry` is nullable. When `CacheSetRequest.returnPreviousValue` is false or there was no previous entry, it is null.
 
 ### 9.8 `TouchResult`
 
@@ -900,7 +903,7 @@ package dev.mars.peegeeq.cache.api.model;
 
 public record TouchResult(
         boolean updated,
-    TtlResult ttl
+        TtlResult ttl
 ) {}
 ```
 
@@ -1031,17 +1034,15 @@ public record ScanResult(
 ```java
 package dev.mars.peegeeq.cache.api.model;
 
-import io.vertx.core.buffer.Buffer;
-
 public record PublishRequest(
         String channel,
-    String payload,
-    String contentType
+        String payload,
+        String contentType
 ) {}
 ```
 
 ```java
-package dev.mars.peegeeq.cache.api.model;
+package dev.mars.peegeeq.cache.api.pubsub;
 
 import io.vertx.core.Future;
 
@@ -1050,6 +1051,52 @@ public interface Subscription {
     Future<Void> unsubscribe();
 }
 ```
+
+### 9.13 Exception types
+
+The `dev.mars.peegeeq.cache.api.exception` package should define the following exception hierarchy:
+
+```java
+package dev.mars.peegeeq.cache.api.exception;
+
+public class CacheException extends RuntimeException {
+    public CacheException(String message) { super(message); }
+    public CacheException(String message, Throwable cause) { super(message, cause); }
+}
+```
+
+```java
+package dev.mars.peegeeq.cache.api.exception;
+
+public class CacheKeyException extends CacheException {
+    public CacheKeyException(String message) { super(message); }
+}
+```
+
+```java
+package dev.mars.peegeeq.cache.api.exception;
+
+public class CacheStoreException extends CacheException {
+    public CacheStoreException(String message, Throwable cause) { super(message, cause); }
+}
+```
+
+```java
+package dev.mars.peegeeq.cache.api.exception;
+
+public class LockNotHeldException extends CacheException {
+    public LockNotHeldException(String message) { super(message); }
+}
+```
+
+Design rules:
+
+- `CacheException` is the base for all peegee-cache exceptions
+- `CacheKeyException` covers invalid keys, namespaces, or key format violations at the API boundary
+- `CacheStoreException` wraps underlying storage failures (PostgreSQL errors, connection failures) and always carries a cause
+- `LockNotHeldException` is thrown when a lock release or renew is attempted by a non-owner or on an expired lease
+- service methods that return `Future<T>` should fail the future with these exceptions rather than throwing synchronously
+- validation failures (null keys, blank namespaces) should throw `IllegalArgumentException` or `NullPointerException` synchronously from record constructors, not wrapped in futures
 
 ---
 
@@ -1134,6 +1181,8 @@ public record PeeGeeCacheBootstrapOptions(
 ) {}
 ```
 
+**Known coupling:** `PeeGeeCacheBootstrapOptions` in the `runtime` module directly imports `PgCacheStoreConfig` from the `pg` module. This means the runtime module is permanently bound to the PostgreSQL implementation at compile time. If a second storage backend is added later, this coupling will need to be broken by introducing a store-agnostic configuration SPI. Acceptable for Phase 1 where PostgreSQL is the only backend.
+
 ### Runtime config
 
 ```java
@@ -1144,12 +1193,12 @@ import java.time.Duration;
 public record PeeGeeCacheConfig(
         Duration defaultTtl,
         Duration expirySweepInterval,
-    int expirySweepBatchSize,
+        int expirySweepBatchSize,
         int maxScanLimit,
         boolean enablePubSub,
-    boolean enableExpirySweeper,
-    boolean sampleReadMetrics,
-    int readMetricSampleRate
+        boolean enableExpirySweeper,
+        boolean sampleReadMetrics,
+        int readMetricSampleRate
 ) {}
 ```
 
@@ -1164,9 +1213,12 @@ public record PgCacheStoreConfig(
         String lockTable,
         String counterTable,
         String pubSubChannelPrefix,
-    boolean useUnloggedCacheTable,
-    boolean useDedicatedListenerConnection
+        boolean useUnloggedCacheTable,
+        boolean useDedicatedListenerConnection
 ) {}
+```
+
+**Deployment-time constraint:** `useUnloggedCacheTable` is a schema-creation-time decision, not a runtime toggle. PostgreSQL does not support `ALTER TABLE` to change a table between logged and unlogged. This flag affects migration behavior only. Once the schema is created, changing this value requires dropping and recreating the `cache_entries` table. The migration logic should check this flag when creating the table and produce `CREATE UNLOGGED TABLE` or `CREATE TABLE` accordingly.
 ```
 
 ---
@@ -1524,6 +1576,29 @@ DO UPDATE SET
 RETURNING version;
 ```
 
+#### Returning the previous value
+
+When `CacheSetRequest.returnPreviousValue` is `true`, the upsert alone is insufficient because `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` returns the *new* row, not the old one.
+
+The correct strategy is a pre-read inside the same transaction:
+
+Step 1: read current entry (if any) with row lock:
+
+```sql
+SELECT
+    namespace, cache_key, value_type, value_bytes, numeric_value,
+    version, created_at, updated_at, expires_at, hit_count, last_accessed_at
+FROM peegee_cache.cache_entries
+WHERE namespace = $1
+  AND cache_key = $2
+  AND (expires_at IS NULL OR expires_at > NOW())
+FOR UPDATE;
+```
+
+Step 2: perform the upsert as above.
+
+Both steps must run inside the same database transaction. The repository layer should only execute step 1 when `returnPreviousValue = true` to avoid unnecessary row-locking overhead.
+
 ### 16.5 SET if absent (`NX` semantics)
 
 Naive insert:
@@ -1645,7 +1720,38 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 16.11 SCAN by namespace/prefix
+### 16.11 TOUCH existing key
+
+`touch()` resets both the TTL to the provided duration and updates `last_accessed_at`. It does **not** change the stored value, value type, or version. It is a lightweight metadata-only update used for keep-alive and access-tracking scenarios.
+
+```sql
+UPDATE peegee_cache.cache_entries
+SET
+    expires_at = CASE WHEN $3 IS NOT NULL
+                      THEN NOW() + ($3 * INTERVAL '1 millisecond')
+                      ELSE expires_at
+                 END,
+    last_accessed_at = NOW(),
+    updated_at = NOW()
+WHERE namespace = $1
+  AND cache_key = $2
+  AND (expires_at IS NULL OR expires_at > NOW())
+RETURNING
+    CASE
+        WHEN expires_at IS NULL THEN NULL
+        ELSE FLOOR(EXTRACT(EPOCH FROM (expires_at - NOW())) * 1000)::BIGINT
+    END AS ttl_millis;
+```
+
+Return mapping:
+
+- no row updated → `TouchResult(false, TtlResult.missing())`
+- row updated with `expires_at IS NULL` → `TouchResult(true, TtlResult.persistent())`
+- row updated with positive remaining time → `TouchResult(true, TtlResult.expiring(ttlMillis))`
+
+If `$3` (ttl millis) is `NULL`, the existing TTL is preserved and only `last_accessed_at` is refreshed.
+
+### 16.12 SCAN by namespace/prefix
 
 Do **not** use offset pagination.
 
@@ -1736,6 +1842,24 @@ expires_at = NULL
 
 If `ttlMode = REPLACE`, the API should reject null `ttl` rather than silently converting that case into `REMOVE`.
 
+### 17.2a INCREMENT without create (`createIfMissing = false`)
+
+When `CounterOptions.createIfMissing` is `false`, use a pure `UPDATE` with no insert fallback. If the counter does not exist, zero rows are affected and the operation returns empty.
+
+```sql
+UPDATE peegee_cache.cache_counters
+SET
+    counter_value = counter_value + $3,
+    version = version + 1,
+    updated_at = NOW()
+WHERE namespace = $1
+  AND counter_key = $2
+  AND (expires_at IS NULL OR expires_at > NOW())
+RETURNING counter_value, version;
+```
+
+The caller should treat zero affected rows as "counter does not exist" and fail the future with an appropriate error or return `Optional.empty()` depending on the API contract.
+
 ### 17.3 Delete expired counter then increment
 
 For correct semantics:
@@ -1749,6 +1873,8 @@ WHERE namespace = $1
 ```
 
 Then do the upsert in the same transaction.
+
+**Concurrency note:** When two transactions concurrently encounter an expired counter row, both may attempt the delete-then-upsert sequence. One transaction will delete the expired row and insert a fresh counter. The other will find the row already gone (delete affects zero rows) and also insert, hitting the `ON CONFLICT` clause and updating. The net effect is correct — both increments are applied — but the counter resets to the new initial value before the second increment rather than continuing from the old expired value. This is the intended semantic: an expired counter is logically absent, so concurrent post-expiry increments both start from the initial value.
 
 ### 17.4 Set exact counter value
 
@@ -1795,6 +1921,15 @@ WHERE namespace = $1
 
 Step 2: insert new lease
 
+The `fencing_token` value depends on `LockAcquireRequest.issueFencingToken`:
+
+- when `true`: use `nextval('peegee_cache.lock_fencing_seq')` to generate a monotonically increasing token
+- when `false`: use `NULL`
+
+The repository should select the appropriate SQL variant or bind the value accordingly.
+
+When `issueFencingToken = true`:
+
 ```sql
 INSERT INTO peegee_cache.cache_locks (
     namespace,
@@ -1807,19 +1942,33 @@ INSERT INTO peegee_cache.cache_locks (
     lease_expires_at
 )
 VALUES (
-    $1, $2, $3, $4, 1, NOW(), NOW(), $5
+    $1, $2, $3, nextval('peegee_cache.lock_fencing_seq'), 1, NOW(), NOW(),
+    NOW() + ($4 * INTERVAL '1 millisecond')
 )
 ON CONFLICT (namespace, lock_key) DO NOTHING
 RETURNING namespace, lock_key, owner_token, fencing_token, lease_expires_at;
 ```
 
-Where `$5` should be computed in SQL as:
+When `issueFencingToken = false`:
 
 ```sql
-NOW() + ($5 * INTERVAL '1 millisecond')
+INSERT INTO peegee_cache.cache_locks (
+    namespace,
+    lock_key,
+    owner_token,
+    fencing_token,
+    version,
+    created_at,
+    updated_at,
+    lease_expires_at
+)
+VALUES (
+    $1, $2, $3, NULL, 1, NOW(), NOW(),
+    NOW() + ($4 * INTERVAL '1 millisecond')
+)
+ON CONFLICT (namespace, lock_key) DO NOTHING
+RETURNING namespace, lock_key, owner_token, fencing_token, lease_expires_at;
 ```
-
-or, if the repository binds a `Duration` directly, the equivalent PostgreSQL interval expression produced from that TTL.
 
 ### 18.2 Reentrant acquire by same owner (optional)
 
