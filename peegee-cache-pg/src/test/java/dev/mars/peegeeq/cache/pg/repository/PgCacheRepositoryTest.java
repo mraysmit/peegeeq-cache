@@ -19,9 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.sql.Connection;
-import java.sql.Statement;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(VertxExtension.class)
@@ -34,7 +31,7 @@ class PgCacheRepositoryTest {
 
     @BeforeAll
     static void startContainer(Vertx vertx) throws Exception {
-        pg.start();
+        pg.start(vertx);
         pool = pg.createPool(vertx);
         repo = new PgCacheRepository(pool);
     }
@@ -76,17 +73,16 @@ class PgCacheRepositoryTest {
 
     @Test
     @Order(3)
-    void getReturnsEmptyForExpiredKey(VertxTestContext ctx) throws Exception {
-        // Insert a row with an already-expired TTL via JDBC
-        try (Connection conn = pg.jdbcConnection(); Statement stmt = conn.createStatement()) {
-            stmt.execute(
-                    "INSERT INTO peegee_cache.cache_entries " +
-                    "(namespace, cache_key, value_type, value_bytes, expires_at) " +
-                    "VALUES ('ns', 'expired-key', 'STRING', 'old'::bytea, NOW() - INTERVAL '1 hour') " +
-                    "ON CONFLICT DO NOTHING");
-        }
+    void getReturnsEmptyForExpiredKey(VertxTestContext ctx) {
         CacheKey key = new CacheKey("ns", "expired-key");
-        repo.get(key).onComplete(ctx.succeeding(result -> ctx.verify(() -> {
+        pool.query(
+                        "INSERT INTO peegee_cache.cache_entries " +
+                        "(namespace, cache_key, value_type, value_bytes, expires_at) " +
+                        "VALUES ('ns', 'expired-key', 'STRING', 'old'::bytea, NOW() - INTERVAL '1 hour') " +
+                        "ON CONFLICT DO NOTHING")
+                .execute()
+                .compose(ignored -> repo.get(key))
+                .onComplete(ctx.succeeding(result -> ctx.verify(() -> {
             assertTrue(result.isEmpty(), "Expired key should be treated as absent");
             ctx.completeNow();
         })));
@@ -153,20 +149,19 @@ class PgCacheRepositoryTest {
 
     @Test
     @Order(13)
-    void setIfAbsentSucceedsOverExpiredKey(VertxTestContext ctx) throws Exception {
-        // Insert expired row via JDBC
-        try (Connection conn = pg.jdbcConnection(); Statement stmt = conn.createStatement()) {
-            stmt.execute(
-                    "INSERT INTO peegee_cache.cache_entries " +
-                    "(namespace, cache_key, value_type, value_bytes, expires_at) " +
-                    "VALUES ('ns', 'nx-expired', 'STRING', 'old'::bytea, NOW() - INTERVAL '1 hour') " +
-                    "ON CONFLICT DO NOTHING");
-        }
+    void setIfAbsentSucceedsOverExpiredKey(VertxTestContext ctx) {
         CacheKey key = new CacheKey("ns", "nx-expired");
         CacheValue value = CacheValue.ofString("fresh");
         CacheSetRequest req = new CacheSetRequest(key, value, null, SetMode.ONLY_IF_ABSENT, null, false);
 
-        repo.set(req).onComplete(ctx.succeeding(result -> ctx.verify(() -> {
+        pool.query(
+                        "INSERT INTO peegee_cache.cache_entries " +
+                        "(namespace, cache_key, value_type, value_bytes, expires_at) " +
+                        "VALUES ('ns', 'nx-expired', 'STRING', 'old'::bytea, NOW() - INTERVAL '1 hour') " +
+                        "ON CONFLICT DO NOTHING")
+                .execute()
+                .compose(ignored -> repo.set(req))
+                .onComplete(ctx.succeeding(result -> ctx.verify(() -> {
             assertTrue(result.applied(), "ONLY_IF_ABSENT should succeed over expired key");
             ctx.completeNow();
         })));

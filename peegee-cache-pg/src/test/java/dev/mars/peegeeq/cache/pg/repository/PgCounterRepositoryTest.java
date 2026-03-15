@@ -16,9 +16,6 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
-
-import java.sql.Connection;
-import java.sql.Statement;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,7 +30,7 @@ class PgCounterRepositoryTest {
 
     @BeforeAll
     static void startContainer(Vertx vertx) throws Exception {
-        pg.start();
+        pg.start(vertx);
         pool = pg.createPool(vertx);
         repo = new PgCounterRepository(pool);
     }
@@ -58,16 +55,16 @@ class PgCounterRepositoryTest {
 
     @Test
     @Order(2)
-    void getReturnsEmptyForExpiredCounter(VertxTestContext ctx) throws Exception {
-        try (Connection conn = pg.jdbcConnection(); Statement stmt = conn.createStatement()) {
-            stmt.execute(
-                    "INSERT INTO peegee_cache.cache_counters " +
-                    "(namespace, counter_key, counter_value, expires_at) " +
-                    "VALUES ('ns', 'expired-ctr', 42, NOW() - INTERVAL '1 hour') " +
-                    "ON CONFLICT DO NOTHING");
-        }
+    void getReturnsEmptyForExpiredCounter(VertxTestContext ctx) {
         CacheKey key = new CacheKey("ns", "expired-ctr");
-        repo.get(key).onComplete(ctx.succeeding(result -> ctx.verify(() -> {
+        pool.query(
+                        "INSERT INTO peegee_cache.cache_counters " +
+                        "(namespace, counter_key, counter_value, expires_at) " +
+                        "VALUES ('ns', 'expired-ctr', 42, NOW() - INTERVAL '1 hour') " +
+                        "ON CONFLICT DO NOTHING")
+                .execute()
+                .compose(ignored -> repo.get(key))
+                .onComplete(ctx.succeeding(result -> ctx.verify(() -> {
             assertTrue(result.isEmpty(), "Expired counter should be absent");
             ctx.completeNow();
         })));
@@ -126,18 +123,17 @@ class PgCounterRepositoryTest {
 
     @Test
     @Order(14)
-    void incrementRestartsAfterExpiry(VertxTestContext ctx) throws Exception {
-        // Insert expired counter
-        try (Connection conn = pg.jdbcConnection(); Statement stmt = conn.createStatement()) {
-            stmt.execute(
-                    "INSERT INTO peegee_cache.cache_counters " +
-                    "(namespace, counter_key, counter_value, expires_at) " +
-                    "VALUES ('ns', 'restart-ctr', 100, NOW() - INTERVAL '1 hour') " +
-                    "ON CONFLICT DO NOTHING");
-        }
+    void incrementRestartsAfterExpiry(VertxTestContext ctx) {
         CacheKey key = new CacheKey("ns", "restart-ctr");
         CounterOptions opts = CounterOptions.defaults();
-        repo.increment(key, 5, opts).onComplete(ctx.succeeding(value -> ctx.verify(() -> {
+        pool.query(
+                        "INSERT INTO peegee_cache.cache_counters " +
+                        "(namespace, counter_key, counter_value, expires_at) " +
+                        "VALUES ('ns', 'restart-ctr', 100, NOW() - INTERVAL '1 hour') " +
+                        "ON CONFLICT DO NOTHING")
+                .execute()
+                .compose(ignored -> repo.increment(key, 5, opts))
+                .onComplete(ctx.succeeding(value -> ctx.verify(() -> {
             assertEquals(5L, value, "Counter should restart from delta after expiry");
             ctx.completeNow();
         })));

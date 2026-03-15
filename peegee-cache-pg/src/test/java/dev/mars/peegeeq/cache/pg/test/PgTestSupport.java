@@ -1,5 +1,6 @@
 package dev.mars.peegeeq.cache.pg.test;
 
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
@@ -11,11 +12,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Manages a disposable PostgreSQL container via Docker CLI and provides
@@ -39,7 +38,7 @@ public final class PgTestSupport {
         this.containerName = containerName;
     }
 
-    public void start() throws Exception {
+    public void start(Vertx vertx) throws Exception {
         log.info("Starting PostgreSQL container '{}' (image: {})", containerName, PG_IMAGE);
         exec("docker", "rm", "-f", containerName);
 
@@ -55,8 +54,8 @@ public final class PgTestSupport {
         pgPort = Integer.parseInt(firstLine.substring(firstLine.lastIndexOf(':') + 1));
         log.info("Container '{}' mapped to port {}", containerName, pgPort);
 
-        waitForPostgres();
-        applyMigrations();
+        waitForPostgres(vertx);
+        applyMigrations(vertx);
         log.info("Container '{}' ready", containerName);
     }
 
@@ -78,32 +77,66 @@ public final class PgTestSupport {
         return Pool.pool(vertx, connectOptions, poolOptions);
     }
 
-    /** JDBC connection for test setup/verification outside of Vert.x. */
-    public Connection jdbcConnection() throws SQLException {
-        return DriverManager.getConnection(
-                "jdbc:postgresql://127.0.0.1:" + pgPort + "/" + PG_DB, PG_USER, PG_PASSWORD);
-    }
-
-    private void waitForPostgres() throws Exception {
+    private void waitForPostgres(Vertx vertx) throws Exception {
+        PgConnectOptions connectOptions = connectOptions();
+        PoolOptions poolOptions = new PoolOptions().setMaxSize(1);
         long deadline = System.currentTimeMillis() + 30_000;
         while (System.currentTimeMillis() < deadline) {
-            try (Connection conn = jdbcConnection()) {
-                try (Statement stmt = conn.createStatement()) {
-                    stmt.execute("SELECT 1");
-                }
+            Pool startupPool = Pool.pool(vertx, connectOptions, poolOptions);
+            try {
+                await(startupPool.query("SELECT 1").execute().mapEmpty(), 5_000);
                 return;
-            } catch (SQLException ignored) {
+            } catch (Exception ignored) {
                 Thread.sleep(500);
+            } finally {
+                startupPool.close();
             }
         }
         throw new RuntimeException("PostgreSQL did not become ready within 30 seconds");
     }
 
-    private void applyMigrations() throws Exception {
+    private void applyMigrations(Vertx vertx) throws Exception {
         String sql = readClasspathResource("/db/migration/V001__create_peegee_cache_schema.sql");
-        try (Connection conn = jdbcConnection(); Statement stmt = conn.createStatement()) {
-            stmt.execute(sql);
+        Pool migrationPool = Pool.pool(vertx, connectOptions(), new PoolOptions().setMaxSize(1));
+        try {
+            await(migrationPool.query(sql).execute().mapEmpty(), 10_000);
+        } finally {
+            migrationPool.close();
         }
+    }
+
+    private PgConnectOptions connectOptions() {
+        return new PgConnectOptions()
+                .setHost("127.0.0.1")
+                .setPort(pgPort)
+                .setDatabase(PG_DB)
+                .setUser(PG_USER)
+                .setPassword(PG_PASSWORD);
+    }
+
+    private static <T> T await(Future<T> future, long timeoutMillis) throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<T> resultRef = new AtomicReference<>();
+        AtomicReference<Throwable> errorRef = new AtomicReference<>();
+
+        future.onComplete(ar -> {
+            if (ar.succeeded()) {
+                resultRef.set(ar.result());
+            } else {
+                errorRef.set(ar.cause());
+            }
+            latch.countDown();
+        });
+
+        if (!latch.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
+            throw new RuntimeException("Timed out waiting for Vert.x SQL operation");
+        }
+
+        Throwable error = errorRef.get();
+        if (error != null) {
+            throw new RuntimeException(error);
+        }
+        return resultRef.get();
     }
 
     private static String readClasspathResource(String path) throws IOException {

@@ -35,7 +35,7 @@ class PgCacheServiceTest {
 
     @BeforeAll
     static void startContainer(Vertx vertx) throws Exception {
-        pg.start();
+        pg.start(vertx);
         pool = pg.createPool(vertx);
         service = new PgCacheService(new PgCacheRepository(pool));
     }

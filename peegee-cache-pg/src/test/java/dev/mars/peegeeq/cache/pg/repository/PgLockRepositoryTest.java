@@ -18,9 +18,6 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
-
-import java.sql.Connection;
-import java.sql.Statement;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,7 +32,7 @@ class PgLockRepositoryTest {
 
     @BeforeAll
     static void startContainer(Vertx vertx) throws Exception {
-        pg.start();
+        pg.start(vertx);
         pool = pg.createPool(vertx);
         repo = new PgLockRepository(pool);
     }
@@ -84,20 +81,19 @@ class PgLockRepositoryTest {
 
     @Test
     @Order(3)
-    void acquireSucceedsAfterExpiredLease(VertxTestContext ctx) throws Exception {
+    void acquireSucceedsAfterExpiredLease(VertxTestContext ctx) {
         LockKey key = new LockKey("ns", "expired-lock");
-        // Insert an expired lock via JDBC
-        try (Connection conn = pg.jdbcConnection(); Statement stmt = conn.createStatement()) {
-            stmt.execute(
-                    "INSERT INTO peegee_cache.cache_locks " +
-                    "(namespace, lock_key, owner_token, lease_expires_at, updated_at) " +
-                    "VALUES ('ns', 'expired-lock', 'old-owner', NOW() - INTERVAL '1 hour', NOW() - INTERVAL '2 hours') " +
-                    "ON CONFLICT DO NOTHING");
-        }
         LockAcquireRequest req = new LockAcquireRequest(
                 key, "new-owner", Duration.ofMinutes(5), false, false);
 
-        repo.acquire(req).onComplete(ctx.succeeding(result -> ctx.verify(() -> {
+        pool.query(
+                        "INSERT INTO peegee_cache.cache_locks " +
+                        "(namespace, lock_key, owner_token, lease_expires_at, updated_at) " +
+                        "VALUES ('ns', 'expired-lock', 'old-owner', NOW() - INTERVAL '1 hour', NOW() - INTERVAL '2 hours') " +
+                        "ON CONFLICT DO NOTHING")
+                .execute()
+                .compose(ignored -> repo.acquire(req))
+                .onComplete(ctx.succeeding(result -> ctx.verify(() -> {
             assertTrue(result.acquired(), "Should acquire over expired lease");
             assertEquals("new-owner", result.ownerToken());
             ctx.completeNow();
