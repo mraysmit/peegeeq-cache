@@ -1,0 +1,581 @@
+# peegee-cache Implementation Plan
+
+## 1. Purpose
+
+This document turns the design in `docs/peegee-cache-design.md` into an implementation sequence.
+
+It is not a second design document. It is a delivery plan for building Phase 1 in a controlled order, with explicit boundaries between:
+
+- `V1 Core`
+- remaining `V1`
+- `V2` and later work
+
+The goal is to prevent the project from drifting into premature feature expansion before the core PostgreSQL-backed cache and coordination behavior is correct.
+
+## 2. Delivery principles
+
+The implementation should follow these rules:
+
+- finish correctness-critical primitives before convenience features
+- keep public API design ahead of implementation details, but not far ahead
+- encode semantics in SQL and schema constraints, not only in Java code
+- keep runtime lifecycle explicit and testable
+- defer broader feature coverage until `V1 Core` semantics are stable under concurrency
+- avoid building Redis-compatibility surfaces before the Java and SQL contracts are coherent
+- keep the implementation and public async contract pure Vert.x 5.x unless a deliberate compatibility layer is designed later
+
+## 2.1 Execution guidelines and coding principles
+
+This implementation plan should be executed with the local guidance in `docs/guidelines/pgq-coding-principles.md` treated as the primary working standard.
+
+Core principles summary:
+
+- investigate first
+- follow existing patterns in the repo and sibling PeeGeeQ code where relevant
+- verify assumptions instead of trusting first impressions
+- fix root causes instead of masking symptoms
+- document actual intent and behavior honestly
+- validate incrementally after each small change
+- classify tests correctly as unit versus integration work
+- fail honestly when there is a real defect
+- read logs carefully instead of relying on superficial success signals
+- use modern Vert.x 5.x composable Future patterns instead of callback-style flow
+
+Critical additional rules for implementation work:
+
+- work incrementally and test after each small incremental change
+- scan test logs in detail; do not rely on exit code alone
+- use Maven debug mode with `-X` when test behavior is unclear
+- verify that test methods actually executed, not just that Maven reported success
+- remember dependent PeeGeeQ modules may need to be installed locally first when that dependency exists
+- do not guess; use the coding principles and the existing code patterns
+- do not continue to the next step until the current tests are passing
+- do not skip failing tests with exclusions, disables, or build flags
+
+Practical repo-specific guidance:
+
+- this work is being done on Windows 11
+- there are already many examples of Vert.x 5.x usage patterns in the imported guidance set
+- there are already many examples of Testcontainers setup patterns in the broader PeeGeeQ guidance and sibling codebase
+- imported guidance files should be used as reference patterns, not as proof that identical code already exists in this repo
+
+## 2.2 Strict TDD and test discipline
+
+Phase 1 implementation should follow strict TDD as a working method, not as a loose preference.
+
+That means:
+
+- write or extend a failing test first for each new behavior or bug fix whenever the behavior is testable
+- implement the minimum code required to make the test pass
+- refactor only after the behavior is covered and passing
+- keep each change small enough that failures can be attributed to one decision at a time
+
+Test discipline rules:
+
+- do not move to the next implementation step until the current tests for the changed behavior are passing
+- read the test output in detail after every run
+- treat suspiciously fast or empty-success test runs as invalid until actual test execution is confirmed
+- use integration tests for database behavior instead of fabricating confidence with mocks
+
+## 2.3 No mocking and mandatory Testcontainers for database work
+
+For this project, mocking is prohibited for database-facing behavior.
+
+Mandatory rules:
+
+- do not mock PostgreSQL connections, pools, repositories, or SQL execution
+- do not substitute H2, HSQLDB, or in-memory databases for PostgreSQL behavior
+- do not skip database tests because Testcontainers is slower than mocks
+- use Testcontainers whenever the code under test touches PostgreSQL semantics, schema, migrations, queries, locking, counters, expiry, or runtime database integration
+
+Allowed scope for pure unit tests:
+
+- validation helpers
+- key parsing and normalization
+- small pure utility logic with zero database behavior
+
+Everything else that depends on real PostgreSQL semantics should be treated as integration work.
+
+## 2.4 Configuration-driven construction
+
+Phase 1 should also be configuration-driven from the start.
+
+That means:
+
+- runtime and store behavior should be supplied through explicit configuration records and bootstrap options
+- libraries should accept validated configuration from callers rather than pulling hidden fallback values from system properties
+- configuration defaults should be explicit, documented, and small enough to reason about
+- no hardcoded schema names, channel names, or environment-specific paths in core modules
+- configuration should map cleanly to Vert.x and PostgreSQL concepts such as pool sizing, timeouts, schema names, listener behavior, and sweeper behavior
+
+Operational implication:
+
+- if behavior matters in production, it should be representable in configuration rather than buried in implementation constants
+
+## 2.5 Pure Vert.x 5.x baseline
+
+The Phase 1 implementation should be explicitly Vert.x 5.x first and pure in its public surface.
+
+That means:
+
+- public async APIs return `io.vertx.core.Future<T>`
+- runtime composition uses Vert.x 5.x `Future` chaining such as `.compose()`, `.map()`, `.recover()`, `.onSuccess()`, and `.onFailure()`
+- database access uses Vert.x reactive PostgreSQL client APIs directly
+- lifecycle and background work follow Vert.x-managed patterns rather than ad hoc thread ownership
+
+Phase 1 should avoid mixing in alternative async contracts or framework-first abstractions in the main public API, including:
+
+- `CompletableFuture` or `CompletionStage` as the primary public contract
+- Reactor types
+- Mutiny as the primary API surface
+- Spring-specific abstractions in core modules
+
+This does not forbid later adapters. It means adapters should sit on top of the Vert.x-native core rather than weakening the main contract during Phase 1.
+
+## 3. Phase map
+
+### Phase 0: Repository and build foundation
+
+Objective:
+
+- establish the module skeleton and build layout so feature work lands in the right place
+
+Scope:
+
+- multi-module Maven parent
+- module boundaries for `api`, `core`, `pg`, `runtime`, `observability`, `test-support`, and `examples`
+- baseline Java and Vert.x version alignment
+
+Exit criteria:
+
+- root build validates
+- all intended Phase 1 modules exist
+- package layout matches the design document
+
+Status:
+
+- started with the current module scaffold
+
+### Phase 1: API skeleton
+
+Objective:
+
+- define the public Java contract for `V1 Core`
+
+Scope:
+
+- `PeeGeeCache`
+- `CacheService`
+- `CounterService`
+- `LockService`
+- `ScanService`
+- `PubSubService`
+- core records and enums such as `CacheKey`, `CacheValue`, `CacheEntry`, `TtlResult`, `CounterOptions`, `CounterTtlMode`, `LockState`, `PublishRequest`, `PubSubMessage`
+- bootstrap-facing contracts such as `PeeGeeCacheManager`
+
+Out of scope:
+
+- full implementation logic
+- rich convenience overloads
+- `V2` structures such as hashes and sorted sets
+
+Exit criteria:
+
+- API types compile cleanly
+- package boundaries are stable enough for downstream modules
+- public types reflect the design’s `V1 Core` semantics
+- the public async surface is consistently Vert.x 5.x `Future`-based
+
+### Phase 2: PostgreSQL schema and migrations
+
+Objective:
+
+- establish the database contract for cache entries, counters, and locks
+
+Scope:
+
+- migration files for schema creation
+- `cache_entries`, `cache_counters`, `cache_locks`
+- indexes and lock fencing sequence
+- database checks and invariants from the design
+- optional `UNLOGGED` posture only where explicitly intended
+
+Out of scope:
+
+- broad SQL function surface
+- advanced observability views
+
+Exit criteria:
+
+- migrations create the Phase 1 schema on a clean PostgreSQL instance
+- invariants such as typed payload exclusivity and lock lease sanity are enforced in SQL
+- migration naming and ordering are stable
+
+### Phase 3: Repository and SQL statement catalogue
+
+Objective:
+
+- implement the data-access layer for `V1 Core`
+
+Scope:
+
+- `PgCacheRepository`
+- `PgCounterRepository`
+- `PgLockRepository`
+- SQL statement catalogue for:
+  - get/set/delete
+  - TTL lookup, expire, persist
+  - counter increment/decrement/set
+  - lock acquire, renew, release, inspect
+- row mappers
+- transaction helpers for expiry-aware and lock-aware flows
+
+Out of scope:
+
+- bulk operations
+- scan/listing
+- pub/sub listener runtime
+
+Exit criteria:
+
+- repository methods exist for every `V1 Core` primitive
+- expiry-aware semantics are implemented with database-clock logic
+- lock semantics use owner token checks and database-derived lease expiry
+
+### Phase 4: Service implementations for V1 Core
+
+Objective:
+
+- expose usable Java services backed by the PostgreSQL repositories
+
+Scope:
+
+- `PgCacheService`
+- `PgCounterService`
+- `PgLockService`
+- `PgPeeGeeCache`
+- validation and normalization logic in `peegee-cache-core`
+
+Out of scope:
+
+- remaining `V1` features such as scan and lightweight pub/sub
+- SQL function productization for external callers
+
+Exit criteria:
+
+- `V1 Core` public interfaces are backed by working implementations
+- type and option validation is consistent
+- service behavior matches the design document for expiry, counters, and lock ownership
+
+### Phase 5: Runtime bootstrap and managed lifecycle
+
+Objective:
+
+- make the library usable as a managed embedded runtime
+
+Scope:
+
+- `PeeGeeCacheFactory`
+- `PeeGeeCaches`
+- `PeeGeeCacheManager`
+- bootstrap options and config records
+- explicit start/stop semantics
+- expiry sweeper runtime
+
+Out of scope:
+
+- full observability integrations
+- advanced runtime self-healing behavior
+
+Exit criteria:
+
+- callers can create a manager and start/stop it cleanly
+- ownership of `Vertx`, `Pool`, sweeper, and listener resources is explicit
+- shutdown order is deterministic and non-accidental
+
+### Phase 6: V1 completion features
+
+Objective:
+
+- add the remaining features still considered part of Phase 1
+
+Scope:
+
+- bulk get/set/delete
+- scan/list by namespace and prefix
+- metadata/versioning exposure
+- lightweight pub/sub
+- admin and metrics hooks
+
+Recommended order inside this phase:
+
+1. scan and metadata
+2. bulk operations
+3. admin hooks
+4. lightweight pub/sub
+
+Reasoning:
+
+- scan and metadata support debugging and operational verification early
+- bulk operations are useful but do not change the core model
+- pub/sub should wait until the runtime lifecycle and payload rules are already stable
+
+Exit criteria:
+
+- all `V1` items in the design are implemented or explicitly deferred with rationale
+- operational behavior is documented well enough for first external adopters
+
+### Phase 7: Native SQL contract hardening
+
+Objective:
+
+- decide how far the out-of-the-box SQL interface is part of the supported product surface
+
+Scope:
+
+- documented read views
+- correctness-sensitive SQL functions for locks and counters first
+- optional cache write functions if non-Java callers are required in the first release
+- compatibility policy for SQL functions if exposed publicly
+
+Exit criteria:
+
+- direct-read versus function-write support boundaries are documented and implemented consistently
+- external SQL callers are not forced to reconstruct concurrency-sensitive multi-statement logic from prose alone
+
+### Phase 8: V2 and later
+
+Objective:
+
+- extend the product only after Phase 1 is stable under realistic usage
+
+Scope candidates:
+
+- hashes
+- sorted sets
+- durable queue semantics
+- delayed jobs
+- rate limiting
+- keyspace notifications
+
+Explicit non-goal unless strategy changes:
+
+- full Redis protocol compatibility
+
+## 4. Feature rollout by milestone
+
+### Milestone A: V1 Core alpha
+
+Target outcome:
+
+- usable embedded cache, counter, and lock library for Java callers
+
+Must include:
+
+- key/value get/set/delete
+- TTL and expiry
+- atomic conditional writes
+- atomic counters
+- namespaces
+- lock service
+- migrations
+- managed bootstrap
+
+Must not include:
+
+- hashes
+- sorted sets
+- Redis protocol adaptation
+- durable queue features
+
+### Milestone B: V1 beta
+
+Target outcome:
+
+- operationally testable Phase 1 library with admin-facing capabilities
+
+Must include:
+
+- scan/listing
+- metadata/versioning support
+- bulk operations
+- initial admin hooks
+- stronger integration-test coverage
+
+### Milestone C: V1 release candidate
+
+Target outcome:
+
+- complete Phase 1 surface as currently defined
+
+Must include:
+
+- lightweight pub/sub
+- documented runtime behavior
+- documented SQL support boundaries
+- examples and operator guidance
+
+## 5. Module-by-module implementation order
+
+### `peegee-cache-api`
+
+Implement first:
+
+- all public interfaces and models for `V1 Core`
+
+Implement later:
+
+- remaining `V1` request/response types for scan and pub/sub where needed
+
+### `peegee-cache-core`
+
+Implement first:
+
+- validation utilities
+- TTL normalization helpers
+- key and namespace rules
+
+Implement later:
+
+- shared result builders and metrics support utilities
+
+### `peegee-cache-pg`
+
+Implement first:
+
+- migrations
+- repositories
+- SQL catalogue
+- row mapping
+- core PostgreSQL-backed services
+
+Implement later:
+
+- scan repository
+- pub/sub runtime integration details
+- SQL function layer for external callers
+
+### `peegee-cache-runtime`
+
+Implement first:
+
+- bootstrap options
+- manager lifecycle
+- explicit startup and shutdown
+
+Implement later:
+
+- sweeper scheduling
+- dedicated pub/sub listener management
+
+### `peegee-cache-observability`
+
+Implement first:
+
+- no-op or minimal interfaces only if needed to avoid contaminating core delivery
+
+Implement later:
+
+- Micrometer and OpenTelemetry integration
+
+### `peegee-cache-test-support`
+
+Implement first:
+
+- PostgreSQL Testcontainers helpers
+- schema bootstrap fixtures
+- concurrency-test helpers
+
+Implement later:
+
+- higher-level DSLs for repetitive test flows
+
+### `peegee-cache-examples`
+
+Implement first:
+
+- one embedded example using the managed runtime
+
+Implement later:
+
+- examples for SQL inspection, locks, and pub/sub
+
+## 6. Testing plan by phase
+
+### Phase 1 through Phase 3
+
+- compile validation for module graph
+- migration smoke tests against real PostgreSQL
+- repository tests for single-operation correctness
+
+### Phase 4 through Phase 5
+
+- service-level integration tests with Testcontainers
+- concurrency tests for:
+  - conditional writes
+  - counter races
+  - lock acquire races
+  - lock renew versus release
+- lifecycle tests for managed startup and shutdown
+
+### Phase 6 onward
+
+- scan behavior tests
+- pub/sub listener and reconnect tests
+- benchmark and profiling work on realistic combined flows
+
+The important benchmark is not isolated `GET` speed alone. It is the combined behavior of database-backed cache mutation, coordination, and notification flows.
+
+## 7. Key risks and control points
+
+### Risk: Phase 1 scope creep
+
+Control:
+
+- do not add hashes, sorted sets, or queue semantics before `V1 Core` is stable
+
+### Risk: treating PostgreSQL like an in-memory cache without operational cost
+
+Control:
+
+- validate churn-heavy behavior with realistic integration tests and benchmarks
+
+### Risk: weak lock semantics due to caller-clock assumptions
+
+Control:
+
+- derive lease expiry from the database clock in SQL
+
+### Risk: unstable external SQL write behavior
+
+Control:
+
+- support direct reads first
+- expose SQL functions for correctness-sensitive writes
+
+### Risk: runtime lifecycle bugs
+
+Control:
+
+- keep manager ownership explicit
+- test shutdown order and background component cleanup early
+
+## 8. Immediate recommended next steps
+
+The next implementation moves should be:
+
+1. create the `peegee-cache-api` skeleton for `V1 Core`
+2. add initial PostgreSQL migrations in `peegee-cache-pg`
+3. implement repository interfaces and SQL statement catalogue
+4. add Testcontainers-based migration and repository tests
+5. wire the first managed runtime path in `peegee-cache-runtime`
+
+## 9. Summary
+
+The correct delivery strategy is:
+
+- build `V1 Core` first
+- finish the database contract before convenience features
+- complete the runtime lifecycle before broadening the surface area
+- treat native SQL support as deliberate product surface, not accidental table exposure
+- defer Redis-shaped expansion until the PostgreSQL-native core is proven

@@ -1,0 +1,98 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### Log Files ###
+logs/
+peegeeq-db/logs/
+peegeeq-examples/logs/
+peegeeq-native/logs/
+target/test-logs/
+*/target/test-logs/
+*.log
+*.log.*
+
+### Prevent JSON files in root directory ###
+# Sample/demo JSON files should go in examples/ directory
+/*.json
+!package.json
+!package-lock.json
+
+### TestContainers auto-generated files ###
+peegeeq-management-ui/testcontainers-db.json
+peegeeq-management-ui/.testcontainers-state.json
+
+### Prevent test files in root directory ###
+# Test SQL files should go in test resources
+/*.sql
+# Test log files are already covered by *.log above
+
+### IntelliJ IDEA ###
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/AugmentWebviewStateStore.xml
+.idea/encodings.xml
+.idea/libraries/
+*.iws
+*.iml
+*.ipr
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+### Node.js ###
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+### Test Results and Reports ###
+test-results/
+*/test-results/
+playwright-report/
+*/playwright-report/
+coverage/
+*/coverage/
+
+### Temporary Files ###
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+*commands.txt
+notes.txt
+TODO.txt
+
+### OS Generated Files ###
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+### IDE history/backups ###
+/.history/
