@@ -152,9 +152,11 @@ Exit criteria:
 - all intended Phase 1 modules exist
 - package layout matches the design document
 
-Status:
+Status: **COMPLETE**
 
-- started with the current module scaffold
+- 7 modules created: `api`, `core`, `pg`, `runtime`, `observability`, `test-support`, `examples`
+- Java 21 + Vert.x 5.0.8 baseline aligned
+- root build validates
 
 ### Phase 1: API skeleton
 
@@ -171,7 +173,7 @@ Scope:
 - `ScanService`
 - `PubSubService`
 - core records and enums such as `CacheKey`, `CacheValue`, `CacheEntry`, `TtlResult`, `CounterOptions`, `CounterTtlMode`, `LockState`, `PublishRequest`, `PubSubMessage`
-- bootstrap-facing contracts such as `PeeGeeCacheManager`
+- exception hierarchy (`CacheException`, `CacheKeyException`, `CacheStoreException`, `LockNotHeldException`)
 
 Out of scope:
 
@@ -185,7 +187,11 @@ Exit criteria:
 - package boundaries are stable enough for downstream modules
 - public types reflect the design’s `V1 Core` semantics
 - the public async surface is consistently Vert.x 5.x `Future`-based
+Status: **COMPLETE**
 
+- 33 source files: 5 service interfaces, 4 enums, 3 validated records, 12 data records, 4 exception classes, 1 facade
+- 34 unit tests (CacheKeyTest 8, CacheValueTest 13, LockKeyTest 7, ExceptionHierarchyTest 6)
+- `PeeGeeCacheManager` deferred to Phase 5 — its signature depends on config records that belong in the runtime bootstrap phase
 ### Phase 2: PostgreSQL schema and migrations
 
 Objective:
@@ -210,6 +216,12 @@ Exit criteria:
 - migrations create the Phase 1 schema on a clean PostgreSQL instance
 - invariants such as typed payload exclusivity and lock lease sanity are enforced in SQL
 - migration naming and ordering are stable
+
+Status: **COMPLETE**
+
+- single migration file: `V001__create_peegee_cache_schema.sql` (schema, 3 tables, 1 sequence, 5 indexes)
+- 27 integration tests against real PostgreSQL via Docker CLI
+- all check constraints, primary keys, indexes, and sequence monotonicity verified
 
 ### Phase 3: Repository and SQL statement catalogue
 
@@ -277,7 +289,7 @@ Scope:
 
 - `PeeGeeCacheFactory`
 - `PeeGeeCaches`
-- `PeeGeeCacheManager`
+- `PeeGeeCacheManager` (deferred from Phase 1 — interface signature depends on config records defined here)
 - bootstrap options and config records
 - explicit start/stop semantics
 - expiry sweeper runtime

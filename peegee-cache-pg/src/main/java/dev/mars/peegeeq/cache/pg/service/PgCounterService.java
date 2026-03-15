@@ -1,0 +1,95 @@
+package dev.mars.peegeeq.cache.pg.service;
+
+import dev.mars.peegeeq.cache.api.counter.CounterService;
+import dev.mars.peegeeq.cache.api.exception.CacheException;
+import dev.mars.peegeeq.cache.api.exception.CacheStoreException;
+import dev.mars.peegeeq.cache.api.model.CacheKey;
+import dev.mars.peegeeq.cache.api.model.CounterOptions;
+import dev.mars.peegeeq.cache.api.model.TtlResult;
+import dev.mars.peegeeq.cache.pg.repository.PgCounterRepository;
+import io.vertx.core.Future;
+
+import java.time.Duration;
+import java.util.Optional;
+
+/**
+ * Phase 4 service implementation backed by {@link PgCounterRepository}.
+ */
+public final class PgCounterService implements CounterService {
+
+    private static final CounterOptions DEFAULTS = CounterOptions.defaults();
+
+    private final PgCounterRepository repository;
+
+    public PgCounterService(PgCounterRepository repository) {
+        this.repository = repository;
+    }
+
+    @Override
+    public Future<Long> increment(CacheKey key) {
+        return incrementBy(key, 1L);
+    }
+
+    @Override
+    public Future<Long> incrementBy(CacheKey key, long delta) {
+        return wrapStoreFailure("incrementBy", repository.increment(key, delta, DEFAULTS));
+    }
+
+    @Override
+    public Future<Long> decrement(CacheKey key) {
+        return decrementBy(key, 1L);
+    }
+
+    @Override
+    public Future<Long> decrementBy(CacheKey key, long delta) {
+        if (delta < 0) {
+            return Future.failedFuture(new IllegalArgumentException("delta must be >= 0"));
+        }
+        return wrapStoreFailure("decrementBy", repository.increment(key, -delta, DEFAULTS));
+    }
+
+    @Override
+    public Future<Optional<Long>> getValue(CacheKey key) {
+        return wrapStoreFailure("getValue", repository.get(key));
+    }
+
+    @Override
+    public Future<Long> setValue(CacheKey key, long value, CounterOptions options) {
+        if (options == null) {
+            return Future.failedFuture(new IllegalArgumentException("options cannot be null"));
+        }
+        return wrapStoreFailure("setValue", repository.setValue(key, value, options));
+    }
+
+    @Override
+    public Future<TtlResult> ttl(CacheKey key) {
+        return wrapStoreFailure("ttl", repository.ttl(key));
+    }
+
+    @Override
+    public Future<Boolean> expire(CacheKey key, Duration ttl) {
+        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+            return Future.failedFuture(new IllegalArgumentException("ttl must be > 0"));
+        }
+        return wrapStoreFailure("expire", repository.expire(key, ttl));
+    }
+
+    @Override
+    public Future<Boolean> persist(CacheKey key) {
+        return wrapStoreFailure("persist", repository.persist(key));
+    }
+
+    @Override
+    public Future<Boolean> delete(CacheKey key) {
+        return wrapStoreFailure("delete", repository.delete(key));
+    }
+
+    private static <T> Future<T> wrapStoreFailure(String operation, Future<T> future) {
+        return future.recover(err -> {
+            if (err instanceof CacheException || err instanceof IllegalArgumentException) {
+                return Future.failedFuture(err);
+            }
+            return Future.failedFuture(new CacheStoreException("Counter " + operation + " failed", err));
+        });
+    }
+}
