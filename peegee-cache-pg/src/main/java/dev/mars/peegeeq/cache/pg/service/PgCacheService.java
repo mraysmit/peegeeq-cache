@@ -9,6 +9,7 @@ import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheSetResult;
 import dev.mars.peegeeq.cache.api.model.TouchResult;
 import dev.mars.peegeeq.cache.api.model.TtlResult;
+import dev.mars.peegeeq.cache.core.validation.CoreValidation;
 import dev.mars.peegeeq.cache.pg.repository.PgCacheRepository;
 import io.vertx.core.Future;
 
@@ -26,7 +27,7 @@ public final class PgCacheService implements CacheService {
     private final PgCacheRepository repository;
 
     public PgCacheService(PgCacheRepository repository) {
-        this.repository = repository;
+        this.repository = CoreValidation.requireNonNull(repository, "repository");
     }
 
     @Override
@@ -92,10 +93,12 @@ public final class PgCacheService implements CacheService {
 
     @Override
     public Future<Boolean> expire(CacheKey key, Duration ttl) {
-        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
-            return Future.failedFuture(new IllegalArgumentException("ttl must be > 0"));
+        try {
+            Duration normalizedTtl = CoreValidation.requirePositiveDuration(ttl, "ttl");
+            return wrapStoreFailure("expire", repository.expire(key, normalizedTtl.toMillis()));
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
         }
-        return wrapStoreFailure("expire", repository.expire(key, ttl.toMillis()));
     }
 
     @Override
@@ -105,11 +108,13 @@ public final class PgCacheService implements CacheService {
 
     @Override
     public Future<TouchResult> touch(CacheKey key, Duration ttl) {
-        if (ttl != null && (ttl.isZero() || ttl.isNegative())) {
-            return Future.failedFuture(new IllegalArgumentException("ttl must be > 0 when provided"));
+        try {
+            Duration normalizedTtl = CoreValidation.requireOptionalPositiveDuration(ttl, "ttl");
+            Long ttlMillis = normalizedTtl == null ? null : normalizedTtl.toMillis();
+            return wrapStoreFailure("touch", repository.touch(key, ttlMillis));
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
         }
-        Long ttlMillis = ttl == null ? null : ttl.toMillis();
-        return wrapStoreFailure("touch", repository.touch(key, ttlMillis));
     }
 
     private static <T> Future<T> wrapStoreFailure(String operation, Future<T> future) {

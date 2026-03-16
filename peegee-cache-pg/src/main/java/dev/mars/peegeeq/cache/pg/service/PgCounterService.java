@@ -6,6 +6,7 @@ import dev.mars.peegeeq.cache.api.exception.CacheStoreException;
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CounterOptions;
 import dev.mars.peegeeq.cache.api.model.TtlResult;
+import dev.mars.peegeeq.cache.core.validation.CoreValidation;
 import dev.mars.peegeeq.cache.pg.repository.PgCounterRepository;
 import io.vertx.core.Future;
 
@@ -22,7 +23,7 @@ public final class PgCounterService implements CounterService {
     private final PgCounterRepository repository;
 
     public PgCounterService(PgCounterRepository repository) {
-        this.repository = repository;
+        this.repository = CoreValidation.requireNonNull(repository, "repository");
     }
 
     @Override
@@ -55,10 +56,12 @@ public final class PgCounterService implements CounterService {
 
     @Override
     public Future<Long> setValue(CacheKey key, long value, CounterOptions options) {
-        if (options == null) {
-            return Future.failedFuture(new IllegalArgumentException("options cannot be null"));
+        try {
+            CounterOptions normalizedOptions = CoreValidation.requireNonNull(options, "options");
+            return wrapStoreFailure("setValue", repository.setValue(key, value, normalizedOptions));
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
         }
-        return wrapStoreFailure("setValue", repository.setValue(key, value, options));
     }
 
     @Override
@@ -68,10 +71,12 @@ public final class PgCounterService implements CounterService {
 
     @Override
     public Future<Boolean> expire(CacheKey key, Duration ttl) {
-        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
-            return Future.failedFuture(new IllegalArgumentException("ttl must be > 0"));
+        try {
+            Duration normalizedTtl = CoreValidation.requirePositiveDuration(ttl, "ttl");
+            return wrapStoreFailure("expire", repository.expire(key, normalizedTtl));
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
         }
-        return wrapStoreFailure("expire", repository.expire(key, ttl));
     }
 
     @Override

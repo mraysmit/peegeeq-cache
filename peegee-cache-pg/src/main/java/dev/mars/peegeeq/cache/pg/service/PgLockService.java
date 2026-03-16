@@ -10,6 +10,7 @@ import dev.mars.peegeeq.cache.api.model.LockKey;
 import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
 import dev.mars.peegeeq.cache.api.model.LockRenewRequest;
 import dev.mars.peegeeq.cache.api.model.LockState;
+import dev.mars.peegeeq.cache.core.validation.CoreValidation;
 import dev.mars.peegeeq.cache.pg.repository.PgLockRepository;
 import io.vertx.core.Future;
 
@@ -23,48 +24,78 @@ public final class PgLockService implements LockService {
     private final PgLockRepository repository;
 
     public PgLockService(PgLockRepository repository) {
-        this.repository = repository;
+        this.repository = CoreValidation.requireNonNull(repository, "repository");
     }
 
     @Override
     public Future<LockAcquireResult> acquire(LockAcquireRequest request) {
-        if (request.leaseTtl() == null || request.leaseTtl().isZero() || request.leaseTtl().isNegative()) {
-            return Future.failedFuture(new IllegalArgumentException("leaseTtl must be > 0"));
+        try {
+            LockAcquireRequest validatedRequest = CoreValidation.requireNonNull(request, "request");
+            CoreValidation.requireNonNull(validatedRequest.key(), "key");
+            CoreValidation.requireNonBlank(validatedRequest.ownerToken(), "ownerToken");
+            CoreValidation.requirePositiveDuration(validatedRequest.leaseTtl(), "leaseTtl");
+            return wrapStoreFailure("acquire", repository.acquire(validatedRequest));
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
         }
-        return wrapStoreFailure("acquire", repository.acquire(request));
     }
 
     @Override
     public Future<Boolean> renew(LockRenewRequest request) {
-        if (request.leaseTtl() == null || request.leaseTtl().isZero() || request.leaseTtl().isNegative()) {
-            return Future.failedFuture(new IllegalArgumentException("leaseTtl must be > 0"));
+        try {
+            LockRenewRequest validatedRequest = CoreValidation.requireNonNull(request, "request");
+            CoreValidation.requireNonNull(validatedRequest.key(), "key");
+            CoreValidation.requireNonBlank(validatedRequest.ownerToken(), "ownerToken");
+            CoreValidation.requirePositiveDuration(validatedRequest.leaseTtl(), "leaseTtl");
+
+            Future<Boolean> chained = repository.renew(validatedRequest)
+                    .compose(renewed -> renewed
+                            ? Future.succeededFuture(true)
+                            : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for renew")));
+            return wrapStoreFailure("renew", chained);
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
         }
-        Future<Boolean> chained = repository.renew(request)
-                .compose(renewed -> renewed
-                        ? Future.succeededFuture(true)
-                        : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for renew")));
-        return wrapStoreFailure("renew", chained);
     }
 
     @Override
     public Future<Boolean> release(LockReleaseRequest request) {
-        Future<Boolean> chained = repository.release(request)
-                .compose(released -> released
-                        ? Future.succeededFuture(true)
-                        : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for release")));
-        return wrapStoreFailure("release", chained);
+        try {
+            LockReleaseRequest validatedRequest = CoreValidation.requireNonNull(request, "request");
+            CoreValidation.requireNonNull(validatedRequest.key(), "key");
+            CoreValidation.requireNonBlank(validatedRequest.ownerToken(), "ownerToken");
+
+            Future<Boolean> chained = repository.release(validatedRequest)
+                    .compose(released -> released
+                            ? Future.succeededFuture(true)
+                            : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for release")));
+            return wrapStoreFailure("release", chained);
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
+        }
     }
 
     @Override
     public Future<Boolean> isHeldBy(LockKey key, String ownerToken) {
-        Future<Boolean> chained = repository.currentLock(key)
-                .map(lock -> lock.map(state -> state.ownerToken().equals(ownerToken)).orElse(false));
-        return wrapStoreFailure("isHeldBy", chained);
+        try {
+            LockKey validatedKey = CoreValidation.requireNonNull(key, "key");
+            String validatedOwnerToken = CoreValidation.requireNonBlank(ownerToken, "ownerToken");
+            Future<Boolean> chained = repository.currentLock(validatedKey)
+                    .map(lock -> lock.map(state -> state.ownerToken().equals(validatedOwnerToken)).orElse(false));
+            return wrapStoreFailure("isHeldBy", chained);
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
+        }
     }
 
     @Override
     public Future<Optional<LockState>> currentLock(LockKey key) {
-        return wrapStoreFailure("currentLock", repository.currentLock(key));
+        try {
+            LockKey validatedKey = CoreValidation.requireNonNull(key, "key");
+            return wrapStoreFailure("currentLock", repository.currentLock(validatedKey));
+        } catch (IllegalArgumentException ex) {
+            return Future.failedFuture(ex);
+        }
     }
 
     private static <T> Future<T> wrapStoreFailure(String operation, Future<T> future) {

@@ -391,7 +391,7 @@ Last reviewed: 2026-03-16
 | Phase 1: API skeleton | COMPLETE | API interfaces and models exist in `peegee-cache-api/src/main/java/dev/mars/peegeeq/cache/api/**`; unit tests for core value objects and exceptions are present and previously documented | None |
 | Phase 2: PostgreSQL schema and migrations | COMPLETE | `peegee-cache-pg/src/main/resources/db/migration/V001__create_peegee_cache_schema.sql` plus migration/invariant tests are already documented in this plan | None |
 | Phase 3: Repository and SQL statement catalogue | COMPLETE | Repositories and SQL catalogues are in place: `PgCacheRepository`, `PgCounterRepository`, `PgLockRepository` and `CacheSql`, `CounterSql`, `LockSql` in `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/` | None |
-| Phase 4: Service implementations for V1 Core | IN PROGRESS | Services exist: `PgCacheService`, `PgCounterService`, `PgLockService`, plus `PgPeeGeeCache` in `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/` and `.../service/` | Validate full behavior parity with design under integration tests, especially TTL and lock ownership semantics |
+| Phase 4: Service implementations for V1 Core | COMPLETE | Services are implemented and now share centralized argument validation via `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, wired in `PgCacheService`, `PgCounterService`, and `PgLockService`; service/repository/migration tests are green | None |
 | Phase 5: Runtime bootstrap and managed lifecycle | IN PROGRESS | Runtime bootstrap sources now exist: `PeeGeeCacheManager`, `PeeGeeCaches`, `PeeGeeCacheFactory`, `PgPeeGeeCacheManager`, `PgPeeGeeCacheFactory`, `PeeGeeCacheBootstrapOptions`, `PeeGeeCacheConfig`, `PgCacheStoreConfig`; lifecycle tests exist in `PeeGeeCachesLifecycleTest` | Complete remaining runtime ownership behavior (expiry sweeper/listener lifecycle) and finalize Phase 5 exit verification |
 | Phase 6: V1 completion features | NOT STARTED | No confirmed scan/bulk/admin/pubsub completion markers yet | Implement phase scope in recommended order and prove through tests |
 | Phase 7: Native SQL contract hardening | NOT STARTED | No documented SQL function boundary implementation yet | Define and implement function-first write contract for correctness-sensitive operations |
@@ -420,12 +420,12 @@ Verdict: COMPLETE
 
 ### Phase 4 strict verification
 
-Verdict: IN PROGRESS (not complete)
+Verdict: COMPLETE
 
 | Exit criterion | Result | Evidence | Notes |
 |---|---|---|---|
 | `V1 Core` public interfaces are backed by working implementations | PASS (for cache/counter/lock) | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCacheService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCounterService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgLockService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/PgPeeGeeCache.java` | Implementations exist and are wired through `PgPeeGeeCache` |
-| type and option validation is consistent | FAIL (partial) | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCacheService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCounterService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgLockService.java`, `peegee-cache-core/src/main/java/` | Basic service-level validation exists, but there is no shared validation/normalization implementation in `peegee-cache-core` yet; behavior is still distributed and incomplete versus phase scope |
+| type and option validation is consistent | PASS | `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, `peegee-cache-core/src/test/java/dev/mars/peegeeq/cache/core/validation/CoreValidationTest.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCacheService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCounterService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgLockService.java`, `peegee-cache-pg/src/test/java/dev/mars/peegeeq/cache/pg/service/PgLockServiceTest.java` | Shared core validation now enforces non-null, non-blank, and positive-duration argument rules across services |
 | service behavior matches the design document for expiry, counters, and lock ownership | PASS (for implemented V1 Core surface) | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCacheRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCounterRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgLockRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/CacheSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/CounterSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/LockSql.java` | TTL writes use database-clock SQL interval expressions and lock ownership checks are enforced in SQL/repository behavior |
 
 Execution evidence from strict run:
@@ -434,13 +434,14 @@ Execution evidence from strict run:
 - reactor result: BUILD SUCCESS
 - module tests observed:
   - `peegee-cache-api`: 34 tests passed
-  - `peegee-cache-pg`: 86 tests passed (migration, repository, and service suites)
+  - `peegee-cache-core`: 4 tests passed (`CoreValidationTest`)
+  - `peegee-cache-pg`: 88 tests passed (migration, repository, and service suites)
 
 Conclusion:
 
 - test suite is green for current implementation
 - Phase 3 exit criteria are satisfied
-- Phase 4 remains in progress due to shared-validation/normalization gaps in `peegee-cache-core`
+- Phase 4 exit criteria are now satisfied
 - Phase 5 has started and is currently in progress with manager/factory/bootstrap implementations and lifecycle tests present
 
 ## 4. Feature rollout by milestone

@@ -108,4 +108,25 @@ class PgLockServiceTest {
                     ctx.completeNow();
                 })));
     }
+
+    @Test
+    void acquireRejectsNullRequest(VertxTestContext ctx) {
+        service.acquire(null)
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertTrue(err instanceof IllegalArgumentException);
+                    assertEquals("request cannot be null", err.getMessage());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void isHeldByRejectsBlankOwnerToken(VertxTestContext ctx) {
+        LockKey key = new LockKey("ns", "lock-svc-invalid-owner");
+        service.isHeldBy(key, "   ")
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertTrue(err instanceof IllegalArgumentException);
+                    assertEquals("ownerToken must not be blank", err.getMessage());
+                    ctx.completeNow();
+                })));
+    }
 }
