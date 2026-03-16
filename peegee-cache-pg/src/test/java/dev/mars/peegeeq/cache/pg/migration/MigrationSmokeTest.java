@@ -1,15 +1,15 @@
 package dev.mars.peegeeq.cache.pg.migration;
 
+import dev.mars.peegeeq.cache.pg.test.PostgreSQLTestConstants;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.testcontainers.containers.PostgreSQLContainer;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -18,7 +18,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,43 +26,20 @@ import static org.junit.jupiter.api.Assertions.fail;
 /**
  * Applies the V001 migration SQL file against a real PostgreSQL instance
  * and verifies the resulting schema objects.
- * <p>
- * Starts a disposable PostgreSQL container via the Docker CLI to work around
- * Testcontainers docker-java incompatibility with Docker Engine 29
- * (minimum API version 1.44). Will be switched back to {@code @Testcontainers}
- * once docker-java/Testcontainers ships a compatible release.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MigrationSmokeTest {
 
-    private static final String CONTAINER_NAME = "pgcache-migration-test";
-    private static final String PG_IMAGE = "postgres:16-alpine";
-    private static final String PG_USER = "test";
-    private static final String PG_PASSWORD = "test";
-    private static final String PG_DB = "testdb";
-    private static int pgPort;
+    private static PostgreSQLContainer<?> postgres;
 
     @BeforeAll
     static void startContainerAndApplyMigrations() throws Exception {
-        // Remove any leftover container from a previous run
-        exec("docker", "rm", "-f", CONTAINER_NAME);
-
-        // Start PostgreSQL container with a random host port
-        exec("docker", "run", "-d", "--name", CONTAINER_NAME,
-                "-e", "POSTGRES_USER=" + PG_USER,
-                "-e", "POSTGRES_PASSWORD=" + PG_PASSWORD,
-                "-e", "POSTGRES_DB=" + PG_DB,
-                "-p", "0:5432",
-                PG_IMAGE);
-
-        // Discover the mapped host port
-        String portOutput = execOutput("docker", "port", CONTAINER_NAME, "5432");
-        // Output is like "0.0.0.0:12345" or "0.0.0.0:12345\n:::12345"
-        String firstLine = portOutput.strip().split("\\R")[0];
-        pgPort = Integer.parseInt(firstLine.substring(firstLine.lastIndexOf(':') + 1));
-
-        // Wait for PostgreSQL to become ready
-        waitForPostgres();
+        postgres = new PostgreSQLContainer<>(PostgreSQLTestConstants.POSTGRES_IMAGE)
+                .withDatabaseName(PostgreSQLTestConstants.DEFAULT_DATABASE_NAME)
+                .withUsername(PostgreSQLTestConstants.DEFAULT_USERNAME)
+                .withPassword(PostgreSQLTestConstants.DEFAULT_PASSWORD)
+                .withReuse(false);
+        postgres.start();
 
         // Apply migration
         try (Connection conn = connect()) {
@@ -76,53 +52,14 @@ class MigrationSmokeTest {
 
     @AfterAll
     static void stopContainer() throws Exception {
-        exec("docker", "rm", "-f", CONTAINER_NAME);
-    }
-
-    private static void waitForPostgres() throws Exception {
-        String url = jdbcUrl();
-        long deadline = System.currentTimeMillis() + 30_000;
-        while (System.currentTimeMillis() < deadline) {
-            try (Connection conn = DriverManager.getConnection(url, PG_USER, PG_PASSWORD)) {
-                try (Statement stmt = conn.createStatement()) {
-                    stmt.execute("SELECT 1");
-                }
-                return;
-            } catch (SQLException ignored) {
-                Thread.sleep(500);
-            }
+        if (postgres != null) {
+            postgres.stop();
+            postgres = null;
         }
-        fail("PostgreSQL did not become ready within 30 seconds");
-    }
-
-    private static String exec(String... cmd) throws Exception {
-        Process p = new ProcessBuilder(cmd)
-                .redirectErrorStream(true)
-                .start();
-        String output;
-        try (var reader = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-            output = reader.lines().reduce("", (a, b) -> a + b + "\n");
-        }
-        p.waitFor(30, TimeUnit.SECONDS);
-        return output;
-    }
-
-    private static String execOutput(String... cmd) throws Exception {
-        Process p = new ProcessBuilder(cmd)
-                .redirectErrorStream(true)
-                .start();
-        String output;
-        try (var reader = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-            output = reader.lines().reduce("", (a, b) -> a + b + "\n");
-        }
-        if (!p.waitFor(30, TimeUnit.SECONDS) || p.exitValue() != 0) {
-            throw new RuntimeException("Command failed: " + String.join(" ", cmd) + "\n" + output);
-        }
-        return output;
     }
 
     private static String jdbcUrl() {
-        return "jdbc:postgresql://127.0.0.1:" + pgPort + "/" + PG_DB;
+        return postgres.getJdbcUrl();
     }
 
     private static String readMigration(String fileName) throws IOException {
@@ -422,7 +359,11 @@ class MigrationSmokeTest {
     // --- Helpers ---
 
     private static Connection connect() throws SQLException {
-        return DriverManager.getConnection(jdbcUrl(), PG_USER, PG_PASSWORD);
+        return DriverManager.getConnection(
+                jdbcUrl(),
+                PostgreSQLTestConstants.DEFAULT_USERNAME,
+                PostgreSQLTestConstants.DEFAULT_PASSWORD
+        );
     }
 
     private void assertTableExists(String tableName) throws SQLException {
