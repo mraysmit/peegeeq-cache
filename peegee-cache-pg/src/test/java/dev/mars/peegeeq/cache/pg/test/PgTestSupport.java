@@ -31,23 +31,17 @@ public final class PgTestSupport {
     }
 
     public void start(Vertx vertx) throws Exception {
-        log.info("Starting PostgreSQL container '{}' (image: {})", logLabel, PostgreSQLTestConstants.POSTGRES_IMAGE);
-        postgres = new PostgreSQLContainer<>(PostgreSQLTestConstants.POSTGRES_IMAGE)
-                .withDatabaseName(PostgreSQLTestConstants.DEFAULT_DATABASE_NAME)
-                .withUsername(PostgreSQLTestConstants.DEFAULT_USERNAME)
-                .withPassword(PostgreSQLTestConstants.DEFAULT_PASSWORD)
-                .withReuse(false);
-        postgres.start();
-
-        log.info("Container '{}' mapped to port {}", logLabel, postgres.getFirstMappedPort());
+        postgres = SharedPostgresContainerManager.acquire(logLabel);
+        log.info("Container '{}' using shared mapped port {}", logLabel, postgres.getFirstMappedPort());
         applyMigrations(vertx);
+        resetDatabaseState(vertx);
         log.info("Container '{}' ready", logLabel);
     }
 
     public void stop() throws Exception {
-        log.info("Stopping container '{}'", logLabel);
+        log.info("Releasing container '{}'", logLabel);
         if (postgres != null) {
-            postgres.stop();
+            SharedPostgresContainerManager.release(logLabel);
             postgres = null;
         }
     }
@@ -72,6 +66,19 @@ public final class PgTestSupport {
             await(migrationPool.query(sql).execute().mapEmpty(), 10_000);
         } finally {
             migrationPool.close();
+        }
+    }
+
+    private void resetDatabaseState(Vertx vertx) throws Exception {
+        Pool adminPool = Pool.pool(vertx, connectOptions(), new PoolOptions().setMaxSize(1));
+        try {
+            await(adminPool.query(
+                    "TRUNCATE TABLE peegee_cache.cache_entries, peegee_cache.cache_counters, peegee_cache.cache_locks")
+                    .execute().mapEmpty(), 10_000);
+            await(adminPool.query("ALTER SEQUENCE peegee_cache.lock_fencing_seq RESTART WITH 1")
+                    .execute().mapEmpty(), 10_000);
+        } finally {
+            await(adminPool.close(), 10_000);
         }
     }
 

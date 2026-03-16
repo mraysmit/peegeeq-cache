@@ -11,6 +11,7 @@ import io.vertx.core.Vertx;
 import io.vertx.sqlclient.Pool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.time.Duration;
 
@@ -26,12 +27,15 @@ public final class CacheVersionedUpdateExample {
 
     public static void main(String[] args) throws Exception {
         Vertx vertx = Vertx.vertx();
+        PostgreSQLContainer<?> container = null;
         Pool pool = null;
         PeeGeeCacheManager manager = null;
         log.info("Starting CacheVersionedUpdateExample");
 
         try {
-            pool = ExampleRuntimeSupport.createPool(vertx);
+            container = ExampleRuntimeSupport.startContainer();
+            ExampleRuntimeSupport.applyMigrations(vertx, container);
+            pool = ExampleRuntimeSupport.createPool(vertx, container);
             log.info("Created PostgreSQL pool for example runtime");
             manager = ExampleRuntimeSupport.startDefaultManager(vertx, pool);
             log.info("Started peegee-cache manager");
@@ -47,11 +51,16 @@ public final class CacheVersionedUpdateExample {
                     null,
                     false
             )));
-                    log.info("Seeded initial order status payload");
+            ExampleLogSupport.logData(log, "seeded dataset",
+                    "key", key.asQualifiedKey(),
+                    "value", "{\"status\":\"NEW\"}");
 
             CacheEntry initial = ExampleRuntimeSupport.await(manager.cache().cache().get(key)).orElseThrow();
             long expectedVersion = initial.version();
-                    log.info("Loaded initial cache entry version={}", expectedVersion);
+            ExampleLogSupport.logData(log, "loaded current entry",
+                    "key", key.asQualifiedKey(),
+                    "value", initial.value().asString(),
+                    "version", expectedVersion);
 
             CacheSetResult firstUpdate = ExampleRuntimeSupport.await(manager.cache().cache().set(new CacheSetRequest(
                     key,
@@ -61,7 +70,10 @@ public final class CacheVersionedUpdateExample {
                     expectedVersion,
                     true
             )));
-                    log.info("First versioned update applied={}, newVersion={}", firstUpdate.applied(), firstUpdate.newVersion());
+            ExampleLogSupport.logData(log, "first versioned update",
+                    "key", key.asQualifiedKey(),
+                    "applied", firstUpdate.applied(),
+                    "newVersion", firstUpdate.newVersion());
 
             CacheSetResult staleUpdate = ExampleRuntimeSupport.await(manager.cache().cache().set(new CacheSetRequest(
                     key,
@@ -71,17 +83,23 @@ public final class CacheVersionedUpdateExample {
                     expectedVersion,
                     true
             )));
-            log.info("Stale versioned update applied={} (expected false)", staleUpdate.applied());
+            ExampleLogSupport.logData(log, "stale versioned update",
+                    "key", key.asQualifiedKey(),
+                    "applied", staleUpdate.applied(),
+                    "expected", false);
 
             CacheEntry finalState = ExampleRuntimeSupport.await(manager.cache().cache().get(key)).orElseThrow();
-            log.info("Final state value={}, version={}", finalState.value().asString(), finalState.version());
+            ExampleLogSupport.logData(log, "final dataset",
+                    "key", key.asQualifiedKey(),
+                    "value", finalState.value().asString(),
+                    "version", finalState.version());
         } catch (Exception ex) {
             log.error("CacheVersionedUpdateExample failed: {}", ex.getMessage());
             log.debug("CacheVersionedUpdateExample exception stack trace", ex);
             throw ex;
         } finally {
             log.info("Shutting down CacheVersionedUpdateExample");
-            ExampleRuntimeSupport.shutdown(manager, pool, vertx);
+            ExampleRuntimeSupport.shutdown(manager, pool, vertx, container);
             log.info("Shutdown complete");
         }
     }

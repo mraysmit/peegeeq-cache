@@ -11,10 +11,10 @@ import io.vertx.core.Vertx;
 import io.vertx.sqlclient.Pool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -29,12 +29,15 @@ public final class CacheBatchAndTtlExample {
 
     public static void main(String[] args) throws Exception {
         Vertx vertx = Vertx.vertx();
+        PostgreSQLContainer<?> container = null;
         Pool pool = null;
         PeeGeeCacheManager manager = null;
         log.info("Starting CacheBatchAndTtlExample");
 
         try {
-            pool = ExampleRuntimeSupport.createPool(vertx);
+            container = ExampleRuntimeSupport.startContainer();
+            ExampleRuntimeSupport.applyMigrations(vertx, container);
+            pool = ExampleRuntimeSupport.createPool(vertx, container);
             log.info("Created PostgreSQL pool for example runtime");
             manager = ExampleRuntimeSupport.startDefaultManager(vertx, pool);
             log.info("Started peegee-cache manager");
@@ -48,15 +51,20 @@ public final class CacheBatchAndTtlExample {
                     new CacheSetRequest(beta, CacheValue.ofString("B"), Duration.ofSeconds(30), SetMode.UPSERT, null, false),
                     new CacheSetRequest(gamma, CacheValue.ofString("C"), null, SetMode.UPSERT, null, false)
             );
+                ExampleLogSupport.logData(log, "seeding dataset",
+                    alpha.asQualifiedKey(), "A",
+                    beta.asQualifiedKey(), "B",
+                    gamma.asQualifiedKey(), "C");
                 log.debug("Executing setMany for {} keys", requests.size());
             ExampleRuntimeSupport.await(manager.cache().cache().setMany(requests));
 
-            Map<CacheKey, Optional<CacheEntry>> loaded = ExampleRuntimeSupport.await(
+                var loaded = ExampleRuntimeSupport.await(
                     manager.cache().cache().getMany(List.of(alpha, beta, gamma))
             );
-            log.info("batch-get alpha={}", loaded.get(alpha).map(entry -> entry.value().asString()).orElse("<missing>"));
-            log.info("batch-get beta={}", loaded.get(beta).map(entry -> entry.value().asString()).orElse("<missing>"));
-            log.info("batch-get gamma={}", loaded.get(gamma).map(entry -> entry.value().asString()).orElse("<missing>"));
+                ExampleLogSupport.logData(log, "batch-get dataset",
+                    alpha.asQualifiedKey(), loaded.get(alpha).map(entry -> entry.value().asString()).orElse("<missing>"),
+                    beta.asQualifiedKey(), loaded.get(beta).map(entry -> entry.value().asString()).orElse("<missing>"),
+                    gamma.asQualifiedKey(), loaded.get(gamma).map(entry -> entry.value().asString()).orElse("<missing>"));
 
             ExampleRuntimeSupport.await(manager.cache().cache().expire(gamma, Duration.ofSeconds(20)));
             ExampleRuntimeSupport.await(manager.cache().cache().touch(beta, Duration.ofSeconds(45)));
@@ -66,19 +74,20 @@ public final class CacheBatchAndTtlExample {
             TtlResult betaTtl = ExampleRuntimeSupport.await(manager.cache().cache().ttl(beta));
             TtlResult gammaTtl = ExampleRuntimeSupport.await(manager.cache().cache().ttl(gamma));
 
-            log.info("ttl alpha state={}, ttlMillis={}", alphaTtl.state(), alphaTtl.ttlMillis());
-            log.info("ttl beta state={}, ttlMillis={}", betaTtl.state(), betaTtl.ttlMillis());
-            log.info("ttl gamma state={}, ttlMillis={}", gammaTtl.state(), gammaTtl.ttlMillis());
+                ExampleLogSupport.logData(log, "ttl states",
+                    alpha.asQualifiedKey(), alphaTtl.state() + "/" + alphaTtl.ttlMillis(),
+                    beta.asQualifiedKey(), betaTtl.state() + "/" + betaTtl.ttlMillis(),
+                    gamma.asQualifiedKey(), gammaTtl.state() + "/" + gammaTtl.ttlMillis());
 
             long removed = ExampleRuntimeSupport.await(manager.cache().cache().deleteMany(List.of(alpha, beta, gamma)));
-            log.info("batch-delete removed={}", removed);
+                ExampleLogSupport.logData(log, "batch-delete result", "removed", removed);
         } catch (Exception ex) {
             log.error("CacheBatchAndTtlExample failed: {}", ex.getMessage());
             log.debug("CacheBatchAndTtlExample exception stack trace", ex);
             throw ex;
         } finally {
             log.info("Shutting down CacheBatchAndTtlExample");
-            ExampleRuntimeSupport.shutdown(manager, pool, vertx);
+            ExampleRuntimeSupport.shutdown(manager, pool, vertx, container);
             log.info("Shutdown complete");
         }
     }

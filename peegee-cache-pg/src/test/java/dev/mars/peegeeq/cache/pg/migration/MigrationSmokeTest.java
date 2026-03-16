@@ -1,6 +1,7 @@
 package dev.mars.peegeeq.cache.pg.migration;
 
 import dev.mars.peegeeq.cache.pg.test.PostgreSQLTestConstants;
+import dev.mars.peegeeq.cache.pg.test.SharedPostgresContainerManager;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
@@ -34,18 +35,15 @@ class MigrationSmokeTest {
 
     @BeforeAll
     static void startContainerAndApplyMigrations() throws Exception {
-        postgres = new PostgreSQLContainer<>(PostgreSQLTestConstants.POSTGRES_IMAGE)
-                .withDatabaseName(PostgreSQLTestConstants.DEFAULT_DATABASE_NAME)
-                .withUsername(PostgreSQLTestConstants.DEFAULT_USERNAME)
-                .withPassword(PostgreSQLTestConstants.DEFAULT_PASSWORD)
-                .withReuse(false);
-        postgres.start();
+        postgres = SharedPostgresContainerManager.acquire("migration-smoke-test");
 
         // Apply migration
         try (Connection conn = connect()) {
             String sql = readMigration("V001__create_peegee_cache_schema.sql");
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute(sql);
+                stmt.execute("TRUNCATE TABLE peegee_cache.cache_entries, peegee_cache.cache_counters, peegee_cache.cache_locks");
+                stmt.execute("ALTER SEQUENCE peegee_cache.lock_fencing_seq RESTART WITH 1");
             }
         }
     }
@@ -53,7 +51,7 @@ class MigrationSmokeTest {
     @AfterAll
     static void stopContainer() throws Exception {
         if (postgres != null) {
-            postgres.stop();
+            SharedPostgresContainerManager.release("migration-smoke-test");
             postgres = null;
         }
     }
