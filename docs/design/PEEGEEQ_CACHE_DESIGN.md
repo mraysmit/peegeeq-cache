@@ -2561,3 +2561,33 @@ That threshold was already reached.
 This is not “Redis on PostgreSQL.”
 
 It is a **transactional cache + lock + counter + lightweight coordination service backed by PostgreSQL**, designed for systems where PostgreSQL is already strategic and operational simplicity matters more than pretending to be Redis.
+
+---
+
+## 29. Starter integration examples
+
+To keep adoption friction low, the repository should carry runnable examples that match the current runtime/bootstrap APIs.
+
+### Current integration-example set
+
+- `peegee-cache-examples/src/main/java/dev/mars/peegeeq/cache/examples/BasicIntegrationExample.java`
+    - purpose: minimal end-to-end bootstrap plus cache/counter/lock primitive calls
+- `peegee-cache-examples/src/main/java/dev/mars/peegeeq/cache/examples/CacheReadThroughExample.java`
+    - purpose: read-through cache pattern with `ONLY_IF_ABSENT` to reduce stampede races
+- `peegee-cache-examples/src/main/java/dev/mars/peegeeq/cache/examples/CacheVersionedUpdateExample.java`
+    - purpose: optimistic concurrency using `ONLY_IF_VERSION_MATCHES` and conflict handling
+- `peegee-cache-examples/src/main/java/dev/mars/peegeeq/cache/examples/CacheBatchAndTtlExample.java`
+    - purpose: batch get/set/delete flows plus TTL lifecycle operations (`expire`, `touch`, `persist`)
+
+Each example is runnable and uses the same runtime bootstrap path (`PeeGeeCaches.create(...)` + `startReactive()` + `stopReactive()`).
+
+### Next integration examples
+
+1. `ConfigDrivenBootstrapExample`
+     - purpose: custom schema/prefix and runtime sweeper configuration
+2. `FailureHandlingExample`
+     - purpose: timeout/failure propagation and graceful shutdown under startup failure
+3. `FrameworkAdapterExample`
+     - purpose: wiring into a service lifecycle (Micronaut/Quarkus/Spring Boot style lifecycle wrapper)
+
+These examples should remain small and executable, and should track the same API contracts validated by integration tests.
