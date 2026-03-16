@@ -392,7 +392,7 @@ Last reviewed: 2026-03-16
 | Phase 2: PostgreSQL schema and migrations | COMPLETE | `peegee-cache-pg/src/main/resources/db/migration/V001__create_peegee_cache_schema.sql` plus migration/invariant tests are already documented in this plan | None |
 | Phase 3: Repository and SQL statement catalogue | COMPLETE | Repositories and SQL catalogues are in place: `PgCacheRepository`, `PgCounterRepository`, `PgLockRepository` and `CacheSql`, `CounterSql`, `LockSql` in `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/` | None |
 | Phase 4: Service implementations for V1 Core | COMPLETE | Services are implemented and now share centralized argument validation via `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, wired in `PgCacheService`, `PgCounterService`, and `PgLockService`; service/repository/migration tests are green | None |
-| Phase 5: Runtime bootstrap and managed lifecycle | IN PROGRESS | Runtime bootstrap sources now exist: `PeeGeeCacheManager`, `PeeGeeCaches`, `PeeGeeCacheFactory`, `PgPeeGeeCacheManager`, `PgPeeGeeCacheFactory`, `PeeGeeCacheBootstrapOptions`, `PeeGeeCacheConfig`, `PgCacheStoreConfig`; lifecycle tests exist in `PeeGeeCachesLifecycleTest` | Complete remaining runtime ownership behavior (expiry sweeper/listener lifecycle) and finalize Phase 5 exit verification |
+| Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | Runtime bootstrap is implemented with explicit ownership of `Vertx`, `Pool`, expiry sweeper timer, and pub/sub listener lifecycle placeholder in `PgPeeGeeCacheManager`; lifecycle tests in `PeeGeeCachesLifecycleTest` verify start/stop ownership and invalid sweeper config guards | None |
 | Phase 6: V1 completion features | NOT STARTED | No confirmed scan/bulk/admin/pubsub completion markers yet | Implement phase scope in recommended order and prove through tests |
 | Phase 7: Native SQL contract hardening | NOT STARTED | No documented SQL function boundary implementation yet | Define and implement function-first write contract for correctness-sensitive operations |
 | Phase 8: V2 and later | DEFERRED | By strategy: V2 starts only after V1 is stable | Revisit after V1 completion and operational hardening |
@@ -428,6 +428,16 @@ Verdict: COMPLETE
 | type and option validation is consistent | PASS | `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, `peegee-cache-core/src/test/java/dev/mars/peegeeq/cache/core/validation/CoreValidationTest.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCacheService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCounterService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgLockService.java`, `peegee-cache-pg/src/test/java/dev/mars/peegeeq/cache/pg/service/PgLockServiceTest.java` | Shared core validation now enforces non-null, non-blank, and positive-duration argument rules across services |
 | service behavior matches the design document for expiry, counters, and lock ownership | PASS (for implemented V1 Core surface) | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCacheRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCounterRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgLockRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/CacheSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/CounterSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/LockSql.java` | TTL writes use database-clock SQL interval expressions and lock ownership checks are enforced in SQL/repository behavior |
 
+### Phase 5 strict verification
+
+Verdict: COMPLETE
+
+| Exit criterion | Result | Evidence | Notes |
+|---|---|---|---|
+| callers can create a manager and start/stop it cleanly | PASS | `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/bootstrap/PeeGeeCaches.java`, `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/bootstrap/PgPeeGeeCacheManager.java`, `peegee-cache-runtime/src/test/java/dev/mars/peegeeq/cache/runtime/bootstrap/PeeGeeCachesLifecycleTest.java` | Lifecycle tests cover create/start/stop, duplicate start/stop guards, and close delegation |
+| ownership of `Vertx`, `Pool`, sweeper, and listener resources is explicit | PASS | `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/bootstrap/PgPeeGeeCacheManager.java`, `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/config/PeeGeeCacheConfig.java`, `peegee-cache-runtime/src/test/java/dev/mars/peegeeq/cache/runtime/bootstrap/PeeGeeCachesLifecycleTest.java` | Manager now owns sweeper timer lifecycle and listener lifecycle state with explicit start/stop behavior and config validation |
+| shutdown order is deterministic and non-accidental | PASS | `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/bootstrap/PgPeeGeeCacheManager.java`, `peegee-cache-runtime/src/test/java/dev/mars/peegeeq/cache/runtime/bootstrap/PeeGeeCachesLifecycleTest.java` | Stop path transitions started state and then stops background components in a deterministic order |
+
 Execution evidence from strict run:
 
 - command executed: `mvn -pl peegee-cache-pg -am test`
@@ -436,13 +446,17 @@ Execution evidence from strict run:
   - `peegee-cache-api`: 34 tests passed
   - `peegee-cache-core`: 4 tests passed (`CoreValidationTest`)
   - `peegee-cache-pg`: 88 tests passed (migration, repository, and service suites)
+- command executed: `mvn -pl peegee-cache-runtime -am test`
+- reactor result: BUILD SUCCESS
+- module tests observed:
+  - `peegee-cache-runtime`: 13 tests passed (`PeeGeeCachesLifecycleTest`)
 
 Conclusion:
 
 - test suite is green for current implementation
 - Phase 3 exit criteria are satisfied
 - Phase 4 exit criteria are now satisfied
-- Phase 5 has started and is currently in progress with manager/factory/bootstrap implementations and lifecycle tests present
+- Phase 5 exit criteria are now satisfied
 
 ## 4. Feature rollout by milestone
 

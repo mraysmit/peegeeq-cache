@@ -57,8 +57,8 @@ public final class PgCounterService implements CounterService {
     @Override
     public Future<Long> setValue(CacheKey key, long value, CounterOptions options) {
         try {
-            CounterOptions normalizedOptions = CoreValidation.requireNonNull(options, "options");
-            return wrapStoreFailure("setValue", repository.setValue(key, value, normalizedOptions));
+            CoreValidation.requireNonNull(options, "options");
+            return wrapStoreFailure("setValue", repository.setValue(key, value, options));
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
         }
@@ -72,8 +72,8 @@ public final class PgCounterService implements CounterService {
     @Override
     public Future<Boolean> expire(CacheKey key, Duration ttl) {
         try {
-            Duration normalizedTtl = CoreValidation.requirePositiveDuration(ttl, "ttl");
-            return wrapStoreFailure("expire", repository.expire(key, normalizedTtl));
+            CoreValidation.requirePositiveDuration(ttl, "ttl");
+            return wrapStoreFailure("expire", repository.expire(key, ttl));
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
         }

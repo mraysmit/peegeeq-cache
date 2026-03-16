@@ -164,6 +164,17 @@ class PgCacheServiceTest {
     }
 
     @Test
+    void expireRejectsNullTtl(VertxTestContext ctx) {
+        CacheKey key = new CacheKey("ns", "svc-expire-null");
+        service.expire(key, null)
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertTrue(err instanceof IllegalArgumentException);
+                    assertEquals("ttl must be > 0", err.getMessage());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
     void touchWithNullTtlPreservesPersistentState(VertxTestContext ctx) {
         CacheKey key = new CacheKey("ns", "svc-touch-null-ttl");
         CacheSetRequest setReq = new CacheSetRequest(key, CacheValue.ofString("v"), null, SetMode.UPSERT, null, false);

@@ -17,6 +17,17 @@ public record PeeGeeCacheConfig(
         boolean enableExpirySweeper
 ) {
 
+    public PeeGeeCacheConfig {
+        if (enableExpirySweeper) {
+            if (expirySweepInterval == null || expirySweepInterval.isZero() || expirySweepInterval.isNegative()) {
+                throw new IllegalArgumentException("expirySweepInterval must be > 0 when enableExpirySweeper=true");
+            }
+            if (expirySweepBatchSize <= 0) {
+                throw new IllegalArgumentException("expirySweepBatchSize must be > 0 when enableExpirySweeper=true");
+            }
+        }
+    }
+
     public static PeeGeeCacheConfig defaults() {
         return new PeeGeeCacheConfig(
                 null,

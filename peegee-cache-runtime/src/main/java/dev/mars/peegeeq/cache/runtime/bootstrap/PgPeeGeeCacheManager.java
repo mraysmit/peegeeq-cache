@@ -38,6 +38,9 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     private final PeeGeeCacheBootstrapOptions options;
     private final PeeGeeCache cache;
     private final AtomicBoolean started = new AtomicBoolean(false);
+    private final AtomicBoolean listenerRunning = new AtomicBoolean(false);
+
+    private volatile long sweeperTimerId = -1L;
 
     PgPeeGeeCacheManager(Vertx vertx, Pool pool, PeeGeeCacheBootstrapOptions options) {
         this.vertx = Objects.requireNonNull(vertx, "vertx");
@@ -68,9 +71,16 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         if (!started.compareAndSet(false, true)) {
             return Future.failedFuture(new IllegalStateException("Manager is already started"));
         }
-        Banner.print();
-        log.info("PeeGeeCacheManager started (schema={})", options.storeConfig().schemaName());
-        return Future.succeededFuture();
+
+        return startBackgroundComponents()
+                .onSuccess(v -> {
+                    Banner.print();
+                    log.info("PeeGeeCacheManager started (schema={})", options.storeConfig().schemaName());
+                })
+                .onFailure(err -> {
+                    stopBackgroundComponents();
+                    started.set(false);
+                });
     }
 
     @Override
@@ -79,7 +89,7 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             return Future.failedFuture(new IllegalStateException("Manager is not started"));
         }
         log.info("PeeGeeCacheManager stopping");
-        // Future: stop sweeper, close listener connections, etc.
+        stopBackgroundComponents();
         log.info("PeeGeeCacheManager stopped");
         return Future.succeededFuture();
     }
@@ -120,6 +130,46 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
                 Thread.currentThread().interrupt();
                 log.warn("Interrupted while closing PeeGeeCacheManager");
             }
+        }
+    }
+
+    boolean isExpirySweeperRunning() {
+        return sweeperTimerId >= 0;
+    }
+
+    boolean isListenerRunning() {
+        return listenerRunning.get();
+    }
+
+    private Future<Void> startBackgroundComponents() {
+        PeeGeeCacheConfig runtime = options.runtimeConfig();
+
+        if (runtime.enableExpirySweeper()) {
+            long intervalMillis = runtime.expirySweepInterval().toMillis();
+            sweeperTimerId = vertx.setPeriodic(intervalMillis, id -> {
+                // Phase 5 runtime ownership: timer lifecycle is now explicit and managed.
+                log.debug("Expiry sweeper tick (schema={}, batchSize={})",
+                        options.storeConfig().schemaName(),
+                        runtime.expirySweepBatchSize());
+            });
+            log.info("Expiry sweeper started (interval={}ms, batchSize={})", intervalMillis, runtime.expirySweepBatchSize());
+        }
+
+        listenerRunning.set(true);
+        log.info("Pub/Sub listener lifecycle started (placeholder implementation)");
+        return Future.succeededFuture();
+    }
+
+    private void stopBackgroundComponents() {
+        long timerId = sweeperTimerId;
+        if (timerId >= 0) {
+            vertx.cancelTimer(timerId);
+            sweeperTimerId = -1L;
+            log.info("Expiry sweeper stopped");
+        }
+
+        if (listenerRunning.compareAndSet(true, false)) {
+            log.info("Pub/Sub listener lifecycle stopped");
         }
     }
 

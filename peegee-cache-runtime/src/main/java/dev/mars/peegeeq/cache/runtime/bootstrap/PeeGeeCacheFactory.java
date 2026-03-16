@@ -8,7 +8,7 @@ import io.vertx.sqlclient.Pool;
 /**
  * Factory for creating managed peegee-cache runtime instances.
  */
-public interface PeeGeeCacheFactory {
+interface PeeGeeCacheFactory {
 
     Future<PeeGeeCacheManager> createManager(
             Vertx vertx,

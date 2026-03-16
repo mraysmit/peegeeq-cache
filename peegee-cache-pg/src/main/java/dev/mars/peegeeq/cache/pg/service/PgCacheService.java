@@ -94,8 +94,8 @@ public final class PgCacheService implements CacheService {
     @Override
     public Future<Boolean> expire(CacheKey key, Duration ttl) {
         try {
-            Duration normalizedTtl = CoreValidation.requirePositiveDuration(ttl, "ttl");
-            return wrapStoreFailure("expire", repository.expire(key, normalizedTtl.toMillis()));
+            CoreValidation.requirePositiveDuration(ttl, "ttl");
+            return wrapStoreFailure("expire", repository.expire(key, ttl.toMillis()));
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
         }
@@ -109,8 +109,8 @@ public final class PgCacheService implements CacheService {
     @Override
     public Future<TouchResult> touch(CacheKey key, Duration ttl) {
         try {
-            Duration normalizedTtl = CoreValidation.requireOptionalPositiveDuration(ttl, "ttl");
-            Long ttlMillis = normalizedTtl == null ? null : normalizedTtl.toMillis();
+            CoreValidation.requireOptionalPositiveDuration(ttl, "ttl");
+            Long ttlMillis = ttl == null ? null : ttl.toMillis();
             return wrapStoreFailure("touch", repository.touch(key, ttlMillis));
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);

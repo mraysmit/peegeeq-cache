@@ -27,6 +27,6 @@ public final class PeeGeeCaches {
     ) {
         Objects.requireNonNull(vertx, "vertx");
         Objects.requireNonNull(pool, "pool");
-        return FACTORY.createManager(vertx, pool, options != null ? options : PeeGeeCacheBootstrapOptions.defaults());
+        return FACTORY.createManager(vertx, pool, options);
     }
 }

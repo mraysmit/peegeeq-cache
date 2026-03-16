@@ -10,17 +10,12 @@ import java.util.Objects;
 /**
  * PostgreSQL-backed implementation of {@link PeeGeeCacheFactory}.
  */
-public final class PgPeeGeeCacheFactory implements PeeGeeCacheFactory {
+final class PgPeeGeeCacheFactory implements PeeGeeCacheFactory {
 
     @Override
     public Future<PeeGeeCacheManager> createManager(Vertx vertx, Pool pool, PeeGeeCacheBootstrapOptions options) {
         Objects.requireNonNull(vertx, "vertx");
         Objects.requireNonNull(pool, "pool");
-
-        PeeGeeCacheBootstrapOptions resolved = options != null
-                ? options
-                : PeeGeeCacheBootstrapOptions.defaults();
-
-        return Future.succeededFuture(new PgPeeGeeCacheManager(vertx, pool, resolved));
+        return Future.succeededFuture(new PgPeeGeeCacheManager(vertx, pool, options));
     }
 }

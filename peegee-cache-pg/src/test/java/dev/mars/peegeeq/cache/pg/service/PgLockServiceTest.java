@@ -129,4 +129,34 @@ class PgLockServiceTest {
                     ctx.completeNow();
                 })));
     }
+
+    @Test
+    void renewRejectsNullRequest(VertxTestContext ctx) {
+        service.renew(null)
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertTrue(err instanceof IllegalArgumentException);
+                    assertEquals("request cannot be null", err.getMessage());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void releaseRejectsNullRequest(VertxTestContext ctx) {
+        service.release(null)
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertTrue(err instanceof IllegalArgumentException);
+                    assertEquals("request cannot be null", err.getMessage());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void currentLockRejectsNullKey(VertxTestContext ctx) {
+        service.currentLock(null)
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertTrue(err instanceof IllegalArgumentException);
+                    assertEquals("key cannot be null", err.getMessage());
+                    ctx.completeNow();
+                })));
+    }
 }

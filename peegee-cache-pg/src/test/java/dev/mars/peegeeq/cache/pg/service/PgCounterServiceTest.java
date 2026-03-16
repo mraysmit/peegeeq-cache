@@ -114,6 +114,28 @@ class PgCounterServiceTest {
     }
 
     @Test
+    void expireRejectsNullTtl(VertxTestContext ctx) {
+        CacheKey key = new CacheKey("ns", "ctr-svc-expire-null");
+        service.expire(key, null)
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertTrue(err instanceof IllegalArgumentException);
+                    assertEquals("ttl must be > 0", err.getMessage());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void setValueRejectsNullOptions(VertxTestContext ctx) {
+        CacheKey key = new CacheKey("ns", "ctr-svc-set-null-opts");
+        service.setValue(key, 1L, null)
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertTrue(err instanceof IllegalArgumentException);
+                    assertEquals("options cannot be null", err.getMessage());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
     void ttlReturnsMissingForUnknownCounter(VertxTestContext ctx) {
         CacheKey key = new CacheKey("ns", "ctr-svc-missing");
         service.ttl(key).onComplete(ctx.succeeding(ttl -> ctx.verify(() -> {

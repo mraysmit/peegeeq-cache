@@ -122,8 +122,8 @@ class PeeGeeCachesLifecycleTest {
                 .onComplete(ctx.succeeding(manager -> ctx.verify(ctx::completeNow)));
     }
 
-        @Test
-        void explicitOptionsAreAccepted(Vertx vertx, VertxTestContext ctx) {
+    @Test
+    void explicitOptionsAreAccepted(Vertx vertx, VertxTestContext ctx) {
         PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
             new PeeGeeCacheConfig(Duration.ofSeconds(45), Duration.ofSeconds(10), 250, true),
             new dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig("custom_schema", "custom_prefix")
@@ -133,10 +133,10 @@ class PeeGeeCachesLifecycleTest {
             .compose(manager -> manager.startReactive().map(manager))
             .compose(manager -> manager.stopReactive().map(manager))
             .onComplete(ctx.succeeding(manager -> ctx.verify(ctx::completeNow)));
-        }
+    }
 
-        @Test
-        void partialNullConfigsAreNormalized(Vertx vertx, VertxTestContext ctx) {
+    @Test
+    void partialNullConfigsAreNormalized(Vertx vertx, VertxTestContext ctx) {
         PeeGeeCacheBootstrapOptions onlyRuntime = new PeeGeeCacheBootstrapOptions(PeeGeeCacheConfig.defaults(), null);
         PeeGeeCacheBootstrapOptions onlyStore = new PeeGeeCacheBootstrapOptions(
             null,
@@ -150,7 +150,7 @@ class PeeGeeCachesLifecycleTest {
             .compose(manager -> manager.startReactive().map(manager))
             .compose(manager -> manager.stopReactive())
             .onComplete(ctx.succeeding(v -> ctx.completeNow()));
-        }
+    }
 
     @Test
     void scanAndPubSubStubsFailFastWithUnsupportedOperation(Vertx vertx, VertxTestContext ctx) {
@@ -194,5 +194,64 @@ class PeeGeeCachesLifecycleTest {
                             ctx.completeNow();
                         }))
                 ));
+    }
+
+    @Test
+    void startOwnsAndStopsBackgroundLifecycles(Vertx vertx, VertxTestContext ctx) {
+        PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
+                new PeeGeeCacheConfig(null, Duration.ofMillis(25), 32, true),
+                dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig.defaults()
+        );
+
+        PeeGeeCaches.create(vertx, pool, options)
+                .compose(manager -> manager.startReactive().map(manager))
+                .compose(manager -> {
+                    ctx.verify(() -> {
+                        PgPeeGeeCacheManager pgManager = (PgPeeGeeCacheManager) manager;
+                        assertTrue(pgManager.isExpirySweeperRunning());
+                        assertTrue(pgManager.isListenerRunning());
+                    });
+                    return manager.stopReactive().map(manager);
+                })
+                .onComplete(ctx.succeeding(manager -> ctx.verify(() -> {
+                    PgPeeGeeCacheManager pgManager = (PgPeeGeeCacheManager) manager;
+                    assertFalse(pgManager.isExpirySweeperRunning());
+                    assertFalse(pgManager.isListenerRunning());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void invalidSweeperConfigFailsAtConstruction(Vertx vertx, VertxTestContext ctx) {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> new PeeGeeCacheConfig(null, Duration.ZERO, 0, true));
+        assertTrue(ex.getMessage().contains("expirySweepInterval must be > 0"));
+        ctx.completeNow();
+    }
+
+    @Test
+    void managerExposesBoundVertxAndPool(Vertx vertx, VertxTestContext ctx) {
+        PeeGeeCaches.create(vertx, pool)
+                .compose(manager -> manager.startReactive().map(manager))
+                .compose(manager -> {
+                    ctx.verify(() -> {
+                        assertSame(vertx, manager.vertx());
+                        assertSame(pool, manager.pool());
+                    });
+                    return manager.stopReactive();
+                })
+                .onComplete(ctx.succeeding(v -> ctx.completeNow()));
+    }
+
+    @Test
+    void cacheAfterStopThrows(Vertx vertx, VertxTestContext ctx) {
+        PeeGeeCaches.create(vertx, pool)
+                .compose(manager -> manager.startReactive().map(manager))
+                .compose(manager -> manager.stopReactive().map(manager))
+                .onComplete(ctx.succeeding(manager -> ctx.verify(() -> {
+                    IllegalStateException ex = assertThrows(IllegalStateException.class, manager::cache);
+                    assertTrue(ex.getMessage().contains("not started"));
+                    ctx.completeNow();
+                })));
     }
 }

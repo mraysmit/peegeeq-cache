@@ -23,15 +23,15 @@ public final class PgTestSupport {
 
     private static final Logger log = LoggerFactory.getLogger(PgTestSupport.class);
 
-    private final String containerName;
+    private final String logLabel;
     private PostgreSQLContainer<?> postgres;
 
-    public PgTestSupport(String containerName) {
-        this.containerName = containerName;
+    public PgTestSupport(String logLabel) {
+        this.logLabel = logLabel;
     }
 
     public void start(Vertx vertx) throws Exception {
-        log.info("Starting PostgreSQL container '{}' (image: {})", containerName, PostgreSQLTestConstants.POSTGRES_IMAGE);
+        log.info("Starting PostgreSQL container '{}' (image: {})", logLabel, PostgreSQLTestConstants.POSTGRES_IMAGE);
         postgres = new PostgreSQLContainer<>(PostgreSQLTestConstants.POSTGRES_IMAGE)
                 .withDatabaseName(PostgreSQLTestConstants.DEFAULT_DATABASE_NAME)
                 .withUsername(PostgreSQLTestConstants.DEFAULT_USERNAME)
@@ -39,13 +39,13 @@ public final class PgTestSupport {
                 .withReuse(false);
         postgres.start();
 
-        log.info("Container '{}' mapped to port {}", containerName, postgres.getFirstMappedPort());
+        log.info("Container '{}' mapped to port {}", logLabel, postgres.getFirstMappedPort());
         applyMigrations(vertx);
-        log.info("Container '{}' ready", containerName);
+        log.info("Container '{}' ready", logLabel);
     }
 
     public void stop() throws Exception {
-        log.info("Stopping container '{}'", containerName);
+        log.info("Stopping container '{}'", logLabel);
         if (postgres != null) {
             postgres.stop();
             postgres = null;

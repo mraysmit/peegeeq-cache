@@ -30,11 +30,11 @@ public final class PgLockService implements LockService {
     @Override
     public Future<LockAcquireResult> acquire(LockAcquireRequest request) {
         try {
-            LockAcquireRequest validatedRequest = CoreValidation.requireNonNull(request, "request");
-            CoreValidation.requireNonNull(validatedRequest.key(), "key");
-            CoreValidation.requireNonBlank(validatedRequest.ownerToken(), "ownerToken");
-            CoreValidation.requirePositiveDuration(validatedRequest.leaseTtl(), "leaseTtl");
-            return wrapStoreFailure("acquire", repository.acquire(validatedRequest));
+            CoreValidation.requireNonNull(request, "request");
+            CoreValidation.requireNonNull(request.key(), "key");
+            CoreValidation.requireNonBlank(request.ownerToken(), "ownerToken");
+            CoreValidation.requirePositiveDuration(request.leaseTtl(), "leaseTtl");
+            return wrapStoreFailure("acquire", repository.acquire(request));
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
         }
@@ -43,12 +43,12 @@ public final class PgLockService implements LockService {
     @Override
     public Future<Boolean> renew(LockRenewRequest request) {
         try {
-            LockRenewRequest validatedRequest = CoreValidation.requireNonNull(request, "request");
-            CoreValidation.requireNonNull(validatedRequest.key(), "key");
-            CoreValidation.requireNonBlank(validatedRequest.ownerToken(), "ownerToken");
-            CoreValidation.requirePositiveDuration(validatedRequest.leaseTtl(), "leaseTtl");
+            CoreValidation.requireNonNull(request, "request");
+            CoreValidation.requireNonNull(request.key(), "key");
+            CoreValidation.requireNonBlank(request.ownerToken(), "ownerToken");
+            CoreValidation.requirePositiveDuration(request.leaseTtl(), "leaseTtl");
 
-            Future<Boolean> chained = repository.renew(validatedRequest)
+            Future<Boolean> chained = repository.renew(request)
                     .compose(renewed -> renewed
                             ? Future.succeededFuture(true)
                             : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for renew")));
@@ -61,11 +61,11 @@ public final class PgLockService implements LockService {
     @Override
     public Future<Boolean> release(LockReleaseRequest request) {
         try {
-            LockReleaseRequest validatedRequest = CoreValidation.requireNonNull(request, "request");
-            CoreValidation.requireNonNull(validatedRequest.key(), "key");
-            CoreValidation.requireNonBlank(validatedRequest.ownerToken(), "ownerToken");
+            CoreValidation.requireNonNull(request, "request");
+            CoreValidation.requireNonNull(request.key(), "key");
+            CoreValidation.requireNonBlank(request.ownerToken(), "ownerToken");
 
-            Future<Boolean> chained = repository.release(validatedRequest)
+            Future<Boolean> chained = repository.release(request)
                     .compose(released -> released
                             ? Future.succeededFuture(true)
                             : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for release")));
@@ -78,10 +78,10 @@ public final class PgLockService implements LockService {
     @Override
     public Future<Boolean> isHeldBy(LockKey key, String ownerToken) {
         try {
-            LockKey validatedKey = CoreValidation.requireNonNull(key, "key");
-            String validatedOwnerToken = CoreValidation.requireNonBlank(ownerToken, "ownerToken");
-            Future<Boolean> chained = repository.currentLock(validatedKey)
-                    .map(lock -> lock.map(state -> state.ownerToken().equals(validatedOwnerToken)).orElse(false));
+            CoreValidation.requireNonNull(key, "key");
+            CoreValidation.requireNonBlank(ownerToken, "ownerToken");
+            Future<Boolean> chained = repository.currentLock(key)
+                    .map(lock -> lock.map(state -> state.ownerToken().equals(ownerToken)).orElse(false));
             return wrapStoreFailure("isHeldBy", chained);
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
@@ -91,8 +91,8 @@ public final class PgLockService implements LockService {
     @Override
     public Future<Optional<LockState>> currentLock(LockKey key) {
         try {
-            LockKey validatedKey = CoreValidation.requireNonNull(key, "key");
-            return wrapStoreFailure("currentLock", repository.currentLock(validatedKey));
+            CoreValidation.requireNonNull(key, "key");
+            return wrapStoreFailure("currentLock", repository.currentLock(key));
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
         }
