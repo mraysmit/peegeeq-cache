@@ -1,6 +1,7 @@
 package dev.mars.peegeeq.cache.pg.migration;
 
 import dev.mars.peegeeq.cache.pg.test.PostgreSQLTestConstants;
+import dev.mars.peegeeq.cache.pg.test.PgTestPostgresContainer;
 import dev.mars.peegeeq.cache.pg.test.SharedPostgresContainerManager;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -8,7 +9,6 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +22,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Applies the V001 migration SQL file against a real PostgreSQL instance
@@ -31,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MigrationSmokeTest {
 
-    private static PostgreSQLContainer<?> postgres;
+    private static PgTestPostgresContainer postgres;
 
     @BeforeAll
     static void startContainerAndApplyMigrations() throws Exception {

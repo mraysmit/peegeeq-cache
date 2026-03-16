@@ -2,8 +2,6 @@ package dev.mars.peegeeq.cache.runtime.bootstrap;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.api.model.PubSubMessage;
-import dev.mars.peegeeq.cache.api.model.ScanRequest;
-import dev.mars.peegeeq.cache.api.model.ScanResult;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import dev.mars.peegeeq.cache.api.scan.ScanService;

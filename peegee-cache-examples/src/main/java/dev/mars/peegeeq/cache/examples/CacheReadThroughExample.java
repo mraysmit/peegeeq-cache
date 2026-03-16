@@ -6,12 +6,8 @@ import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheSetResult;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
 import dev.mars.peegeeq.cache.api.model.SetMode;
-import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
-import io.vertx.core.Vertx;
-import io.vertx.sqlclient.Pool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -27,25 +23,17 @@ public final class CacheReadThroughExample {
     }
 
     public static void main(String[] args) throws Exception {
-        Vertx vertx = Vertx.vertx();
-        PostgreSQLContainer<?> container = null;
-        Pool pool = null;
-        PeeGeeCacheManager manager = null;
-        log.info("Starting CacheReadThroughExample");
-
-        try {
-            container = ExampleRuntimeSupport.startContainer();
-            ExampleRuntimeSupport.applyMigrations(vertx, container);
-            pool = ExampleRuntimeSupport.createPool(vertx, container);
-            log.info("Created PostgreSQL pool for example runtime");
-            manager = ExampleRuntimeSupport.startDefaultManager(vertx, pool);
-            log.info("Started peegee-cache manager");
+        ExampleRuntimeSupport.runWithDefaultManager(log, "CacheReadThroughExample", manager -> {
+            var cache = manager.cache();
 
             CacheKey key = new CacheKey("products", "42");
             log.debug("Read-through lookup for {}", key.asQualifiedKey());
-            Optional<CacheEntry> cached = ExampleRuntimeSupport.await(manager.cache().cache().get(key));
+            Optional<CacheEntry> cached = ExampleLogSupport.timed(log, "cache.get(read-through)", () ->
+                    ExampleRuntimeSupport.await(cache.cache().get(key)));
             if (cached.isPresent()) {
-                log.info("cache-hit value={}", cached.get().value().asString());
+                ExampleLogSupport.logData(log, "cache-hit",
+                        "key", key.asQualifiedKey(),
+                        "value", cached.get().value().asString());
                 return;
             }
 
@@ -61,7 +49,8 @@ public final class CacheReadThroughExample {
                     null,
                     true
             );
-            CacheSetResult setResult = ExampleRuntimeSupport.await(manager.cache().cache().set(writeIfAbsent));
+                CacheSetResult setResult = ExampleLogSupport.timed(log, "cache.set(only-if-absent)", () ->
+                    ExampleRuntimeSupport.await(cache.cache().set(writeIfAbsent)));
 
             if (setResult.applied()) {
                 ExampleLogSupport.logData(log, "cache-fill winner",
@@ -69,20 +58,13 @@ public final class CacheReadThroughExample {
                     "value", loadedFromSource,
                     "version", setResult.newVersion());
             } else {
-                Optional<CacheEntry> existing = ExampleRuntimeSupport.await(manager.cache().cache().get(key));
+                Optional<CacheEntry> existing = ExampleLogSupport.timed(log, "cache.get(lost-race)", () ->
+                    ExampleRuntimeSupport.await(cache.cache().get(key)));
                 ExampleLogSupport.logData(log, "cache-fill lost race",
                     "key", key.asQualifiedKey(),
                     "existing", existing.map(entry -> entry.value().asString()).orElse("<missing>"));
             }
-        } catch (Exception ex) {
-            log.error("CacheReadThroughExample failed: {}", ex.getMessage());
-            log.debug("CacheReadThroughExample exception stack trace", ex);
-            throw ex;
-        } finally {
-            log.info("Shutting down CacheReadThroughExample");
-            ExampleRuntimeSupport.shutdown(manager, pool, vertx, container);
-            log.info("Shutdown complete");
-        }
+        });
     }
 
     private static String loadProductJson(String productId) {

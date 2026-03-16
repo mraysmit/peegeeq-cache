@@ -3,7 +3,6 @@ package dev.mars.peegeeq.cache.pg.repository;
 import dev.mars.peegeeq.cache.api.model.CacheEntry;
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
-import dev.mars.peegeeq.cache.api.model.CacheSetResult;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
 import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.pg.test.PgTestSupport;

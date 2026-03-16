@@ -2,12 +2,10 @@ package dev.mars.peegeeq.cache.pg.repository;
 
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CounterOptions;
-import dev.mars.peegeeq.cache.api.model.CounterTtlMode;
 import dev.mars.peegeeq.cache.api.model.TtlResult;
 import dev.mars.peegeeq.cache.pg.sql.CounterSql;
 import io.vertx.core.Future;
 import io.vertx.sqlclient.Pool;
-import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

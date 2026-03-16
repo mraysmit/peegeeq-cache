@@ -1,7 +1,6 @@
 package dev.mars.peegeeq.cache.pg.repository;
 
 import dev.mars.peegeeq.cache.api.model.LockAcquireRequest;
-import dev.mars.peegeeq.cache.api.model.LockAcquireResult;
 import dev.mars.peegeeq.cache.api.model.LockKey;
 import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
 import dev.mars.peegeeq.cache.api.model.LockRenewRequest;

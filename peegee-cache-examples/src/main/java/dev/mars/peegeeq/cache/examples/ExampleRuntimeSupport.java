@@ -10,7 +10,6 @@ import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -20,6 +19,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 final class ExampleRuntimeSupport {
+
+    @FunctionalInterface
+    interface ExampleWork {
+        void run(PeeGeeCacheManager manager) throws Exception;
+    }
 
     private static final Logger log = LoggerFactory.getLogger(ExampleRuntimeSupport.class);
     private static final Duration AWAIT_TIMEOUT = Duration.ofSeconds(20);
@@ -32,39 +36,46 @@ final class ExampleRuntimeSupport {
     private ExampleRuntimeSupport() {
     }
 
-    static PostgreSQLContainer<?> startContainer() {
+    
+
+    static ExamplePostgresContainer startContainer() {
         log.info("Starting PostgreSQL Testcontainer (image: {})", POSTGRES_IMAGE);
-        PostgreSQLContainer<?> container = new PostgreSQLContainer<>(POSTGRES_IMAGE)
+        ExamplePostgresContainer container = new ExamplePostgresContainer(POSTGRES_IMAGE)
                 .withDatabaseName(DATABASE_NAME)
                 .withUsername(USERNAME)
                 .withPassword(PASSWORD)
                 .withReuse(false);
-        container.start();
-        log.info("Container started — mapped to {}:{}", container.getHost(), container.getFirstMappedPort());
+        try {
+            container.start();
+        } catch (RuntimeException ex) {
+            closeQuietly(container);
+            throw ex;
+        }
+        log.info("Container started - mapped to {}:{}", container.getHost(), container.getFirstMappedPort());
         return container;
     }
 
-    static void stopContainer(PostgreSQLContainer<?> container) {
+    static void stopContainer(ExamplePostgresContainer container) {
         if (container != null) {
             log.info("Stopping PostgreSQL Testcontainer");
             container.stop();
         }
     }
 
-    static Pool createPool(Vertx vertx, PostgreSQLContainer<?> container) {
+    static Pool createPool(Vertx vertx, ExamplePostgresContainer container) {
         PgConnectOptions connectOptions = new PgConnectOptions()
                 .setHost(container.getHost())
                 .setPort(container.getFirstMappedPort())
                 .setDatabase(DATABASE_NAME)
                 .setUser(USERNAME)
                 .setPassword(PASSWORD);
-        log.info("Creating Vert.x SQL pool — host={} port={} database={} user={}",
+        log.info("Creating Vert.x SQL pool - host={} port={} database={} user={}",
                 connectOptions.getHost(), connectOptions.getPort(),
                 connectOptions.getDatabase(), connectOptions.getUser());
         return Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(8));
     }
 
-    static void applyMigrations(Vertx vertx, PostgreSQLContainer<?> container) throws Exception {
+    static void applyMigrations(Vertx vertx, ExamplePostgresContainer container) throws Exception {
         log.info("Applying database migrations");
         String sql = readClasspathResource("/db/migration/V001__create_peegee_cache_schema.sql");
         PgConnectOptions opts = new PgConnectOptions()
@@ -91,8 +102,34 @@ final class ExampleRuntimeSupport {
         return manager;
     }
 
+    static void runWithDefaultManager(Logger exampleLog, String exampleName, ExampleWork work) throws Exception {
+        Vertx vertx = Vertx.vertx();
+        ExamplePostgresContainer container = null;
+        Pool pool = null;
+        PeeGeeCacheManager manager = null;
+
+        exampleLog.info("Starting {}", exampleName);
+        try {
+            container = startContainer();
+            applyMigrations(vertx, container);
+            pool = createPool(vertx, container);
+            exampleLog.info("Created PostgreSQL pool for example runtime");
+            manager = startDefaultManager(vertx, pool);
+            exampleLog.info("Started peegee-cache manager");
+            work.run(manager);
+        } catch (Exception ex) {
+            exampleLog.error("{} failed: {}", exampleName, ex.getMessage());
+            exampleLog.debug("{} exception stack trace", exampleName, ex);
+            throw ex;
+        } finally {
+            exampleLog.info("Shutting down {}", exampleName);
+            shutdown(manager, pool, vertx, container);
+            exampleLog.info("Shutdown complete");
+        }
+    }
+
     static void shutdown(PeeGeeCacheManager manager, Pool pool, Vertx vertx,
-                          PostgreSQLContainer<?> container) throws Exception {
+                          ExamplePostgresContainer container) throws Exception {
         log.info("Shutting down runtime resources");
         if (manager != null && manager.isStarted()) {
             log.debug("Stopping started manager");
@@ -145,6 +182,14 @@ final class ExampleRuntimeSupport {
                 throw new IOException("Resource not found on classpath: " + path);
             }
             return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static void closeQuietly(AutoCloseable closeable) {
+        try {
+            closeable.close();
+        } catch (Exception closeError) {
+            log.debug("Ignored close failure after startup error", closeError);
         }
     }
 }

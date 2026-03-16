@@ -7,7 +7,6 @@ import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,7 +23,7 @@ public final class PgTestSupport {
     private static final Logger log = LoggerFactory.getLogger(PgTestSupport.class);
 
     private final String logLabel;
-    private PostgreSQLContainer<?> postgres;
+    private PgTestPostgresContainer postgres;
 
     public PgTestSupport(String logLabel) {
         this.logLabel = logLabel;
