@@ -45,7 +45,12 @@ public final class CacheSql {
                 version, created_at, updated_at, expires_at, hit_count, last_accessed_at
             )
             VALUES ($1, $2, $3, $4, $5,
-                    1, NOW(), NOW(), $6, 0, NULL)
+                                        1, NOW(), NOW(),
+                                        CASE WHEN $6::BIGINT IS NULL
+                                                 THEN NULL
+                                                 ELSE NOW() + (($6::BIGINT) * INTERVAL '1 millisecond')
+                                        END,
+                                        0, NULL)
             ON CONFLICT (namespace, cache_key)
             DO UPDATE SET
                 value_type    = EXCLUDED.value_type,
@@ -84,7 +89,12 @@ public final class CacheSql {
                 version, created_at, updated_at, expires_at, hit_count, last_accessed_at
             )
             VALUES ($1, $2, $3, $4, $5,
-                    1, NOW(), NOW(), $6, 0, NULL)
+                    1, NOW(), NOW(),
+                    CASE WHEN $6::BIGINT IS NULL
+                         THEN NULL
+                         ELSE NOW() + (($6::BIGINT) * INTERVAL '1 millisecond')
+                    END,
+                    0, NULL)
             ON CONFLICT (namespace, cache_key) DO NOTHING
             RETURNING version
             """;
@@ -97,7 +107,10 @@ public final class CacheSql {
                 numeric_value = $5,
                 version       = version + 1,
                 updated_at    = NOW(),
-                expires_at    = $6
+                expires_at    = CASE WHEN $6::BIGINT IS NULL
+                                     THEN NULL
+                                     ELSE NOW() + (($6::BIGINT) * INTERVAL '1 millisecond')
+                                END
             WHERE namespace = $1
               AND cache_key = $2
               AND (expires_at IS NULL OR expires_at > NOW())
@@ -112,7 +125,10 @@ public final class CacheSql {
                 numeric_value = $6,
                 version       = version + 1,
                 updated_at    = NOW(),
-                expires_at    = $7
+                expires_at    = CASE WHEN $7::BIGINT IS NULL
+                                     THEN NULL
+                                     ELSE NOW() + (($7::BIGINT) * INTERVAL '1 millisecond')
+                                END
             WHERE namespace = $1
               AND cache_key = $2
               AND version   = $3

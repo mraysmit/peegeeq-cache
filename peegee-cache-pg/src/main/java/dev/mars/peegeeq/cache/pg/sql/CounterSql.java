@@ -22,7 +22,11 @@ public final class CounterSql {
                 namespace, counter_key, counter_value, version,
                 created_at, updated_at, expires_at
             )
-            VALUES ($1, $2, $3, 1, NOW(), NOW(), $4)
+            VALUES ($1, $2, $3, 1, NOW(), NOW(),
+                    CASE WHEN $4::BIGINT IS NULL
+                         THEN NULL
+                         ELSE NOW() + (($4::BIGINT) * INTERVAL '1 millisecond')
+                    END)
             ON CONFLICT (namespace, counter_key)
             DO UPDATE SET
                 counter_value = peegee_cache.cache_counters.counter_value + EXCLUDED.counter_value,
@@ -38,7 +42,11 @@ public final class CounterSql {
                 namespace, counter_key, counter_value, version,
                 created_at, updated_at, expires_at
             )
-            VALUES ($1, $2, $3, 1, NOW(), NOW(), $4)
+            VALUES ($1, $2, $3, 1, NOW(), NOW(),
+                    CASE WHEN $4::BIGINT IS NULL
+                         THEN NULL
+                         ELSE NOW() + (($4::BIGINT) * INTERVAL '1 millisecond')
+                    END)
             ON CONFLICT (namespace, counter_key)
             DO UPDATE SET
                 counter_value = peegee_cache.cache_counters.counter_value + EXCLUDED.counter_value,
@@ -54,7 +62,11 @@ public final class CounterSql {
                 namespace, counter_key, counter_value, version,
                 created_at, updated_at, expires_at
             )
-            VALUES ($1, $2, $3, 1, NOW(), NOW(), $4)
+            VALUES ($1, $2, $3, 1, NOW(), NOW(),
+                    CASE WHEN $4::BIGINT IS NULL
+                         THEN NULL
+                         ELSE NOW() + (($4::BIGINT) * INTERVAL '1 millisecond')
+                    END)
             ON CONFLICT (namespace, counter_key)
             DO UPDATE SET
                 counter_value = peegee_cache.cache_counters.counter_value + EXCLUDED.counter_value,
@@ -91,7 +103,11 @@ public final class CounterSql {
                 namespace, counter_key, counter_value, version,
                 created_at, updated_at, expires_at
             )
-            VALUES ($1, $2, $3, 1, NOW(), NOW(), $4)
+            VALUES ($1, $2, $3, 1, NOW(), NOW(),
+                    CASE WHEN $4::BIGINT IS NULL
+                         THEN NULL
+                         ELSE NOW() + (($4::BIGINT) * INTERVAL '1 millisecond')
+                    END)
             ON CONFLICT (namespace, counter_key)
             DO UPDATE SET
                 counter_value = EXCLUDED.counter_value,
@@ -101,40 +117,40 @@ public final class CounterSql {
             RETURNING counter_value, version
             """;
 
-        /** Section 17.5 — TTL lookup for live counters. */
-        public static final String TTL = """
-                        SELECT
-                                CASE
-                                        WHEN expires_at IS NULL THEN NULL
-                                        ELSE FLOOR(EXTRACT(EPOCH FROM (expires_at - NOW())) * 1000)::BIGINT
-                                END AS ttl_millis
-                        FROM peegee_cache.cache_counters
-                        WHERE namespace = $1
-                            AND counter_key = $2
-                            AND (expires_at IS NULL OR expires_at > NOW())
-                        """;
+    /** Section 17.5 — TTL lookup for live counters. */
+    public static final String TTL = """
+            SELECT
+                CASE
+                    WHEN expires_at IS NULL THEN NULL
+                    ELSE FLOOR(EXTRACT(EPOCH FROM (expires_at - NOW())) * 1000)::BIGINT
+                END AS ttl_millis
+            FROM peegee_cache.cache_counters
+            WHERE namespace = $1
+              AND counter_key = $2
+              AND (expires_at IS NULL OR expires_at > NOW())
+            """;
 
-        /** Section 17.6 — set TTL on an existing live counter. */
-        public static final String EXPIRE = """
-                        UPDATE peegee_cache.cache_counters
-                        SET expires_at = NOW() + ($3 * INTERVAL '1 millisecond'),
-                                version = version + 1,
-                                updated_at = NOW()
-                        WHERE namespace = $1
-                            AND counter_key = $2
-                            AND (expires_at IS NULL OR expires_at > NOW())
-                        """;
+    /** Section 17.6 — set TTL on an existing live counter. */
+    public static final String EXPIRE = """
+            UPDATE peegee_cache.cache_counters
+            SET expires_at = NOW() + ($3 * INTERVAL '1 millisecond'),
+                version    = version + 1,
+                updated_at = NOW()
+            WHERE namespace = $1
+              AND counter_key = $2
+              AND (expires_at IS NULL OR expires_at > NOW())
+            """;
 
-        /** Section 17.7 — remove TTL from an existing live counter. */
-        public static final String PERSIST = """
-                        UPDATE peegee_cache.cache_counters
-                        SET expires_at = NULL,
-                                version = version + 1,
-                                updated_at = NOW()
-                        WHERE namespace = $1
-                            AND counter_key = $2
-                            AND (expires_at IS NULL OR expires_at > NOW())
-                        """;
+    /** Section 17.7 — remove TTL from an existing live counter. */
+    public static final String PERSIST = """
+            UPDATE peegee_cache.cache_counters
+            SET expires_at = NULL,
+                version    = version + 1,
+                updated_at = NOW()
+            WHERE namespace = $1
+              AND counter_key = $2
+              AND (expires_at IS NULL OR expires_at > NOW())
+            """;
 
     /** Unconditional delete. */
     public static final String DELETE = """

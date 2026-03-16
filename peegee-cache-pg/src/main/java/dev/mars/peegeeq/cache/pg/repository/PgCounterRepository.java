@@ -13,7 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.time.OffsetDateTime;
 import java.util.Optional;
 
 /**
@@ -68,7 +67,7 @@ public final class PgCounterRepository {
     /** Section 17.4 — set exact counter value via upsert. */
     public Future<Long> setValue(CacheKey key, long value, CounterOptions opts) {
         log.debug("setValue counter key={} value={}", key, value);
-        Tuple params = Tuple.of(key.namespace(), key.key(), value, ttlTimestamp(opts));
+        Tuple params = Tuple.of(key.namespace(), key.key(), value, ttlMillis(opts.ttl()));
         return pool.preparedQuery(CounterSql.SET_VALUE)
                 .execute(params)
                 .map(rows -> rows.iterator().next().getLong("counter_value"));
@@ -145,7 +144,7 @@ public final class PgCounterRepository {
         };
 
         Tuple keyTuple = Tuple.of(key.namespace(), key.key());
-        Tuple params = Tuple.of(key.namespace(), key.key(), delta, ttlTimestamp(opts));
+        Tuple params = Tuple.of(key.namespace(), key.key(), delta, ttlMillis(opts.ttl()));
 
         return pool.withTransaction(conn ->
                 conn.preparedQuery(CounterSql.DELETE_EXPIRED)
@@ -158,10 +157,10 @@ public final class PgCounterRepository {
         );
     }
 
-    private static OffsetDateTime ttlTimestamp(CounterOptions opts) {
-        if (opts.ttl() == null) {
+    private static Long ttlMillis(Duration ttl) {
+        if (ttl == null) {
             return null;
         }
-        return OffsetDateTime.now().plus(opts.ttl());
+        return ttl.toMillis();
     }
 }

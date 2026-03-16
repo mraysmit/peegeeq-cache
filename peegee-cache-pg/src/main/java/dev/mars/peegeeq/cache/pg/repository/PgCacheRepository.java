@@ -14,11 +14,10 @@ import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Row;
-import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 
@@ -164,8 +163,9 @@ public final class PgCacheRepository {
                 conn.preparedQuery(CacheSql.GET_FOR_UPDATE)
                         .execute(keyTuple)
                         .compose(prevRows -> {
-                            CacheEntry prev = prevRows.iterator().hasNext()
-                                    ? mapRow(prevRows.iterator().next())
+                            var it = prevRows.iterator();
+                            CacheEntry prev = it.hasNext()
+                                    ? mapRow(it.next())
                                     : null;
                             return conn.preparedQuery(CacheSql.UPSERT)
                                     .execute(params)
@@ -230,7 +230,7 @@ public final class PgCacheRepository {
                 req.value().type().name(),
                 valueBytes(req.value()),
                 numericValue(req.value()),
-                ttlToTimestamp(req)
+                ttlMillis(req.ttl())
         );
         return pool.preparedQuery(CacheSql.UPDATE_IF_VERSION_MATCHES)
                 .execute(params)
@@ -287,7 +287,7 @@ public final class PgCacheRepository {
                 req.value().type().name(),
                 valueBytes(req.value()),
                 numericValue(req.value()),
-                ttlToTimestamp(req)
+                ttlMillis(req.ttl())
         );
     }
 
@@ -299,24 +299,10 @@ public final class PgCacheRepository {
         return v.type() == ValueType.LONG ? v.longValue() : null;
     }
 
-    /**
-     * Converts request TTL to an interval-based timestamp expression.
-     * Returns null when no TTL is set, which maps to {@code expires_at = NULL}
-     * in the SQL. The actual timestamp computation (NOW() + interval) is done
-     * in SQL — we pass the millisecond duration.
-     * <p>
-     * Note: The UPSERT/INSERT SQL uses $6 directly as expires_at. Since we
-     * cannot compute NOW() + interval from the client side, we pass null
-     * for no-TTL and an OffsetDateTime for TTL entries.
-     */
-    private static OffsetDateTime ttlToTimestamp(CacheSetRequest req) {
-        // We cannot pass the TTL as millis and compute NOW() + interval in a
-        // parameterised $6 slot — the UPSERT uses $6 as expires_at directly.
-        // So we compute the future timestamp from the client side.
-        // This is acceptable for set operations; the ~ms clock skew is negligible.
-        if (req.ttl() == null) {
+    private static Long ttlMillis(Duration ttl) {
+        if (ttl == null) {
             return null;
         }
-        return OffsetDateTime.now().plus(req.ttl());
+        return ttl.toMillis();
     }
 }

@@ -1,3 +1,19 @@
+```
+    ____            ______              ____   ______
+   / __ \___  ___  / ____/__  ___      / __ \ / ____/
+  / /_/ / _ \/ _ \/ / __/ _ \/ _ \    / / / // /
+ / ____/  __/  __/ /_/ /  __/  __/   / /_/ // /___
+/_/    \___/\___/\____/\___/\___/    \___\_\\____/
+
+PostgreSQL-Backed Cache and Coordination Library
+```
+
+**Author**: Mark A Ray-Smith Cityline Ltd.
+**Date**: March 2026
+**Version**: 0.1
+
+---
+
 # peegee-cache Design Document
 
 ## 1. Overview
@@ -2206,6 +2222,18 @@ Operationally, this design should assume:
 - explicit autovacuum tuning for cache and queue-like tables
 - connection pooling as a baseline requirement, not an afterthought
 - realistic performance benchmarking on combined application flows, not only isolated GET/SET microbenchmarks
+
+**Autovacuum tuning note for future operator guide:** Cache tables with frequent upserts, conditional writes, and sweeper deletes generate dead tuples at a much higher rate than typical application tables. The default `autovacuum_vacuum_scale_factor` of 0.2 (20% of table size before triggering) is too conservative for high-churn cache workloads. Operators should consider per-table overrides such as:
+
+```sql
+ALTER TABLE peegee_cache.cache_entries SET (
+    autovacuum_vacuum_scale_factor = 0.05,
+    autovacuum_analyze_scale_factor = 0.05,
+    autovacuum_vacuum_cost_delay = 2
+);
+```
+
+Similar settings apply to `cache_counters` under heavy increment load. `cache_locks` typically has lower churn but should still be monitored. This guidance belongs in a deployment/tuning document rather than in migration SQL, since optimal values depend on workload profile and hardware.
 
 The important benchmark is often not “single cache read vs Redis” but “write domain row + invalidate cache + notify subscribers” inside one transactional boundary.
 
