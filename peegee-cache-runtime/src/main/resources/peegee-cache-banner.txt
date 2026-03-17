@@ -5,5 +5,5 @@
  / ____/  __/  __/ /_/ /  __/  __/ /___
 /_/    \___/\___/\____/\___/\___/\____/
 
-  PeeGeeC - PostgreSQL-Backed Cache and Coordination Library
+  PostgreSQL-Backed Cache and Coordination Library
   Version: ${version}

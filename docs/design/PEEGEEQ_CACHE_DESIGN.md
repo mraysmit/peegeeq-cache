@@ -16,6 +16,12 @@ PostgreSQL-Backed Cache and Coordination Library
 
 # peegee-cache Design Document
 
+---
+
+# Part I — Design and Architecture
+
+---
+
 ## 1. Overview
 
 **peegee-cache** is a PostgreSQL-backed, Redis-inspired cache and coordination library built for the **PeeGeeQ family** and intended to start on **Java 21+** and **Vert.x 5.0.x**.
@@ -23,42 +29,6 @@ PostgreSQL-Backed Cache and Coordination Library
 It is **library-first**, not daemon-first. The Java API is the primary product. PostgreSQL is the first storage implementation. Vert.x provides the asynchronous programming model and runtime integration.
 
 This is **not** intended to be a full Redis clone in Phase 1. It is intended to provide the high-value parts of Redis that map well onto PostgreSQL and are actually useful in enterprise systems.
-
-### Alignment with the existing PeeGeeQ codebase
-
-The sibling `peegeeq` project establishes a few conventions that `peegee-cache` should follow from day one:
-
-- keep the `dev.mars` group and `dev.mars.peegeeq.*` package family
-- use `io.vertx.core.Future<T>` for reactive public APIs
-- keep runtime lifecycle explicit rather than implicit
-- expose a manager/factory bootstrap story similar to `PeeGeeQManager` and `PgClientFactory`
-- preserve module separation between API, PostgreSQL implementation, runtime, observability, and test support
-
-That means the cache design should optimize first for clean integration with the current PeeGeeQ baseline on Java 21 and Vert.x 5.0.x. A later standalone release can raise the baseline in a coordinated version bump, but the initial API should not assume a newer floor than the rest of the family already uses.
-
-### Implementation guardrails
-
-These are non-negotiable implementation rules for Phase 1:
-
-- use a pure Vert.x 5.x public async contract built on `io.vertx.core.Future<T>`
-- keep runtime composition and lifecycle management Vert.x-native
-- follow strict TDD for behavior that can be tested
-- do not use mocking for database-facing behavior
-- use Testcontainers for PostgreSQL-backed integration work
-- keep construction and runtime behavior configuration-driven
-- do not hide important behavior in hardcoded defaults or ad hoc environment lookups
-
-Practical meaning:
-
-- no `CompletableFuture`, Reactor, Mutiny-as-primary-surface, or Spring-first abstractions in the Phase 1 core API
-- no H2 or in-memory stand-ins for PostgreSQL semantics
-- no progressing to the next step while the current changed behavior is still failing tests
-
-### Proposed package root
-
-```java
-package dev.mars.peegeeq.cache;
-```
 
 ### Product positioning
 
@@ -100,9 +70,112 @@ Short version:
 
 ---
 
-## 2. What Redis features are actually useful
+## 2. PostgreSQL as a cache engine
 
-The first step is **not** “copy Redis.” The first step is to decide which Redis features are actually valuable, feasible on PostgreSQL, and worth implementing.
+PostgreSQL is not usually the first technology people associate with caching. But modern PostgreSQL has specific features that make it a genuinely capable cache backend — and in many deployment scenarios, simpler to operate than a dedicated cache tier.
+
+### Storage and performance features
+
+**UNLOGGED tables.** PostgreSQL can create tables that skip write-ahead log (WAL) writes entirely. For cache data that is reconstructable on failure, this eliminates the largest source of write overhead. UNLOGGED tables approach in-memory write speeds while still benefiting from PostgreSQL's query planner, indexing, and connection infrastructure. Cache entries are a textbook use case — the data is derived or refillable, so crash loss is acceptable.
+
+**Shared buffers and OS page cache.** PostgreSQL keeps frequently accessed pages in shared memory. Hot cache keys — the ones that matter most for latency — naturally stay resident in shared buffers without any explicit eviction policy configuration. The OS page cache provides a second layer. For working sets that fit in memory (which covers most cache workloads), PostgreSQL read latency is dominated by process overhead, not disk I/O.
+
+**Prepared statements and plan caching.** Cache operations are highly repetitive — the same `SELECT`, `INSERT ... ON CONFLICT`, and `UPDATE` patterns executed millions of times with different bind parameters. PostgreSQL's prepared statement mechanism caches query plans, eliminating parse and plan overhead on repeat executions. The Vert.x reactive PostgreSQL client uses the extended query protocol, which benefits from this automatically.
+
+**HOT (Heap-Only Tuple) updates.** When an `UPDATE` does not change any indexed column, PostgreSQL can perform a HOT update — rewriting only the heap page without touching any index. Cache operations like `touch()` (updating `last_accessed_at`), `expire()` (updating `expires_at`), and hit-count increments hit this fast path because the indexed columns (`namespace`, `cache_key`) remain unchanged.
+
+**Partial indexes.** The expiry index `WHERE expires_at IS NOT NULL` only indexes rows that actually have a TTL. Persistent cache entries add zero index maintenance overhead. This is more efficient than indexing every row when only a fraction carry expiry metadata.
+
+**TOAST compression.** Large values stored in `BYTEA` columns are automatically compressed and out-of-line stored by PostgreSQL's TOAST mechanism. This is transparent — no application-level compression logic needed — and reduces storage and I/O for JSON payloads and large binary values.
+
+**Index-only scans.** Existence checks (`EXISTS`) and TTL lookups can be served entirely from the index without touching the heap, when the covering index contains the needed columns. This reduces I/O for the most latency-sensitive read paths.
+
+**`text_pattern_ops` indexes.** PostgreSQL's operator class for `LIKE 'prefix%'` queries enables efficient cursor-based scanning by namespace and key prefix without resorting to full-text search infrastructure.
+
+### Built-in coordination features
+
+**`LISTEN/NOTIFY`.** PostgreSQL provides native pub/sub channels at the protocol level. Cache invalidation fan-out, worker wakeups, and lightweight event notification work without any additional infrastructure. Crucially, `pg_notify()` called inside a transaction only fires if the transaction commits — giving atomic "write plus notify" semantics that Redis cannot match without application-level two-phase logic.
+
+**Advisory locks.** While `peegee-cache` uses table-based lease locks for richer semantics (fencing tokens, owner tracking, TTL), PostgreSQL's advisory lock system provides an additional coordination primitive at zero schema cost. This is available as a fallback or complement for simple mutual exclusion needs.
+
+**Sequences.** Monotonically increasing fencing tokens use PostgreSQL sequences (`lock_fencing_seq`), which are non-transactional and gap-free under concurrent access — exactly the semantics needed for lock fencing without contention bottlenecks.
+
+### Operational advantages over a separate cache tier
+
+**No additional infrastructure.** If the system already runs PostgreSQL, adding cache behavior requires zero new processes, ports, clusters, or monitoring targets. Redis requires its own deployment, its own connection pool, its own monitoring, its own backup strategy (if persistence matters), and its own failure domain.
+
+**Single backup and recovery story.** Cache state, business data, and coordination state are all in one database. Backup, point-in-time recovery, and disaster recovery plans do not need to account for a separate system with different consistency guarantees.
+
+**Single connection pool.** Application connections to PostgreSQL are already provisioned and managed. A cache backed by the same database reuses existing connection infrastructure. Adding Redis means a second connection pool with its own sizing, timeout, and failure characteristics.
+
+**Unified monitoring.** `pg_stat_statements` captures cache query performance alongside business queries. `pg_stat_user_tables` shows cache table bloat, sequential scans, and index usage. There is no need for a parallel monitoring stack.
+
+**Replication for free.** If the PostgreSQL deployment already has streaming replicas for read scaling or high availability, cache data is replicated automatically. Read-heavy cache workloads can be directed to replicas with no additional configuration beyond a read pool.
+
+**Mature tooling.** `psql`, `pgAdmin`, `pg_dump`, `pg_restore`, `EXPLAIN ANALYZE`, and the entire PostgreSQL ecosystem work on cache tables. Debugging a cache issue means running a SQL query, not learning a separate CLI or protocol.
+
+**Simpler failure modes.** With Redis, a cache miss during a Redis outage is a different failure mode from a cache miss during normal operation. With PostgreSQL-backed caching, the cache is available whenever the database is available — which is the same availability requirement as the rest of the application. There is no "Redis is down but the app should still work" scenario to design for.
+
+### Where PostgreSQL cache performance is competitive
+
+For workloads with these characteristics, PostgreSQL-backed caching is not just operationally simpler — it can match or exceed the effective throughput of a dedicated Redis instance:
+
+- **Write-heavy mixed workloads.** When the dominant pattern is "write business data + update cache + notify" inside one transaction, PostgreSQL eliminates the network round-trip to Redis and the two-phase consistency problem. The amortized cost of the cache operation inside an existing transaction is often lower than a separate Redis call.
+
+- **Working sets that fit in shared buffers.** When hot keys fit comfortably in PostgreSQL's shared memory, read latency is bounded by local process overhead (typically low single-digit milliseconds), not disk I/O. For many applications, this is well within acceptable cache read latency.
+
+- **Moderate request rates (thousands to low tens of thousands of ops/sec).** A properly tuned PostgreSQL instance on modern hardware handles this range comfortably, especially with UNLOGGED tables, prepared statements, and connection pooling. Most business applications never exceed this range for cache traffic.
+
+- **Operations where cache coherence matters more than raw speed.** Rate limiting, distributed locking, counter-based throttling, and conditional writes all benefit from ACID guarantees. Getting these right with Redis requires careful Lua scripting or multi-step flows; PostgreSQL provides them natively.
+
+### Where Redis remains the better choice
+
+PostgreSQL is not a universal cache replacement. Redis is still the right tool when:
+
+- latency requirements are sub-millisecond at p99
+- throughput exceeds what a single PostgreSQL instance (or its read replicas) can serve
+- the workload is dominated by specialized Redis data structures (sorted sets for leaderboards, streams for event processing, HyperLogLog for cardinality estimation)
+- the architecture explicitly requires an independent cache tier decoupled from the primary database
+- the cache dataset significantly exceeds available PostgreSQL shared buffer memory and hot-key locality does not apply
+
+The honest position is: PostgreSQL is a capable cache engine for a large class of real workloads, and it eliminates an entire category of operational complexity. It is not pretending to be faster than Redis at dedicated in-memory caching.
+
+---
+
+## 3. Product and naming decisions
+
+### Project name
+
+**peegee-cache**
+
+This fits the broader PeeGeeQ naming style and is honest about the product focus.
+
+### Tagline candidates
+
+- PostgreSQL-backed caching and coordination
+- Transactional cache primitives on PostgreSQL
+- Redis-inspired cache services for Vert.x
+- Cache, locks, counters, and TTL on PostgreSQL
+
+Best practical tagline:
+
+**PostgreSQL-backed caching and coordination**
+
+### What not to say
+
+Do not lead with:
+
+- Redis replacement
+- Redis killer
+- fully compatible Redis clone
+
+That creates the wrong expectations and invites bad comparisons.
+
+---
+
+## 4. What Redis features are actually useful
+
+The first step is **not** "copy Redis." The first step is to decide which Redis features are actually valuable, feasible on PostgreSQL, and worth implementing.
 
 ### Tier 1 — Core features for Phase 1
 
@@ -186,7 +259,7 @@ These are the features that provide real value and map well to PostgreSQL:
 
 ---
 
-## 3. Feature matrix
+## 5. Feature matrix
 
 ### Scoring legend
 
@@ -272,38 +345,7 @@ These are the features that provide real value and map well to PostgreSQL:
 
 ---
 
-## 4. Product and naming decisions
-
-### Project name
-
-**peegee-cache**
-
-This fits the broader PeeGeeQ naming style and is honest about the product focus.
-
-### Tagline candidates
-
-- PostgreSQL-backed caching and coordination
-- Transactional cache primitives on PostgreSQL
-- Redis-inspired cache services for Vert.x
-- Cache, locks, counters, and TTL on PostgreSQL
-
-Best practical tagline:
-
-**PostgreSQL-backed caching and coordination**
-
-### What not to say
-
-Do not lead with:
-
-- Redis replacement
-- Redis killer
-- fully compatible Redis clone
-
-That creates the wrong expectations and invites bad comparisons.
-
----
-
-## 5. Library-first architecture
+## 6. Library-first architecture
 
 The correct architectural call is **library-first**.
 
@@ -337,7 +379,350 @@ The existing PeeGeeQ codebase uses explicit manager/factory objects for startup,
 
 ---
 
-## 6. Phase 1 module structure
+## 7. Explicit design calls
+
+These are the deliberate design choices made so far.
+
+### Use separate services, not one giant god interface
+Correct:
+- `CacheService`
+- `CounterService`
+- `LockService`
+- `ScanService`
+- `PubSubService`
+
+Wrong:
+- `RedisLikeService` with a hundred unrelated methods
+
+### Use first-class namespace + key
+Correct:
+- `CacheKey(namespace, key)`
+
+Wrong:
+- raw string everywhere
+
+### Use typed requests for writes
+Correct:
+- `CacheSetRequest`
+
+Wrong:
+- ten overloaded `set(...)` methods that rot over time
+
+### Use optimistic versioning early
+Correct:
+- every mutable entry has a `version`
+
+Wrong:
+- add versioning later after clients depend on weaker semantics
+
+### Keep pub/sub deliberately narrow
+Correct:
+- invalidation and light notifications
+
+Wrong:
+- pretending PostgreSQL `NOTIFY` is Kafka
+
+### Be honest about where Redis still wins
+Redis still has a better fit when the workload requires:
+
+- extreme throughput or very low-latency hot-path reads
+- large-scale dedicated cache-tier behavior
+- Redis-native structures such as streams, mature sorted-set-heavy workflows, HyperLogLog, or similar specialized patterns
+- architectures that explicitly require an external cache tier independent from the primary database
+
+`peegee-cache` should be sold as a PostgreSQL-native coordination and cache library, not as a universal reason to remove Redis from every system.
+
+### Do not try to emulate Redis transactions exactly
+Use SQL transactions instead.
+
+### Do not treat lists as a priority
+If queue semantics are needed, build a proper queue module later.
+
+### Do not try to build protocol compatibility first
+Build the Java library first. Network/server adapters can come later.
+
+### Align with PeeGeeQ runtime patterns
+Correct:
+- explicit bootstrap options
+- managed start/stop lifecycle
+- clear ownership of `Vertx` and `Pool`
+
+Wrong:
+- hidden singleton startup
+- implicit background threads with no lifecycle owner
+
+---
+
+## 8. Data typing decisions
+
+### `TEXT` for namespace and keys
+Correct for Phase 1. Do not over-engineer with varchar lengths in the database first.
+
+### `BYTEA` for stored values
+Correct for a cache library:
+- binary-safe
+- easy Vert.x Buffer mapping
+- no JSON-only lock-in
+
+### `TIMESTAMPTZ`
+Use it everywhere for temporal fields.
+
+### `BIGINT version`
+Correct and simple for mutation versioning.
+
+---
+
+## 9. Expiry semantics
+
+This is one of the most important design decisions.
+
+### Lazy expiry is authoritative
+A row is treated as absent if:
+
+```sql
+expires_at IS NOT NULL AND expires_at <= NOW()
+```
+
+### Background cleanup is eventual
+A sweeper deletes physically expired rows later.
+
+That means:
+- logical expiry is immediate on read
+- physical deletion is eventual
+
+This is the correct model.
+
+### Consequences
+Write operations such as set-if-absent, counter create, and lock acquire should usually treat expired rows as absent. In practice this means transactional "delete expired then act" flows are often required for correctness.
+
+---
+
+## 10. Pub/sub integration
+
+Phase 1 does not require a table for pub/sub if PostgreSQL `LISTEN/NOTIFY` is used.
+
+Suggested channel naming:
+
+```text
+peegee_cache__{channel}
+```
+
+Publish via:
+
+```sql
+SELECT pg_notify($1, $2);
+```
+
+One important architectural advantage over a separate Redis publish step is that `pg_notify` can be part of the same transaction as the underlying row changes. If the surrounding transaction rolls back, the notification should not be treated as committed state.
+
+For domain flows that need "write plus notify" atomicity, prefer one of these patterns:
+
+- execute `pg_notify` in the same transaction as the data mutation
+- or use a trigger/outbox-style pattern so notification emission is coupled to committed database state
+
+Important limitations:
+- `NOTIFY` payload is text and size-limited
+- binary payload passthrough should **not** be part of the Phase 1 public API
+- for Phase 1, payloads should be UTF-8 text or JSON strings with optional `contentType`
+
+Phase 1 public contract:
+
+- `PublishRequest.payload` is `String`
+- `PublishRequest.contentType` is advisory metadata such as `text/plain` or `application/json`
+- subscribers receive `PubSubMessage` with string payloads
+- pattern subscriptions are explicitly a V2 feature, not part of the Phase 1 API
+
+Operational guidance:
+
+- use a dedicated PostgreSQL connection for the `LISTEN` loop
+- treat pub/sub as best-effort fan-out, not durable delivery
+- drop or reject oversized payloads early instead of silently truncating them
+- if durable notifications become a requirement, add a separate events table/module rather than stretching `NOTIFY`
+
+Pub/sub in Phase 1 is for:
+- cache invalidation
+- local worker wakeups
+- lightweight internal notifications
+
+It is **not** a durable messaging system and should not be sold as one.
+
+---
+
+## 11. Non-functional requirements and concerns
+
+### Binary-safe values
+Do not build a cache that only stores strings and JSON unless you want to regret it later.
+
+### Typed values
+Support at least:
+- bytes
+- string
+- json
+- long / numeric
+
+Do **not** expose Java serialization as a first-class public API.
+
+### Metrics
+Need instrumentation for:
+- gets
+- sets
+- hits
+- misses
+- expired-on-read
+- sweeper deletions
+- lock acquire success/failure
+- pub/sub publish failures
+- pub/sub listener reconnects
+- queue claim latency later
+- pub/sub send/receive counts
+
+### Concurrency tests
+Need brutal integration tests for:
+- two clients incrementing same key
+- two workers racing to claim the same logical resource
+- two owners racing for same lock
+- expiry while reading
+- renew vs release races
+- notification ordering assumptions
+
+### PostgreSQL hygiene
+This is where PostgreSQL-backed caches can go wrong if you are careless:
+- update churn
+- delete churn
+- index bloat
+- autovacuum tuning
+- table partitioning later if needed
+- logged vs unlogged table decisions
+
+Operationally, this design should assume:
+
+- aggressive monitoring of bloat on high-churn cache tables
+- explicit autovacuum tuning for cache and queue-like tables
+- connection pooling as a baseline requirement, not an afterthought
+- realistic performance benchmarking on combined application flows, not only isolated GET/SET microbenchmarks
+
+**Autovacuum tuning note for future operator guide:** Cache tables with frequent upserts, conditional writes, and sweeper deletes generate dead tuples at a much higher rate than typical application tables. The default `autovacuum_vacuum_scale_factor` of 0.2 (20% of table size before triggering) is too conservative for high-churn cache workloads. Operators should consider per-table overrides such as:
+
+```sql
+ALTER TABLE peegee_cache.cache_entries SET (
+    autovacuum_vacuum_scale_factor = 0.05,
+    autovacuum_analyze_scale_factor = 0.05,
+    autovacuum_vacuum_cost_delay = 2
+);
+```
+
+Similar settings apply to `cache_counters` under heavy increment load. `cache_locks` typically has lower churn but should still be monitored. This guidance belongs in a deployment/tuning document rather than in migration SQL, since optimal values depend on workload profile and hardware.
+
+The important benchmark is often not "single cache read vs Redis" but "write domain row + invalidate cache + notify subscribers" inside one transactional boundary.
+
+### Read-path write amplification
+Updating `hit_count` and `last_accessed_at` on every read may be operationally stupid for hot keys.
+
+Better options:
+- sampled updates
+- optional update mode via config
+- async/statistical tracking later
+
+### Dedicated listener connections
+PostgreSQL `LISTEN/NOTIFY` should not share the same connection flow as normal query traffic.
+
+Use a dedicated listener connection or pool slot for pub/sub runtime so that:
+
+- listener backpressure does not block foreground cache operations
+- reconnect logic stays isolated
+- lifecycle ownership is explicit in the runtime manager
+
+---
+
+## 12. Scaling and clustering analysis
+
+### Why Redis Cluster semantics do not apply
+
+Redis Cluster provides hash-slot partitioning (16,384 slots mapped to nodes), automatic resharding, gossip-based failure detection with replica promotion, client-side `MOVED`/`ASK` routing, and multi-key restrictions (operations spanning keys must hit the same hash slot).
+
+The feature matrix rates Redis Cluster semantics as **Very High complexity / Poor PostgreSQL fit / No**. This is correct for the following reasons:
+
+- Redis Cluster solves a **single-writer memory bottleneck** — one node cannot hold all keys in RAM. PostgreSQL does not have this problem. It stores data on disk with shared buffers, and a single PostgreSQL instance can handle datasets far exceeding available RAM.
+- Hash-slot routing is meaningless when all data lives in one relational database. Building a distributed routing layer on top of a system that already centralises data access adds complexity with no benefit.
+- The gossip protocol, slot migration, and `MOVED`/`ASK` semantics are tightly coupled to Redis's in-memory architecture. Reimplementing them over PostgreSQL would be a massive engineering effort that produces something strictly worse than what PostgreSQL already offers natively.
+
+### The transactional locality constraint
+
+The core differentiator of peegee-cache — "write domain row + invalidate cache + notify subscribers inside one transactional boundary" — is fundamentally incompatible with Redis Cluster semantics. Redis Cluster partitions data across nodes; cross-node transactions are not possible. PostgreSQL gives ACID transactions across all cache keys, counters, and locks in one database. Splitting that across nodes destroys the core value proposition.
+
+This means the scaling story must lean into PostgreSQL's strengths rather than attempting to replicate Redis's distributed architecture.
+
+### PostgreSQL scaling tiers
+
+Rather than emulating Redis Cluster, peegee-cache should rely on PostgreSQL's own scaling mechanisms. These form a natural progression:
+
+#### Tier 1: Vertical scaling + connection pooling
+
+- PostgreSQL handles surprisingly large cache workloads on modern hardware
+- PgBouncer or built-in connection pooling prevents connection exhaustion
+- `UNLOGGED` tables eliminate WAL overhead for cache data that is reconstructable
+- This is where the vast majority of peegee-cache deployments should live
+
+#### Tier 2: Read replicas for read-heavy workloads
+
+- PostgreSQL streaming replication provides read replicas with millisecond lag
+- peegee-cache could support a `readPool` / `writePool` split in `PgCacheStoreConfig`
+- Reads (`GET`, `EXISTS`, `SCAN`, `TTL` lookups) route to replicas; writes route to the primary
+- **Consistency trade-off**: reads from replicas may see slightly stale data — for a cache this is usually acceptable, since the data was already stale by definition. Lock reads and counter reads must go to the primary.
+- Achievable with modest API changes; worth designing for in V2
+
+#### Tier 3: Table partitioning by namespace
+
+- PostgreSQL native partitioning (`PARTITION BY LIST (namespace)` or `PARTITION BY HASH (namespace, cache_key)`)
+- Keeps indexes smaller per partition, improves vacuum performance, enables partition-level maintenance
+- Transparent to the application — SQL does not change
+- This is an operational/DBA decision, not an application architecture change
+- The bootstrap SQL could offer partitioned table variants as a configuration option
+
+#### Tier 4: Citus / distributed PostgreSQL (horizontal write scaling)
+
+- Citus distributes tables across PostgreSQL worker nodes by a distribution key
+- `namespace` or `(namespace, cache_key)` is a natural distribution key for all three tables
+- Queries that include the distribution key get routed to the correct shard automatically
+- Cross-shard queries (e.g., scan across all namespaces) still work but are slower
+- This is the closest analogue to Redis Cluster's hash-slot partitioning, but it operates at the PostgreSQL level — peegee-cache does not need to know about it
+- **Key advantage**: peegee-cache's SQL stays the same; sharding is transparent
+
+#### Tier 5: Multi-region / active-active
+
+- Tools like BDR (Bi-Directional Replication) exist but add significant complexity
+- For caches, the simpler answer is usually: each region has its own peegee-cache instance backed by a local PostgreSQL, and cache misses are tolerable
+- Explicitly out of scope for any near-term work
+
+### What peegee-cache should do about scaling
+
+1. **Do nothing cluster-specific in Phase 1** — this is already the plan and it is correct
+2. **Keep SQL portable across PostgreSQL scaling tiers** — the current SQL works with vanilla PostgreSQL, read replicas, partitioned tables, and Citus without modification; this is already true
+3. **Design configuration for read/write pool separation** — `PgCacheStoreConfig` could accept an optional read pool for follower reads; this is a V2 feature but the config model should not preclude it
+4. **Document the scaling story honestly** — one PostgreSQL instance handles more cache throughput than people expect; when it does not, the answer is PostgreSQL scaling (partitioning, replicas, Citus), not reimplementing Redis Cluster
+
+### Where Redis still wins on scaling
+
+Redis Cluster provides sub-millisecond latency at scale by keeping everything in memory across many nodes. For workloads that require:
+
+- millions of operations per second on a single key space
+- sub-millisecond p99 latency as a hard constraint
+- a dedicated cache tier independent from the primary database
+- horizontal write scaling without involving the primary database at all
+
+Redis remains the better tool. peegee-cache competes on operational simplicity, transactional correctness, and infrastructure consolidation — not on raw throughput at massive scale.
+
+### Summary
+
+The correct "clustering" answer for peegee-cache is: **let PostgreSQL handle it**. The library should produce clean, shard-friendly SQL (which it already does), document the scaling tiers honestly, and avoid building routing/partitioning/failover logic that PostgreSQL already provides better at the infrastructure level.
+
+---
+
+# Part II — Module and Schema Design
+
+---
+
+## 13. Phase 1 module structure
 
 ```text
 peegee-cache-parent
@@ -421,7 +806,7 @@ Optional metrics/tracing:
 
 ---
 
-## 7. Package structure
+## 14. Package structure
 
 ### API module packages
 
@@ -496,11 +881,305 @@ Use:
 
 ---
 
-## 8. Public service interfaces (Phase 1)
+## 15. PostgreSQL schema (Phase 1)
+
+Use a dedicated schema:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS peegee_cache;
+```
+
+Phase 1 tables:
+
+- `peegee_cache.cache_entries`
+- `peegee_cache.cache_counters`
+- `peegee_cache.cache_locks`
+
+Optional later:
+- `peegee_cache.cache_events`
+- `peegee_cache.hash_entries`
+- `peegee_cache.zset_entries`
+- `peegee_cache.queue_entries`
+
+### 14.1 `cache_entries`
+
+For disposable cache data, this table may be created as `UNLOGGED` when the operator explicitly chooses write speed and WAL reduction over crash persistence. That matches real cache semantics well: logically reconstructable data can be lost on crash without violating system truth.
+
+Default recommendation:
+
+- `cache_entries`: optionally `UNLOGGED`
+- `cache_counters`: usually logged
+- `cache_locks`: logged
+
+Reasoning:
+
+- plain cache values are often derived or refillable
+- counters may participate in rate limits, quotas, or billing-like controls
+- locks are coordination state and should not disappear after a crash unless the runtime explicitly chooses that behavior
+
+```sql
+CREATE TABLE IF NOT EXISTS peegee_cache.cache_entries (
+    namespace           TEXT                        NOT NULL,
+    cache_key           TEXT                        NOT NULL,
+    value_type          TEXT                        NOT NULL,
+    value_bytes         BYTEA,
+    numeric_value       BIGINT,
+    version             BIGINT                      NOT NULL DEFAULT 1,
+    created_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+    expires_at          TIMESTAMPTZ,
+    hit_count           BIGINT                      NOT NULL DEFAULT 0,
+    last_accessed_at    TIMESTAMPTZ,
+    PRIMARY KEY (namespace, cache_key),
+    CONSTRAINT chk_cache_entries_value_type
+        CHECK (value_type IN ('BYTES', 'STRING', 'JSON', 'LONG')),
+    CONSTRAINT chk_cache_entries_value_payload
+        CHECK (
+            (
+                value_type = 'LONG'
+                AND numeric_value IS NOT NULL
+                AND value_bytes IS NULL
+            )
+            OR
+            (
+                value_type IN ('BYTES', 'STRING', 'JSON')
+                AND value_bytes IS NOT NULL
+                AND numeric_value IS NULL
+            )
+        )
+);
+```
+
+#### Why these columns exist
+
+- `namespace`, `cache_key`: composite primary key, first-class namespace support
+- `value_type`: supports BYTES / STRING / JSON / LONG
+- `value_bytes`: binary-safe payload storage
+- `numeric_value`: typed numeric support
+- `version`: CAS / optimistic concurrency
+- `created_at`, `updated_at`: operational visibility
+- `expires_at`: TTL
+- `hit_count`, `last_accessed_at`: optional observability fields
+
+The payload `CHECK` is intentionally exclusive, not just permissive:
+
+- `LONG` rows must use `numeric_value` only
+- `BYTES` / `STRING` / `JSON` rows must use `value_bytes` only
+- mixed payload rows are rejected at the database layer rather than relying on application discipline
+
+### 14.2 `cache_entries` indexes
+
+Expiry index:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_cache_entries_expires_at
+    ON peegee_cache.cache_entries (expires_at)
+    WHERE expires_at IS NOT NULL;
+```
+
+Prefix-scan support:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_cache_entries_namespace_key_pattern
+    ON peegee_cache.cache_entries (namespace, cache_key text_pattern_ops);
+```
+
+### 14.3 `cache_counters`
+
+Counters should not be stuffed into the generic cache table if heavy counter usage is expected.
+
+Unlike disposable cache entries, counters should default to logged tables because they often affect externally visible control flow such as rate limiting, throttling, and usage accounting.
+
+```sql
+CREATE TABLE IF NOT EXISTS peegee_cache.cache_counters (
+    namespace           TEXT                        NOT NULL,
+    counter_key         TEXT                        NOT NULL,
+    counter_value       BIGINT                      NOT NULL,
+    version             BIGINT                      NOT NULL DEFAULT 1,
+    created_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+    expires_at          TIMESTAMPTZ,
+    PRIMARY KEY (namespace, counter_key)
+);
+```
+
+Indexes:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_cache_counters_expires_at
+    ON peegee_cache.cache_counters (expires_at)
+    WHERE expires_at IS NOT NULL;
+```
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_cache_counters_namespace_key_pattern
+    ON peegee_cache.cache_counters (namespace, counter_key text_pattern_ops);
+```
+
+### 14.4 `cache_locks`
+
+Locks are not just cache entries with TTL. They need proper ownership and lease semantics.
+
+Locks should default to logged storage. Losing lease state on crash may be acceptable in some narrow designs, but it should not be the default contract for a coordination primitive.
+
+```sql
+CREATE TABLE IF NOT EXISTS peegee_cache.cache_locks (
+    namespace           TEXT                        NOT NULL,
+    lock_key            TEXT                        NOT NULL,
+    owner_token         TEXT                        NOT NULL,
+    fencing_token       BIGINT,
+    version             BIGINT                      NOT NULL DEFAULT 1,
+    created_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+    lease_expires_at    TIMESTAMPTZ                 NOT NULL,
+    PRIMARY KEY (namespace, lock_key),
+    CONSTRAINT chk_cache_locks_future_lease
+        CHECK (lease_expires_at > updated_at)
+);
+```
+
+Lease times should be derived from the PostgreSQL server clock, not from caller-supplied absolute timestamps. API requests should carry a positive lease TTL, and SQL should compute `lease_expires_at` from `NOW()` inside the statement.
+
+Index:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_cache_locks_lease_expires_at
+    ON peegee_cache.cache_locks (lease_expires_at);
+```
+
+### 14.5 Lock fencing token sequence
+
+```sql
+CREATE SEQUENCE IF NOT EXISTS peegee_cache.lock_fencing_seq;
+```
+
+---
+
+## 16. Native SQL interface
+
+`peegee-cache` should expose a **native PostgreSQL interface out of the box**, but the support boundary must be explicit.
+
+### What "out of the box" should mean
+
+Supported immediately:
+
+- direct SQL reads against documented tables and views
+- `psql` inspection and operational queries
+- reporting, debugging, and admin scripts that read cache state directly
+- SQL functions/procedures for correctness-sensitive writes
+
+Not automatically supported as a stable contract:
+
+- arbitrary external writes directly against base tables for locks, counters, or TTL-aware key mutation
+- expecting every SQL caller to reimplement `NX`, expiry-aware upsert, lock lease rules, or notification semantics correctly
+
+The rule should be simple:
+
+- **reads may use tables/views directly**
+- **writes should use documented SQL functions for semantics that matter under concurrency**
+
+### Recommended support model
+
+Use a mixed model:
+
+1. **Table/view read interface**
+    - stable read access for ops and diagnostics
+    - examples: inspect a key, list expiring entries, inspect active locks, review counters
+
+2. **Function-based write interface**
+    - stable SQL entry points for mutation semantics
+    - examples: set key, get key, expire key, increment counter, acquire lock, renew lock, release lock, publish notification
+
+3. **Implementation tables remain internal-by-default for writes**
+    - external callers should not depend on internal multi-step write flows unless the doc explicitly marks them as supported
+
+### Why this is necessary
+
+Direct writes are fine only for trivial cases. They become unsafe once the semantics involve:
+
+- treating expired rows as absent
+- `ON CONFLICT` plus version increments
+- owner-matched lock renewal/release
+- lease expiry computed from the database clock
+- atomic "write plus notify" behavior
+
+Those are exactly the cases where a stable SQL function is better than telling every caller to copy a multi-statement transaction from the docs.
+
+### Recommended SQL API shape
+
+Illustrative function names:
+
+```sql
+peegee_cache.get_entry(namespace text, cache_key text)
+peegee_cache.set_entry(namespace text, cache_key text, value_type text, value_bytes bytea, numeric_value bigint, ttl_millis bigint, mode text, expected_version bigint)
+peegee_cache.delete_entry(namespace text, cache_key text)
+peegee_cache.expire_entry(namespace text, cache_key text, ttl_millis bigint)
+peegee_cache.persist_entry(namespace text, cache_key text)
+
+peegee_cache.increment_counter(namespace text, counter_key text, delta bigint, ttl_millis bigint, ttl_mode text)
+peegee_cache.set_counter(namespace text, counter_key text, counter_value bigint, ttl_millis bigint)
+
+peegee_cache.acquire_lock(namespace text, lock_key text, owner_token text, lease_ttl_millis bigint, issue_fencing_token boolean)
+peegee_cache.renew_lock(namespace text, lock_key text, owner_token text, lease_ttl_millis bigint)
+peegee_cache.release_lock(namespace text, lock_key text, owner_token text)
+
+peegee_cache.publish(channel text, payload text, content_type text)
+```
+
+These do not need to be implemented before the Java API exists, but the design should reserve space for them now so non-Java callers are not treated as an accidental afterthought.
+
+### Recommended first-cut support policy
+
+For Phase 1:
+
+- document tables for read access
+- document views for friendly inspection where useful
+- expose SQL functions for lock and counter mutation first
+- expose SQL functions for cache writes if non-Java callers are a real requirement in the first release
+
+For later phases:
+
+- decide whether the SQL function interface is a first-class product surface with compatibility guarantees
+- add migration/versioning policy for SQL functions if external clients depend on them
+
+### Operational examples that should work from `psql`
+
+Examples of intentionally supported direct reads:
+
+```sql
+SELECT *
+FROM peegee_cache.cache_entries
+WHERE namespace = 'session'
+  AND cache_key = 'abc123';
+
+SELECT *
+FROM peegee_cache.cache_locks
+WHERE namespace = 'jobs'
+  AND lease_expires_at > NOW()
+ORDER BY lease_expires_at;
+```
+
+Examples of writes that should prefer functions over raw table DML:
+
+```sql
+SELECT * FROM peegee_cache.acquire_lock('jobs', 'worker-election', 'node-a', 15000, true);
+
+SELECT * FROM peegee_cache.increment_counter('rate-limit', 'client-1', 1, 60000, 'PRESERVE_EXISTING');
+```
+
+That gives operators and other languages a native SQL path without weakening the correctness guarantees that justify this project in the first place.
+
+---
+
+# Part III — API Specification
+
+---
+
+## 17. Public service interfaces (Phase 1)
 
 These are the first-cut interfaces for the library.
 
-### 8.1 `CacheService`
+### 16.1 `CacheService`
 
 ```java
 package dev.mars.peegeeq.cache.api.cache;
@@ -544,7 +1223,7 @@ public interface CacheService {
 }
 ```
 
-### 8.2 `CounterService`
+### 16.2 `CounterService`
 
 ```java
 package dev.mars.peegeeq.cache.api.counter;
@@ -583,7 +1262,7 @@ public interface CounterService {
 
 **Design note on `CacheKey` reuse:** `CounterService` uses `CacheKey` rather than introducing a separate `CounterKey` type. This is intentional. `CacheKey` is structurally just `(namespace, key)` — a general-purpose composite identifier. Counters and cache entries live in separate tables, so there is no key-space collision. Introducing `CounterKey` with an identical `(namespace, key)` structure would add a type without adding meaning. If counter identity diverges structurally from cache identity in a later phase, a dedicated key type can be introduced then.
 
-### 8.3 `LockService`
+### 16.3 `LockService`
 
 ```java
 package dev.mars.peegeeq.cache.api.lock;
@@ -612,7 +1291,7 @@ public interface LockService {
 }
 ```
 
-### 8.4 `ScanService`
+### 16.4 `ScanService`
 
 ```java
 package dev.mars.peegeeq.cache.api.scan;
@@ -627,9 +1306,9 @@ public interface ScanService {
 }
 ```
 
-**Scope note:** `ScanService` in Phase 1 covers `cache_entries` only. Scanning counters and locks is deferred to V1 completion (Phase 6) since operational inspection of those tables is lower-frequency. If needed earlier, direct SQL reads against `cache_counters` and `cache_locks` are explicitly supported (see section 25).
+**Scope note:** `ScanService` in Phase 1 covers `cache_entries` only. Scanning counters and locks is deferred to V1 completion (Phase 6) since operational inspection of those tables is lower-frequency. If needed earlier, direct SQL reads against `cache_counters` and `cache_locks` are explicitly supported (see section 16).
 
-### 8.5 `PubSubService`
+### 16.5 `PubSubService`
 
 ```java
 package dev.mars.peegeeq.cache.api.pubsub;
@@ -690,9 +1369,9 @@ public interface PeeGeeCache {
 
 ---
 
-## 9. Core public models
+## 18. Core public models
 
-### 9.1 `CacheKey`
+### 17.1 `CacheKey`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -719,7 +1398,7 @@ public record CacheKey(String namespace, String key) {
 }
 ```
 
-### 9.2 `LockKey`
+### 17.2 `LockKey`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -740,7 +1419,7 @@ public record LockKey(String namespace, String key) {
 }
 ```
 
-### 9.3 `CacheValue` and `ValueType`
+### 17.3 `CacheValue` and `ValueType`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -811,7 +1490,7 @@ public enum ValueType {
 }
 ```
 
-### 9.4 `CacheEntry`
+### 17.4 `CacheEntry`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -834,7 +1513,7 @@ public record CacheEntry(
 }
 ```
 
-### 9.4a TTL result model
+### 17.4a TTL result model
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -867,7 +1546,7 @@ public record TtlResult(
 }
 ```
 
-### 9.5 `SetMode`
+### 17.5 `SetMode`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -880,7 +1559,7 @@ public enum SetMode {
 }
 ```
 
-### 9.6 `CacheSetRequest`
+### 17.6 `CacheSetRequest`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -897,7 +1576,7 @@ public record CacheSetRequest(
 ) {}
 ```
 
-### 9.7 `CacheSetResult`
+### 17.7 `CacheSetResult`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -911,7 +1590,7 @@ public record CacheSetResult(
 
 `previousEntry` is nullable. When `CacheSetRequest.returnPreviousValue` is false or there was no previous entry, it is null.
 
-### 9.8 `TouchResult`
+### 17.8 `TouchResult`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -922,7 +1601,7 @@ public record TouchResult(
 ) {}
 ```
 
-### 9.9 `CounterOptions`
+### 17.9 `CounterOptions`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -950,7 +1629,7 @@ public enum CounterTtlMode {
 }
 ```
 
-### 9.10 Lock models
+### 17.10 Lock models
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1017,7 +1696,7 @@ public record LockReleaseRequest(
 ) {}
 ```
 
-### 9.11 Scan models
+### 17.11 Scan models
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1044,7 +1723,7 @@ public record ScanResult(
 ) {}
 ```
 
-### 9.12 Pub/sub models
+### 17.12 Pub/sub models
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1067,7 +1746,7 @@ public interface Subscription {
 }
 ```
 
-### 9.13 Exception types
+### 17.13 Exception types
 
 The `dev.mars.peegeeq.cache.api.exception` package should define the following exception hierarchy:
 
@@ -1115,7 +1794,7 @@ Design rules:
 
 ---
 
-## 10. Bootstrap and configuration
+## 19. Bootstrap and configuration
 
 ### Recommended runtime bootstrap shape
 
@@ -1238,7 +1917,7 @@ public record PgCacheStoreConfig(
 
 ---
 
-## 11. Internal SPI ideas
+## 20. Internal SPI ideas
 
 These should remain internal or semi-internal, not part of the main business API.
 
@@ -1264,262 +1943,13 @@ public interface MetricsRecorder {
 
 ---
 
-## 12. First-cut PostgreSQL implementation classes
-
-Expected classes in `peegee-cache-pg`:
-
-```text
-PgPeeGeeCache
-PgPeeGeeCacheManager
-PgCacheService
-PgCounterService
-PgLockService
-PgScanService
-PgPubSubService
-
-PgCacheRepository
-PgCounterRepository
-PgLockRepository
-PgScanRepository
-PgNotificationListener
-
-SqlStatements
-RowMappers
-PgTxSupport
-```
-
-Expected runtime classes:
-
-```text
-ExpirySweeper
-PubSubListenerRuntime
-PeeGeeCacheBootstrap
-PeeGeeCacheLifecycle
-```
+# Part IV — SQL Operations Catalogue
 
 ---
 
-## 13. PostgreSQL schema (Phase 1)
+## 21. Core SQL operations
 
-Use a dedicated schema:
-
-```sql
-CREATE SCHEMA IF NOT EXISTS peegee_cache;
-```
-
-Phase 1 tables:
-
-- `peegee_cache.cache_entries`
-- `peegee_cache.cache_counters`
-- `peegee_cache.cache_locks`
-
-Optional later:
-- `peegee_cache.cache_events`
-- `peegee_cache.hash_entries`
-- `peegee_cache.zset_entries`
-- `peegee_cache.queue_entries`
-
-### 13.1 `cache_entries`
-
-For disposable cache data, this table may be created as `UNLOGGED` when the operator explicitly chooses write speed and WAL reduction over crash persistence. That matches real cache semantics well: logically reconstructable data can be lost on crash without violating system truth.
-
-Default recommendation:
-
-- `cache_entries`: optionally `UNLOGGED`
-- `cache_counters`: usually logged
-- `cache_locks`: logged
-
-Reasoning:
-
-- plain cache values are often derived or refillable
-- counters may participate in rate limits, quotas, or billing-like controls
-- locks are coordination state and should not disappear after a crash unless the runtime explicitly chooses that behavior
-
-```sql
-CREATE TABLE IF NOT EXISTS peegee_cache.cache_entries (
-    namespace           TEXT                        NOT NULL,
-    cache_key           TEXT                        NOT NULL,
-    value_type          TEXT                        NOT NULL,
-    value_bytes         BYTEA,
-    numeric_value       BIGINT,
-    version             BIGINT                      NOT NULL DEFAULT 1,
-    created_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
-    expires_at          TIMESTAMPTZ,
-    hit_count           BIGINT                      NOT NULL DEFAULT 0,
-    last_accessed_at    TIMESTAMPTZ,
-    PRIMARY KEY (namespace, cache_key),
-    CONSTRAINT chk_cache_entries_value_type
-        CHECK (value_type IN ('BYTES', 'STRING', 'JSON', 'LONG')),
-    CONSTRAINT chk_cache_entries_value_payload
-        CHECK (
-            (
-                value_type = 'LONG'
-                AND numeric_value IS NOT NULL
-                AND value_bytes IS NULL
-            )
-            OR
-            (
-                value_type IN ('BYTES', 'STRING', 'JSON')
-                AND value_bytes IS NOT NULL
-                AND numeric_value IS NULL
-            )
-        )
-);
-```
-
-#### Why these columns exist
-
-- `namespace`, `cache_key`: composite primary key, first-class namespace support
-- `value_type`: supports BYTES / STRING / JSON / LONG
-- `value_bytes`: binary-safe payload storage
-- `numeric_value`: typed numeric support
-- `version`: CAS / optimistic concurrency
-- `created_at`, `updated_at`: operational visibility
-- `expires_at`: TTL
-- `hit_count`, `last_accessed_at`: optional observability fields
-
-The payload `CHECK` is intentionally exclusive, not just permissive:
-
-- `LONG` rows must use `numeric_value` only
-- `BYTES` / `STRING` / `JSON` rows must use `value_bytes` only
-- mixed payload rows are rejected at the database layer rather than relying on application discipline
-
-### 13.2 `cache_entries` indexes
-
-Expiry index:
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_cache_entries_expires_at
-    ON peegee_cache.cache_entries (expires_at)
-    WHERE expires_at IS NOT NULL;
-```
-
-Prefix-scan support:
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_cache_entries_namespace_key_pattern
-    ON peegee_cache.cache_entries (namespace, cache_key text_pattern_ops);
-```
-
-### 13.3 `cache_counters`
-
-Counters should not be stuffed into the generic cache table if heavy counter usage is expected.
-
-Unlike disposable cache entries, counters should default to logged tables because they often affect externally visible control flow such as rate limiting, throttling, and usage accounting.
-
-```sql
-CREATE TABLE IF NOT EXISTS peegee_cache.cache_counters (
-    namespace           TEXT                        NOT NULL,
-    counter_key         TEXT                        NOT NULL,
-    counter_value       BIGINT                      NOT NULL,
-    version             BIGINT                      NOT NULL DEFAULT 1,
-    created_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
-    expires_at          TIMESTAMPTZ,
-    PRIMARY KEY (namespace, counter_key)
-);
-```
-
-Indexes:
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_cache_counters_expires_at
-    ON peegee_cache.cache_counters (expires_at)
-    WHERE expires_at IS NOT NULL;
-```
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_cache_counters_namespace_key_pattern
-    ON peegee_cache.cache_counters (namespace, counter_key text_pattern_ops);
-```
-
-### 13.4 `cache_locks`
-
-Locks are not just cache entries with TTL. They need proper ownership and lease semantics.
-
-Locks should default to logged storage. Losing lease state on crash may be acceptable in some narrow designs, but it should not be the default contract for a coordination primitive.
-
-```sql
-CREATE TABLE IF NOT EXISTS peegee_cache.cache_locks (
-    namespace           TEXT                        NOT NULL,
-    lock_key            TEXT                        NOT NULL,
-    owner_token         TEXT                        NOT NULL,
-    fencing_token       BIGINT,
-    version             BIGINT                      NOT NULL DEFAULT 1,
-    created_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
-    lease_expires_at    TIMESTAMPTZ                 NOT NULL,
-    PRIMARY KEY (namespace, lock_key),
-    CONSTRAINT chk_cache_locks_future_lease
-        CHECK (lease_expires_at > updated_at)
-);
-```
-
-Lease times should be derived from the PostgreSQL server clock, not from caller-supplied absolute timestamps. API requests should carry a positive lease TTL, and SQL should compute `lease_expires_at` from `NOW()` inside the statement.
-
-Index:
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_cache_locks_lease_expires_at
-    ON peegee_cache.cache_locks (lease_expires_at);
-```
-
-### 13.5 Lock fencing token sequence
-
-```sql
-CREATE SEQUENCE IF NOT EXISTS peegee_cache.lock_fencing_seq;
-```
-
----
-
-## 14. Data typing decisions
-
-### `TEXT` for namespace and keys
-Correct for Phase 1. Do not over-engineer with varchar lengths in the database first.
-
-### `BYTEA` for stored values
-Correct for a cache library:
-- binary-safe
-- easy Vert.x Buffer mapping
-- no JSON-only lock-in
-
-### `TIMESTAMPTZ`
-Use it everywhere for temporal fields.
-
-### `BIGINT version`
-Correct and simple for mutation versioning.
-
----
-
-## 15. Expiry semantics
-
-This is one of the most important design decisions.
-
-### Lazy expiry is authoritative
-A row is treated as absent if:
-
-```sql
-expires_at IS NOT NULL AND expires_at <= NOW()
-```
-
-### Background cleanup is eventual
-A sweeper deletes physically expired rows later.
-
-That means:
-- logical expiry is immediate on read
-- physical deletion is eventual
-
-This is the correct model.
-
-### Consequences
-Write operations such as set-if-absent, counter create, and lock acquire should usually treat expired rows as absent. In practice this means transactional “delete expired then act” flows are often required for correctness.
-
----
-
-## 16. Core SQL operations
-
-### 16.1 GET cache entry
+### 20.1 GET cache entry
 
 ```sql
 SELECT
@@ -1540,7 +1970,7 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 16.2 EXISTS
+### 20.2 EXISTS
 
 ```sql
 SELECT EXISTS (
@@ -1552,7 +1982,7 @@ SELECT EXISTS (
 );
 ```
 
-### 16.3 DELETE
+### 20.3 DELETE
 
 ```sql
 DELETE FROM peegee_cache.cache_entries
@@ -1560,7 +1990,7 @@ WHERE namespace = $1
   AND cache_key = $2;
 ```
 
-### 16.4 UPSERT set
+### 20.4 UPSERT set
 
 ```sql
 INSERT INTO peegee_cache.cache_entries (
@@ -1614,7 +2044,7 @@ Step 2: perform the upsert as above.
 
 Both steps must run inside the same database transaction. The repository layer should only execute step 1 when `returnPreviousValue = true` to avoid unnecessary row-locking overhead.
 
-### 16.5 SET if absent (`NX` semantics)
+### 20.5 SET if absent (`NX` semantics)
 
 Naive insert:
 
@@ -1654,7 +2084,7 @@ WHERE namespace = $1
 
 Then insert in the same transaction.
 
-### 16.6 SET only if present (`XX` semantics)
+### 20.6 SET only if present (`XX` semantics)
 
 ```sql
 UPDATE peegee_cache.cache_entries
@@ -1671,7 +2101,7 @@ WHERE namespace = $1
 RETURNING version;
 ```
 
-### 16.7 SET only if version matches
+### 20.7 SET only if version matches
 
 ```sql
 UPDATE peegee_cache.cache_entries
@@ -1689,7 +2119,7 @@ WHERE namespace = $1
 RETURNING version;
 ```
 
-### 16.8 TTL lookup
+### 20.8 TTL lookup
 
 ```sql
 SELECT
@@ -1709,7 +2139,7 @@ This query maps directly to `TtlResult`:
 - row returned with `expires_at IS NULL` -> `TtlResult.persistent()`
 - row returned with positive remaining time -> `TtlResult.expiring(ttlMillis)`
 
-### 16.9 EXPIRE existing key
+### 20.9 EXPIRE existing key
 
 ```sql
 UPDATE peegee_cache.cache_entries
@@ -1722,7 +2152,7 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 16.10 PERSIST existing key
+### 20.10 PERSIST existing key
 
 ```sql
 UPDATE peegee_cache.cache_entries
@@ -1735,7 +2165,7 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 16.11 TOUCH existing key
+### 20.11 TOUCH existing key
 
 `touch()` resets both the TTL to the provided duration and updates `last_accessed_at`. It does **not** change the stored value, value type, or version. It is a lightweight metadata-only update used for keep-alive and access-tracking scenarios.
 
@@ -1766,7 +2196,7 @@ Return mapping:
 
 If `$3` (ttl millis) is `NULL`, the existing TTL is preserved and only `last_accessed_at` is refreshed.
 
-### 16.12 SCAN by namespace/prefix
+### 20.12 SCAN by namespace/prefix
 
 Do **not** use offset pagination.
 
@@ -1796,9 +2226,9 @@ Cursor should be opaque to callers, even if internally it carries namespace/pref
 
 ---
 
-## 17. Counter SQL operations
+## 22. Counter SQL operations
 
-### 17.1 GET counter
+### 21.1 GET counter
 
 ```sql
 SELECT counter_value
@@ -1808,7 +2238,7 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 17.2 INCREMENT with create-if-missing
+### 21.2 INCREMENT with create-if-missing
 
 Counter TTL policy is **not** implicit. It is controlled by `CounterOptions.ttlMode`.
 
@@ -1857,7 +2287,7 @@ expires_at = NULL
 
 If `ttlMode = REPLACE`, the API should reject null `ttl` rather than silently converting that case into `REMOVE`.
 
-### 17.2a INCREMENT without create (`createIfMissing = false`)
+### 21.2a INCREMENT without create (`createIfMissing = false`)
 
 When `CounterOptions.createIfMissing` is `false`, use a pure `UPDATE` with no insert fallback. If the counter does not exist, zero rows are affected and the operation returns empty.
 
@@ -1875,7 +2305,7 @@ RETURNING counter_value, version;
 
 The caller should treat zero affected rows as "counter does not exist" and fail the future with an appropriate error or return `Optional.empty()` depending on the API contract.
 
-### 17.3 Delete expired counter then increment
+### 21.3 Delete expired counter then increment
 
 For correct semantics:
 
@@ -1891,7 +2321,7 @@ Then do the upsert in the same transaction.
 
 **Concurrency note:** When two transactions concurrently encounter an expired counter row, both may attempt the delete-then-upsert sequence. One transaction will delete the expired row and insert a fresh counter. The other will find the row already gone (delete affects zero rows) and also insert, hitting the `ON CONFLICT` clause and updating. The net effect is correct — both increments are applied — but the counter resets to the new initial value before the second increment rather than continuing from the old expired value. This is the intended semantic: an expired counter is logically absent, so concurrent post-expiry increments both start from the initial value.
 
-### 17.4 Set exact counter value
+### 21.4 Set exact counter value
 
 ```sql
 INSERT INTO peegee_cache.cache_counters (
@@ -1917,11 +2347,11 @@ RETURNING counter_value, version;
 
 ---
 
-## 18. Lock SQL operations
+## 23. Lock SQL operations
 
 Locks should be lease-based only. No permanent locks.
 
-### 18.1 Acquire lock if absent or expired
+### 22.1 Acquire lock if absent or expired
 
 Use a positive lease TTL parameter, not a caller-computed absolute timestamp. That keeps lock correctness tied to the database clock and avoids skew between application nodes.
 
@@ -1985,7 +2415,7 @@ ON CONFLICT (namespace, lock_key) DO NOTHING
 RETURNING namespace, lock_key, owner_token, fencing_token, lease_expires_at;
 ```
 
-### 18.2 Reentrant acquire by same owner (optional)
+### 22.2 Reentrant acquire by same owner (optional)
 
 ```sql
 UPDATE peegee_cache.cache_locks
@@ -2000,7 +2430,7 @@ WHERE namespace = $1
 RETURNING namespace, lock_key, owner_token, fencing_token, lease_expires_at;
 ```
 
-### 18.3 Renew lease only by owner
+### 22.3 Renew lease only by owner
 
 ```sql
 UPDATE peegee_cache.cache_locks
@@ -2015,7 +2445,7 @@ WHERE namespace = $1
 RETURNING lease_expires_at;
 ```
 
-### 18.4 Release only by owner
+### 22.4 Release only by owner
 
 ```sql
 DELETE FROM peegee_cache.cache_locks
@@ -2024,7 +2454,7 @@ WHERE namespace = $1
   AND owner_token = $3;
 ```
 
-### 18.5 Read current lock if active
+### 22.5 Read current lock if active
 
 ```sql
 SELECT
@@ -2044,7 +2474,7 @@ WHERE namespace = $1
 
 ---
 
-## 19. Expiry sweeper SQL
+## 24. Expiry sweeper SQL
 
 Background cleanup belongs in runtime/background processing.
 
@@ -2102,60 +2532,88 @@ WHERE cl.namespace = e.namespace
 
 ---
 
-## 20. Pub/sub integration
-
-Phase 1 does not require a table for pub/sub if PostgreSQL `LISTEN/NOTIFY` is used.
-
-Suggested channel naming:
-
-```text
-peegee_cache__{channel}
-```
-
-Publish via:
-
-```sql
-SELECT pg_notify($1, $2);
-```
-
-One important architectural advantage over a separate Redis publish step is that `pg_notify` can be part of the same transaction as the underlying row changes. If the surrounding transaction rolls back, the notification should not be treated as committed state.
-
-For domain flows that need “write plus notify” atomicity, prefer one of these patterns:
-
-- execute `pg_notify` in the same transaction as the data mutation
-- or use a trigger/outbox-style pattern so notification emission is coupled to committed database state
-
-Important limitations:
-- `NOTIFY` payload is text and size-limited
-- binary payload passthrough should **not** be part of the Phase 1 public API
-- for Phase 1, payloads should be UTF-8 text or JSON strings with optional `contentType`
-
-Phase 1 public contract:
-
-- `PublishRequest.payload` is `String`
-- `PublishRequest.contentType` is advisory metadata such as `text/plain` or `application/json`
-- subscribers receive `PubSubMessage` with string payloads
-- pattern subscriptions are explicitly a V2 feature, not part of the Phase 1 API
-
-Operational guidance:
-
-- use a dedicated PostgreSQL connection for the `LISTEN` loop
-- treat pub/sub as best-effort fan-out, not durable delivery
-- drop or reject oversized payloads early instead of silently truncating them
-- if durable notifications become a requirement, add a separate events table/module rather than stretching `NOTIFY`
-
-Pub/sub in Phase 1 is for:
-- cache invalidation
-- local worker wakeups
-- lightweight internal notifications
-
-It is **not** a durable messaging system and should not be sold as one.
+# Part V — Implementation Guidance
 
 ---
 
-## 21. Migration file structure
+## 25. Alignment with the existing PeeGeeQ codebase
 
-Recommended migration files:
+The sibling `peegeeq` project establishes a few conventions that `peegee-cache` should follow from day one:
+
+- keep the `dev.mars` group and `dev.mars.peegeeq.*` package family
+- use `io.vertx.core.Future<T>` for reactive public APIs
+- keep runtime lifecycle explicit rather than implicit
+- expose a manager/factory bootstrap story similar to `PeeGeeQManager` and `PgClientFactory`
+- preserve module separation between API, PostgreSQL implementation, runtime, observability, and test support
+
+That means the cache design should optimize first for clean integration with the current PeeGeeQ baseline on Java 21 and Vert.x 5.0.x. A later standalone release can raise the baseline in a coordinated version bump, but the initial API should not assume a newer floor than the rest of the family already uses.
+
+### Proposed package root
+
+```java
+package dev.mars.peegeeq.cache;
+```
+
+---
+
+## 26. Implementation guardrails
+
+These are non-negotiable implementation rules for Phase 1:
+
+- use a pure Vert.x 5.x public async contract built on `io.vertx.core.Future<T>`
+- keep runtime composition and lifecycle management Vert.x-native
+- follow strict TDD for behavior that can be tested
+- do not use mocking for database-facing behavior
+- use Testcontainers for PostgreSQL-backed integration work
+- keep construction and runtime behavior configuration-driven
+- do not hide important behavior in hardcoded defaults or ad hoc environment lookups
+
+Practical meaning:
+
+- no `CompletableFuture`, Reactor, Mutiny-as-primary-surface, or Spring-first abstractions in the Phase 1 core API
+- no H2 or in-memory stand-ins for PostgreSQL semantics
+- no progressing to the next step while the current changed behavior is still failing tests
+
+---
+
+## 27. First-cut PostgreSQL implementation classes
+
+Expected classes in `peegee-cache-pg`:
+
+```text
+PgPeeGeeCache
+PgPeeGeeCacheManager
+PgCacheService
+PgCounterService
+PgLockService
+PgScanService
+PgPubSubService
+
+PgCacheRepository
+PgCounterRepository
+PgLockRepository
+PgScanRepository
+PgNotificationListener
+
+SqlStatements
+RowMappers
+PgTxSupport
+```
+
+Expected runtime classes:
+
+```text
+ExpirySweeper
+PubSubListenerRuntime
+PeeGeeCacheBootstrap
+PeeGeeCacheLifecycle
+```
+
+---
+
+## 28. Bootstrap file structure
+
+Recommended bootstrap files:
 
 ```text
 V001__create_schema.sql
@@ -2166,171 +2624,58 @@ V005__create_lock_fencing_sequence.sql
 V006__create_indexes.sql
 ```
 
-That is cleaner than a single giant migration.
+That is cleaner than a single giant bootstrap script.
 
 ---
 
-## 22. Non-functional requirements and concerns
+## 29. Recommended next steps
 
-### Binary-safe values
-Do not build a cache that only stores strings and JSON unless you want to regret it later.
+The design work should proceed in this order:
 
-### Typed values
-Support at least:
-- bytes
-- string
-- json
-- long / numeric
+1. **Schema first** — done in this document
+2. **API skeleton aligned with PeeGeeQ conventions**
+    - `TtlResult`, `CounterTtlMode`, `LockState`, `PubSubMessage`
+    - managed bootstrap via `PeeGeeCacheManager`
+    - explicit runtime ownership of listener and sweeper services
+3. **Repository layer and SQL statement catalogue**
+   - `PgCacheRepository`
+   - `PgCounterRepository`
+   - `PgLockRepository`
+   - SQL statement catalogue
+4. **Actual Java module skeleton**
+5. **Runtime bootstrap, dedicated pub/sub listener, and expiry sweeper**
+6. **Integration tests with Testcontainers**
+7. **Benchmark and profiling work**
 
-Do **not** expose Java serialization as a first-class public API.
+### Immediate next move
 
-### Metrics
-Need instrumentation for:
-- gets
-- sets
-- hits
-- misses
-- expired-on-read
-- sweeper deletions
-- lock acquire success/failure
-- pub/sub publish failures
-- pub/sub listener reconnects
-- queue claim latency later
-- pub/sub send/receive counts
-
-### Concurrency tests
-Need brutal integration tests for:
-- two clients incrementing same key
-- two workers racing to claim the same logical resource
-- two owners racing for same lock
-- expiry while reading
-- renew vs release races
-- notification ordering assumptions
-
-### PostgreSQL hygiene
-This is where PostgreSQL-backed caches can go wrong if you are careless:
-- update churn
-- delete churn
-- index bloat
-- autovacuum tuning
-- table partitioning later if needed
-- logged vs unlogged table decisions
-
-Operationally, this design should assume:
-
-- aggressive monitoring of bloat on high-churn cache tables
-- explicit autovacuum tuning for cache and queue-like tables
-- connection pooling as a baseline requirement, not an afterthought
-- realistic performance benchmarking on combined application flows, not only isolated GET/SET microbenchmarks
-
-**Autovacuum tuning note for future operator guide:** Cache tables with frequent upserts, conditional writes, and sweeper deletes generate dead tuples at a much higher rate than typical application tables. The default `autovacuum_vacuum_scale_factor` of 0.2 (20% of table size before triggering) is too conservative for high-churn cache workloads. Operators should consider per-table overrides such as:
-
-```sql
-ALTER TABLE peegee_cache.cache_entries SET (
-    autovacuum_vacuum_scale_factor = 0.05,
-    autovacuum_analyze_scale_factor = 0.05,
-    autovacuum_vacuum_cost_delay = 2
-);
-```
-
-Similar settings apply to `cache_counters` under heavy increment load. `cache_locks` typically has lower churn but should still be monitored. This guidance belongs in a deployment/tuning document rather than in migration SQL, since optimal values depend on workload profile and hardware.
-
-The important benchmark is often not “single cache read vs Redis” but “write domain row + invalidate cache + notify subscribers” inside one transactional boundary.
-
-### Read-path write amplification
-Updating `hit_count` and `last_accessed_at` on every read may be operationally stupid for hot keys.
-
-Better options:
-- sampled updates
-- optional update mode via config
-- async/statistical tracking later
-
-### Dedicated listener connections
-PostgreSQL `LISTEN/NOTIFY` should not share the same connection flow as normal query traffic.
-
-Use a dedicated listener connection or pool slot for pub/sub runtime so that:
-
-- listener backpressure does not block foreground cache operations
-- reconnect logic stays isolated
-- lifecycle ownership is explicit in the runtime manager
+Define the API module first, then the repository layer and SQL statement catalogue for `peegee-cache-pg`, so the database semantics and runtime lifecycle are reflected directly in the Vert.x code boundaries.
 
 ---
 
-## 23. Explicit design calls
+## 30. Documentation strategy going forward
 
-These are the deliberate design choices made so far.
+Do **not** rely on chat history as the system of record.
 
-### Use separate services, not one giant god interface
-Correct:
-- `CacheService`
-- `CounterService`
-- `LockService`
-- `ScanService`
-- `PubSubService`
+The right process is:
+- create the markdown document early,
+- treat it as a living design document,
+- update it after each major design checkpoint,
+- preserve rationale in appendices or decision sections rather than flattening everything into vague summaries.
 
-Wrong:
-- `RedisLikeService` with a hundred unrelated methods
+### Practical rule
 
-### Use first-class namespace + key
-Correct:
-- `CacheKey(namespace, key)`
+Once a section becomes stable enough that reconstructing it from chat would be annoying, it belongs in the markdown document.
 
-Wrong:
-- raw string everywhere
-
-### Use typed requests for writes
-Correct:
-- `CacheSetRequest`
-
-Wrong:
-- ten overloaded `set(...)` methods that rot over time
-
-### Use optimistic versioning early
-Correct:
-- every mutable entry has a `version`
-
-Wrong:
-- add versioning later after clients depend on weaker semantics
-
-### Keep pub/sub deliberately narrow
-Correct:
-- invalidation and light notifications
-
-Wrong:
-- pretending PostgreSQL `NOTIFY` is Kafka
-
-### Be honest about where Redis still wins
-Redis still has a better fit when the workload requires:
-
-- extreme throughput or very low-latency hot-path reads
-- large-scale dedicated cache-tier behavior
-- Redis-native structures such as streams, mature sorted-set-heavy workflows, HyperLogLog, or similar specialized patterns
-- architectures that explicitly require an external cache tier independent from the primary database
-
-`peegee-cache` should be sold as a PostgreSQL-native coordination and cache library, not as a universal reason to remove Redis from every system.
-
-### Do not try to emulate Redis transactions exactly
-Use SQL transactions instead.
-
-### Do not treat lists as a priority
-If queue semantics are needed, build a proper queue module later.
-
-### Do not try to build protocol compatibility first
-Build the Java library first. Network/server adapters can come later.
-
-### Align with PeeGeeQ runtime patterns
-Correct:
-- explicit bootstrap options
-- managed start/stop lifecycle
-- clear ownership of `Vertx` and `Pool`
-
-Wrong:
-- hidden singleton startup
-- implicit background threads with no lifecycle owner
+That threshold was already reached.
 
 ---
 
-## 24. Example usage
+# Part VI — Examples
+
+---
+
+## 31. Example usage
 
 ```java
 PeeGeeCacheManager manager = await(PeeGeeCaches.createManager(vertx, pool, options));
@@ -2374,197 +2719,7 @@ Subscription subscription = await(cache.pubSub().subscribe("cache-invalidation",
 
 ---
 
-## 25. Native SQL interface
-
-`peegee-cache` should expose a **native PostgreSQL interface out of the box**, but the support boundary must be explicit.
-
-### What “out of the box” should mean
-
-Supported immediately:
-
-- direct SQL reads against documented tables and views
-- `psql` inspection and operational queries
-- reporting, debugging, and admin scripts that read cache state directly
-- SQL functions/procedures for correctness-sensitive writes
-
-Not automatically supported as a stable contract:
-
-- arbitrary external writes directly against base tables for locks, counters, or TTL-aware key mutation
-- expecting every SQL caller to reimplement `NX`, expiry-aware upsert, lock lease rules, or notification semantics correctly
-
-The rule should be simple:
-
-- **reads may use tables/views directly**
-- **writes should use documented SQL functions for semantics that matter under concurrency**
-
-### Recommended support model
-
-Use a mixed model:
-
-1. **Table/view read interface**
-    - stable read access for ops and diagnostics
-    - examples: inspect a key, list expiring entries, inspect active locks, review counters
-
-2. **Function-based write interface**
-    - stable SQL entry points for mutation semantics
-    - examples: set key, get key, expire key, increment counter, acquire lock, renew lock, release lock, publish notification
-
-3. **Implementation tables remain internal-by-default for writes**
-    - external callers should not depend on internal multi-step write flows unless the doc explicitly marks them as supported
-
-### Why this is necessary
-
-Direct writes are fine only for trivial cases. They become unsafe once the semantics involve:
-
-- treating expired rows as absent
-- `ON CONFLICT` plus version increments
-- owner-matched lock renewal/release
-- lease expiry computed from the database clock
-- atomic “write plus notify” behavior
-
-Those are exactly the cases where a stable SQL function is better than telling every caller to copy a multi-statement transaction from the docs.
-
-### Recommended SQL API shape
-
-Illustrative function names:
-
-```sql
-peegee_cache.get_entry(namespace text, cache_key text)
-peegee_cache.set_entry(namespace text, cache_key text, value_type text, value_bytes bytea, numeric_value bigint, ttl_millis bigint, mode text, expected_version bigint)
-peegee_cache.delete_entry(namespace text, cache_key text)
-peegee_cache.expire_entry(namespace text, cache_key text, ttl_millis bigint)
-peegee_cache.persist_entry(namespace text, cache_key text)
-
-peegee_cache.increment_counter(namespace text, counter_key text, delta bigint, ttl_millis bigint, ttl_mode text)
-peegee_cache.set_counter(namespace text, counter_key text, counter_value bigint, ttl_millis bigint)
-
-peegee_cache.acquire_lock(namespace text, lock_key text, owner_token text, lease_ttl_millis bigint, issue_fencing_token boolean)
-peegee_cache.renew_lock(namespace text, lock_key text, owner_token text, lease_ttl_millis bigint)
-peegee_cache.release_lock(namespace text, lock_key text, owner_token text)
-
-peegee_cache.publish(channel text, payload text, content_type text)
-```
-
-These do not need to be implemented before the Java API exists, but the design should reserve space for them now so non-Java callers are not treated as an accidental afterthought.
-
-### Recommended first-cut support policy
-
-For Phase 1:
-
-- document tables for read access
-- document views for friendly inspection where useful
-- expose SQL functions for lock and counter mutation first
-- expose SQL functions for cache writes if non-Java callers are a real requirement in the first release
-
-For later phases:
-
-- decide whether the SQL function interface is a first-class product surface with compatibility guarantees
-- add migration/versioning policy for SQL functions if external clients depend on them
-
-### Operational examples that should work from `psql`
-
-Examples of intentionally supported direct reads:
-
-```sql
-SELECT *
-FROM peegee_cache.cache_entries
-WHERE namespace = 'session'
-  AND cache_key = 'abc123';
-
-SELECT *
-FROM peegee_cache.cache_locks
-WHERE namespace = 'jobs'
-  AND lease_expires_at > NOW()
-ORDER BY lease_expires_at;
-```
-
-Examples of writes that should prefer functions over raw table DML:
-
-```sql
-SELECT * FROM peegee_cache.acquire_lock('jobs', 'worker-election', 'node-a', 15000, true);
-
-SELECT * FROM peegee_cache.increment_counter('rate-limit', 'client-1', 1, 60000, 'PRESERVE_EXISTING');
-```
-
-That gives operators and other languages a native SQL path without weakening the correctness guarantees that justify this project in the first place.
-
----
-
-## 26. Recommended next steps
-
-The design work should proceed in this order:
-
-1. **Schema first** — done in this document
-2. **API skeleton aligned with PeeGeeQ conventions**
-    - `TtlResult`, `CounterTtlMode`, `LockState`, `PubSubMessage`
-    - managed bootstrap via `PeeGeeCacheManager`
-    - explicit runtime ownership of listener and sweeper services
-3. **Repository layer and SQL statement catalogue**
-   - `PgCacheRepository`
-   - `PgCounterRepository`
-   - `PgLockRepository`
-   - SQL statement catalogue
-4. **Actual Java module skeleton**
-5. **Runtime bootstrap, dedicated pub/sub listener, and expiry sweeper**
-6. **Integration tests with Testcontainers**
-7. **Benchmark and profiling work**
-
-### Immediate next move
-
-Define the API module first, then the repository layer and SQL statement catalogue for `peegee-cache-pg`, so the database semantics and runtime lifecycle are reflected directly in the Vert.x code boundaries.
-
----
-
-## 27. Documentation strategy going forward
-
-Do **not** rely on chat history as the system of record.
-
-The right process is:
-- create the markdown document early,
-- treat it as a living design document,
-- update it after each major design checkpoint,
-- preserve rationale in appendices or decision sections rather than flattening everything into vague summaries.
-
-### Practical rule
-
-Once a section becomes stable enough that reconstructing it from chat would be annoying, it belongs in the markdown document.
-
-That threshold was already reached.
-
----
-
-## 28. Final summary
-
-`peegee-cache` should be built as a **library-first, PostgreSQL-backed, Vert.x-native cache and coordination library**.
-
-### Phase 1 includes
-- key/value cache
-- TTL / expiry
-- conditional writes
-- counters
-- namespaces
-- scanning
-- distributed locks
-- light pub/sub
-- metrics hooks
-
-### Phase 1 excludes
-- full Redis compatibility
-- cluster semantics
-- streams
-- scripting
-- broad list/set emulation
-- queue subsystem as Redis-list emulation
-
-### Architectural stance
-
-This is not “Redis on PostgreSQL.”
-
-It is a **transactional cache + lock + counter + lightweight coordination service backed by PostgreSQL**, designed for systems where PostgreSQL is already strategic and operational simplicity matters more than pretending to be Redis.
-
----
-
-## 29. Starter integration examples
+## 32. Starter integration examples
 
 To keep adoption friction low, the repository should carry runnable examples that match the current runtime/bootstrap APIs.
 
@@ -2591,3 +2746,38 @@ Each example is runnable and uses the same runtime bootstrap path (`PeeGeeCaches
      - purpose: wiring into a service lifecycle (Micronaut/Quarkus/Spring Boot style lifecycle wrapper)
 
 These examples should remain small and executable, and should track the same API contracts validated by integration tests.
+
+---
+
+# Summary
+
+---
+
+## 33. Final summary
+
+`peegee-cache` should be built as a **library-first, PostgreSQL-backed, Vert.x-native cache and coordination library**.
+
+### Phase 1 includes
+- key/value cache
+- TTL / expiry
+- conditional writes
+- counters
+- namespaces
+- scanning
+- distributed locks
+- light pub/sub
+- metrics hooks
+
+### Phase 1 excludes
+- full Redis compatibility
+- cluster semantics
+- streams
+- scripting
+- broad list/set emulation
+- queue subsystem as Redis-list emulation
+
+### Architectural stance
+
+This is not "Redis on PostgreSQL."
+
+It is a **transactional cache + lock + counter + lightweight coordination service backed by PostgreSQL**, designed for systems where PostgreSQL is already strategic and operational simplicity matters more than pretending to be Redis.
