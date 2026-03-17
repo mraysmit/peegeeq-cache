@@ -48,9 +48,10 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         this.options = normalizeOptions(options);
 
         // Wire the service graph
-        PgCacheRepository cacheRepo = new PgCacheRepository(pool);
-        PgCounterRepository counterRepo = new PgCounterRepository(pool);
-        PgLockRepository lockRepo = new PgLockRepository(pool);
+        String schemaName = this.options.storeConfig().schemaName();
+        PgCacheRepository cacheRepo = new PgCacheRepository(pool, schemaName);
+        PgCounterRepository counterRepo = new PgCounterRepository(pool, schemaName);
+        PgLockRepository lockRepo = new PgLockRepository(pool, schemaName);
 
         PgCacheService cacheService = new PgCacheService(cacheRepo);
         PgCounterService counterService = new PgCounterService(counterRepo);

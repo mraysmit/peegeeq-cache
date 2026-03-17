@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -21,15 +22,17 @@ public final class PgCounterRepository {
     private static final Logger log = LoggerFactory.getLogger(PgCounterRepository.class);
 
     private final Pool pool;
+    private final CounterSql sql;
 
-    public PgCounterRepository(Pool pool) {
-        this.pool = pool;
+    public PgCounterRepository(Pool pool, String schemaName) {
+        this.pool = Objects.requireNonNull(pool, "pool");
+        this.sql = CounterSql.forSchema(schemaName);
     }
 
     /** Section 17.1 — returns the live counter value, or empty if missing/expired. */
     public Future<Optional<Long>> get(CacheKey key) {
         log.debug("get counter key={}", key);
-        return pool.preparedQuery(CounterSql.GET)
+        return pool.preparedQuery(sql.GET)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
                     var it = rows.iterator();
@@ -66,7 +69,7 @@ public final class PgCounterRepository {
     public Future<Long> setValue(CacheKey key, long value, CounterOptions opts) {
         log.debug("setValue counter key={} value={}", key, value);
         Tuple params = Tuple.of(key.namespace(), key.key(), value, ttlMillis(opts.ttl()));
-        return pool.preparedQuery(CounterSql.SET_VALUE)
+        return pool.preparedQuery(sql.SET_VALUE)
                 .execute(params)
                 .map(rows -> rows.iterator().next().getLong("counter_value"));
     }
@@ -74,7 +77,7 @@ public final class PgCounterRepository {
     /** Unconditional delete. Returns true if a row was removed. */
     public Future<Boolean> delete(CacheKey key) {
         log.debug("delete counter key={}", key);
-        return pool.preparedQuery(CounterSql.DELETE)
+        return pool.preparedQuery(sql.DELETE)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
                     boolean deleted = rows.rowCount() > 0;
@@ -86,7 +89,7 @@ public final class PgCounterRepository {
     /** Returns TTL state for a live counter. */
     public Future<TtlResult> ttl(CacheKey key) {
         log.debug("ttl counter key={}", key);
-        return pool.preparedQuery(CounterSql.TTL)
+        return pool.preparedQuery(sql.TTL)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
                     var it = rows.iterator();
@@ -108,7 +111,7 @@ public final class PgCounterRepository {
         }
         long ttlMillis = ttl.toMillis();
         log.debug("expire counter key={} ttlMillis={}", key, ttlMillis);
-        return pool.preparedQuery(CounterSql.EXPIRE)
+        return pool.preparedQuery(sql.EXPIRE)
                 .execute(Tuple.of(key.namespace(), key.key(), ttlMillis))
                 .map(rows -> rows.rowCount() > 0);
     }
@@ -116,7 +119,7 @@ public final class PgCounterRepository {
     /** Removes TTL from a live counter. */
     public Future<Boolean> persist(CacheKey key) {
         log.debug("persist counter key={}", key);
-        return pool.preparedQuery(CounterSql.PERSIST)
+        return pool.preparedQuery(sql.PERSIST)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> rows.rowCount() > 0);
     }
@@ -124,7 +127,7 @@ public final class PgCounterRepository {
     // ---- Private helpers ----
 
     private Future<Long> incrementNoCreate(CacheKey key, long delta) {
-        return pool.preparedQuery(CounterSql.INCREMENT_NO_CREATE)
+        return pool.preparedQuery(sql.INCREMENT_NO_CREATE)
                 .execute(Tuple.of(key.namespace(), key.key(), delta))
                 .map(rows -> {
                     if (rows.rowCount() == 0) {
@@ -136,16 +139,16 @@ public final class PgCounterRepository {
 
     private Future<Long> incrementWithCreate(CacheKey key, long delta, CounterOptions opts) {
         String sql = switch (opts.ttlMode()) {
-            case PRESERVE_EXISTING -> CounterSql.INCREMENT_PRESERVE;
-            case REPLACE -> CounterSql.INCREMENT_REPLACE;
-            case REMOVE -> CounterSql.INCREMENT_REMOVE;
+            case PRESERVE_EXISTING -> this.sql.INCREMENT_PRESERVE;
+            case REPLACE -> this.sql.INCREMENT_REPLACE;
+            case REMOVE -> this.sql.INCREMENT_REMOVE;
         };
 
         Tuple keyTuple = Tuple.of(key.namespace(), key.key());
         Tuple params = Tuple.of(key.namespace(), key.key(), delta, ttlMillis(opts.ttl()));
 
         return pool.withTransaction(conn ->
-                conn.preparedQuery(CounterSql.DELETE_EXPIRED)
+                conn.preparedQuery(this.sql.DELETE_EXPIRED)
                         .execute(keyTuple)
                         .compose(ignored ->
                                 conn.preparedQuery(sql)

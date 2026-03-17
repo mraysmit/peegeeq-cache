@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(VertxExtension.class)
 class PgLockServiceTest {
 
-    private static final PgTestSupport pg = new PgTestSupport("pglock-service-test");
+    private static final PgTestSupport pg = new PgTestSupport("pglock-service-test", "peegee_cache");
     private static Pool pool;
     private static PgLockService service;
 
@@ -33,7 +33,7 @@ class PgLockServiceTest {
     static void startContainer(Vertx vertx) throws Exception {
         pg.start(vertx);
         pool = pg.createPool(vertx);
-        service = new PgLockService(new PgLockRepository(pool));
+        service = new PgLockService(new PgLockRepository(pool, "peegee_cache"));
     }
 
     @AfterAll

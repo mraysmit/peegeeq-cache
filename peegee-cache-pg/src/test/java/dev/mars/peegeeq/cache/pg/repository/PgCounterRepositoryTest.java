@@ -4,6 +4,7 @@ import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CounterOptions;
 import dev.mars.peegeeq.cache.api.model.CounterTtlMode;
 import dev.mars.peegeeq.cache.api.model.TtlState;
+import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
 import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
+
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -24,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PgCounterRepositoryTest {
 
-    private static final PgTestSupport pg = new PgTestSupport("pgcache-counter-test");
+    private static final PgTestSupport pg = new PgTestSupport("pgcache-counter-test", "peegee_cache");
     private static Pool pool;
     private static PgCounterRepository repo;
 
@@ -32,7 +34,7 @@ class PgCounterRepositoryTest {
     static void startContainer(Vertx vertx) throws Exception {
         pg.start(vertx);
         pool = pg.createPool(vertx);
-        repo = new PgCounterRepository(pool);
+        repo = new PgCounterRepository(pool, "peegee_cache");
     }
 
     @AfterAll
@@ -304,5 +306,28 @@ class PgCounterRepositoryTest {
             assertFalse(deleted);
             ctx.completeNow();
         })));
+    }
+
+    @Test
+    @Order(50)
+    void repositoryUsesConfiguredSchema(VertxTestContext ctx) {
+        String schema = "custom_counter_repo";
+        PgCounterRepository customRepo = new PgCounterRepository(pool, schema);
+        CacheKey key = new CacheKey("ns", "custom-counter-key");
+
+        applySchema(schema)
+                .compose(v -> customRepo.increment(key, 7, CounterOptions.defaults()))
+                .compose(v -> customRepo.get(key))
+                .onComplete(ctx.succeeding(result -> ctx.verify(() -> {
+                    assertTrue(result.isPresent());
+                    assertEquals(7L, result.get());
+                    ctx.completeNow();
+                })));
+    }
+
+    private static io.vertx.core.Future<Void> applySchema(String schemaName) {
+        String sql = "DROP SCHEMA IF EXISTS " + schemaName + " CASCADE;\n"
+                + BootstrapSqlRenderer.loadForSchema(schemaName);
+        return pool.query(sql).execute().mapEmpty();
     }
 }

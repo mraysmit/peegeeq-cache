@@ -1,4 +1,4 @@
-package dev.mars.peegeeq.cache.pg.migration;
+package dev.mars.peegeeq.cache.pg.bootstrap;
 
 import dev.mars.peegeeq.cache.pg.test.PostgreSQLTestConstants;
 import dev.mars.peegeeq.cache.pg.test.PgTestPostgresContainer;
@@ -10,8 +10,6 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -24,21 +22,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Applies the V001 migration SQL file against a real PostgreSQL instance
+ * Applies the V001 bootstrap SQL against a real PostgreSQL instance
  * and verifies the resulting schema objects.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class MigrationSmokeTest {
+class BootstrapSmokeTest {
 
     private static PgTestPostgresContainer postgres;
 
     @BeforeAll
-    static void startContainerAndApplyMigrations() throws Exception {
-        postgres = SharedPostgresContainerManager.acquire("migration-smoke-test");
+    static void startContainerAndApplyBootstrapSql() throws Exception {
+        postgres = SharedPostgresContainerManager.acquire("bootstrap-smoke-test");
 
-        // Apply migration
         try (Connection conn = connect()) {
-            String sql = readMigration("V001__create_peegee_cache_schema.sql");
+            String sql = BootstrapSqlRenderer.loadBootstrapSql();
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute(sql);
                 stmt.execute("TRUNCATE TABLE peegee_cache.cache_entries, peegee_cache.cache_counters, peegee_cache.cache_locks");
@@ -50,23 +47,13 @@ class MigrationSmokeTest {
     @AfterAll
     static void stopContainer() throws Exception {
         if (postgres != null) {
-            SharedPostgresContainerManager.release("migration-smoke-test");
+            SharedPostgresContainerManager.release("bootstrap-smoke-test");
             postgres = null;
         }
     }
 
     private static String jdbcUrl() {
         return postgres.getJdbcUrl();
-    }
-
-    private static String readMigration(String fileName) throws IOException {
-        String path = "/db/migration/" + fileName;
-        try (var is = MigrationSmokeTest.class.getResourceAsStream(path)) {
-            if (is == null) {
-                throw new IOException("Migration file not found on classpath: " + path);
-            }
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
-        }
     }
 
     // --- Schema ---

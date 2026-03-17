@@ -87,7 +87,7 @@ For behavior that depends on **Vert.x runtime semantics**:
 
 | Test class | Tests | What it verifies |
 |---|---|---|
-| `MigrationSmokeTest` | 27 | Schema creation, table columns/types, primary keys, check constraints (value type, payload exclusivity, lease sanity), sequence monotonicity, all 5 indexes, constraint enforcement (rejects invalid data, accepts valid data) |
+| `BootstrapSmokeTest` | 27 | Schema creation, table columns/types, primary keys, check constraints (value type, payload exclusivity, lease sanity), sequence monotonicity, all 5 indexes, constraint enforcement (rejects invalid data, accepts valid data) |
 
 ## 4. Phase 3 test plan — Repository and SQL statement catalogue
 

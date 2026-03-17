@@ -5,6 +5,7 @@ import dev.mars.peegeeq.cache.api.model.LockKey;
 import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
 import dev.mars.peegeeq.cache.api.model.LockRenewRequest;
 import dev.mars.peegeeq.cache.api.model.LockState;
+import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
 import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
+
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PgLockRepositoryTest {
 
-    private static final PgTestSupport pg = new PgTestSupport("pgcache-lock-test");
+    private static final PgTestSupport pg = new PgTestSupport("pgcache-lock-test", "peegee_cache");
     private static Pool pool;
     private static PgLockRepository repo;
 
@@ -33,7 +35,7 @@ class PgLockRepositoryTest {
     static void startContainer(Vertx vertx) throws Exception {
         pg.start(vertx);
         pool = pg.createPool(vertx);
-        repo = new PgLockRepository(pool);
+        repo = new PgLockRepository(pool, "peegee_cache");
     }
 
     @AfterAll
@@ -272,5 +274,33 @@ class PgLockRepositoryTest {
             assertTrue(state.isEmpty());
             ctx.completeNow();
         })));
+    }
+
+    @Test
+    @Order(50)
+    void repositoryUsesConfiguredSchema(VertxTestContext ctx) {
+        String schema = "custom_lock_repo";
+        PgLockRepository customRepo = new PgLockRepository(pool, schema);
+        LockKey key = new LockKey("ns", "custom-lock-key");
+        LockAcquireRequest req = new LockAcquireRequest(
+                key, "owner-custom", Duration.ofMinutes(5), false, true);
+
+        applySchema(schema)
+                .compose(v -> customRepo.acquire(req))
+                .compose(acquired -> {
+                    assertTrue(acquired.acquired());
+                    return customRepo.currentLock(key);
+                })
+                .onComplete(ctx.succeeding(state -> ctx.verify(() -> {
+                    assertTrue(state.isPresent());
+                    assertEquals("owner-custom", state.get().ownerToken());
+                    ctx.completeNow();
+                })));
+    }
+
+    private static io.vertx.core.Future<Void> applySchema(String schemaName) {
+        String sql = "DROP SCHEMA IF EXISTS " + schemaName + " CASCADE;\n"
+                + BootstrapSqlRenderer.loadForSchema(schemaName);
+        return pool.query(sql).execute().mapEmpty();
     }
 }

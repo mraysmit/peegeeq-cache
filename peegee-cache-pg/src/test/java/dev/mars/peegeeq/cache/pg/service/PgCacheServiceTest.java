@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(VertxExtension.class)
 class PgCacheServiceTest {
 
-    private static final PgTestSupport pg = new PgTestSupport("pgcache-service-test");
+    private static final PgTestSupport pg = new PgTestSupport("pgcache-service-test", "peegee_cache");
     private static Pool pool;
     private static PgCacheService service;
 
@@ -37,7 +37,7 @@ class PgCacheServiceTest {
     static void startContainer(Vertx vertx) throws Exception {
         pg.start(vertx);
         pool = pg.createPool(vertx);
-        service = new PgCacheService(new PgCacheRepository(pool));
+        service = new PgCacheService(new PgCacheRepository(pool, "peegee_cache"));
     }
 
     @AfterAll

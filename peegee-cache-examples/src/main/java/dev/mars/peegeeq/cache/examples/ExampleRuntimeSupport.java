@@ -1,5 +1,6 @@
 package dev.mars.peegeeq.cache.examples;
 
+import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
 import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
 import dev.mars.peegeeq.cache.runtime.bootstrap.PeeGeeCacheBootstrapOptions;
 import dev.mars.peegeeq.cache.runtime.bootstrap.PeeGeeCaches;
@@ -11,8 +12,6 @@ import io.vertx.sqlclient.PoolOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -75,21 +74,25 @@ final class ExampleRuntimeSupport {
         return Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(8));
     }
 
-    static void applyMigrations(Vertx vertx, ExamplePostgresContainer container) throws Exception {
-        log.info("Applying database migrations");
-        String sql = readClasspathResource("/db/migration/V001__create_peegee_cache_schema.sql");
+    static void applyBootstrapSql(Vertx vertx, ExamplePostgresContainer container) throws Exception {
+        applyBootstrapSql(vertx, container, BootstrapSqlRenderer.DEFAULT_SCHEMA_NAME);
+    }
+
+    static void applyBootstrapSql(Vertx vertx, ExamplePostgresContainer container, String schemaName) throws Exception {
+        log.info("Applying bootstrap SQL");
+        String sql = BootstrapSqlRenderer.loadForSchema(schemaName);
         PgConnectOptions opts = new PgConnectOptions()
                 .setHost(container.getHost())
                 .setPort(container.getFirstMappedPort())
                 .setDatabase(DATABASE_NAME)
                 .setUser(USERNAME)
                 .setPassword(PASSWORD);
-        Pool migrationPool = Pool.pool(vertx, opts, new PoolOptions().setMaxSize(1));
+        Pool bootstrapPool = Pool.pool(vertx, opts, new PoolOptions().setMaxSize(1));
         try {
-            await(migrationPool.query(sql).execute().mapEmpty());
-            log.info("Migrations applied successfully");
+            await(bootstrapPool.query(sql).execute().mapEmpty());
+            log.info("Bootstrap SQL applied successfully");
         } finally {
-            await(migrationPool.close());
+            await(bootstrapPool.close());
         }
     }
 
@@ -111,7 +114,7 @@ final class ExampleRuntimeSupport {
         exampleLog.info("Starting {}", exampleName);
         try {
             container = startContainer();
-            applyMigrations(vertx, container);
+            applyBootstrapSql(vertx, container);
             pool = createPool(vertx, container);
             exampleLog.info("Created PostgreSQL pool for example runtime");
             manager = startDefaultManager(vertx, pool);
@@ -174,15 +177,6 @@ final class ExampleRuntimeSupport {
         }
 
         return resultRef.get();
-    }
-
-    private static String readClasspathResource(String path) throws IOException {
-        try (var is = ExampleRuntimeSupport.class.getResourceAsStream(path)) {
-            if (is == null) {
-                throw new IOException("Resource not found on classpath: " + path);
-            }
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
-        }
     }
 
     private static void closeQuietly(AutoCloseable closeable) {

@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -30,15 +31,17 @@ public final class PgCacheRepository {
     private static final Logger log = LoggerFactory.getLogger(PgCacheRepository.class);
 
     private final Pool pool;
+    private final CacheSql sql;
 
-    public PgCacheRepository(Pool pool) {
-        this.pool = pool;
+    public PgCacheRepository(Pool pool, String schemaName) {
+        this.pool = Objects.requireNonNull(pool, "pool");
+        this.sql = CacheSql.forSchema(schemaName);
     }
 
     /** Section 16.1 — returns a live entry, or empty if missing/expired. */
     public Future<Optional<CacheEntry>> get(CacheKey key) {
         log.debug("get key={}", key);
-        return pool.preparedQuery(CacheSql.GET)
+        return pool.preparedQuery(sql.GET)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
                     var it = rows.iterator();
@@ -54,7 +57,7 @@ public final class PgCacheRepository {
     /** Section 16.3 — unconditional delete. Returns true if a row was removed. */
     public Future<Boolean> delete(CacheKey key) {
         log.debug("delete key={}", key);
-        return pool.preparedQuery(CacheSql.DELETE)
+        return pool.preparedQuery(sql.DELETE)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
                     boolean deleted = rows.rowCount() > 0;
@@ -66,7 +69,7 @@ public final class PgCacheRepository {
     /** Section 16.2 — true when a live entry exists. */
     public Future<Boolean> exists(CacheKey key) {
         log.debug("exists key={}", key);
-        return pool.preparedQuery(CacheSql.EXISTS)
+        return pool.preparedQuery(sql.EXISTS)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> rows.iterator().next().getBoolean(0));
     }
@@ -74,7 +77,7 @@ public final class PgCacheRepository {
     /** Section 16.8 — ttl lookup for live entries. */
     public Future<TtlResult> ttl(CacheKey key) {
         log.debug("ttl key={}", key);
-        return pool.preparedQuery(CacheSql.TTL)
+        return pool.preparedQuery(sql.TTL)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
                     var it = rows.iterator();
@@ -92,7 +95,7 @@ public final class PgCacheRepository {
     /** Section 16.9 — set ttl on live entry. */
     public Future<Boolean> expire(CacheKey key, long ttlMillis) {
         log.debug("expire key={} ttlMillis={}", key, ttlMillis);
-        return pool.preparedQuery(CacheSql.EXPIRE)
+        return pool.preparedQuery(sql.EXPIRE)
                 .execute(Tuple.of(key.namespace(), key.key(), ttlMillis))
                 .map(rows -> rows.rowCount() > 0);
     }
@@ -100,7 +103,7 @@ public final class PgCacheRepository {
     /** Section 16.10 — remove ttl from live entry. */
     public Future<Boolean> persist(CacheKey key) {
         log.debug("persist key={}", key);
-        return pool.preparedQuery(CacheSql.PERSIST)
+        return pool.preparedQuery(sql.PERSIST)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> rows.rowCount() > 0);
     }
@@ -108,7 +111,7 @@ public final class PgCacheRepository {
     /** Section 16.11 — touch entry and optionally refresh ttl. */
     public Future<TouchResult> touch(CacheKey key, Long ttlMillis) {
         log.debug("touch key={} ttlMillis={}", key, ttlMillis);
-        return pool.preparedQuery(CacheSql.TOUCH)
+        return pool.preparedQuery(sql.TOUCH)
                 .execute(Tuple.of(key.namespace(), key.key(), ttlMillis))
                 .map(rows -> {
                     var it = rows.iterator();
@@ -145,7 +148,7 @@ public final class PgCacheRepository {
             return setUpsertWithPrevious(req);
         }
         Tuple params = valueTuple(req);
-        return pool.preparedQuery(CacheSql.UPSERT)
+        return pool.preparedQuery(sql.UPSERT)
                 .execute(params)
                 .map(rows -> {
                     Row row = rows.iterator().next();
@@ -160,14 +163,14 @@ public final class PgCacheRepository {
         Tuple params = valueTuple(req);
 
         return pool.withTransaction(conn ->
-                conn.preparedQuery(CacheSql.GET_FOR_UPDATE)
+                conn.preparedQuery(sql.GET_FOR_UPDATE)
                         .execute(keyTuple)
                         .compose(prevRows -> {
                             var it = prevRows.iterator();
                             CacheEntry prev = it.hasNext()
                                     ? mapRow(it.next())
                                     : null;
-                            return conn.preparedQuery(CacheSql.UPSERT)
+                                return conn.preparedQuery(sql.UPSERT)
                                     .execute(params)
                                     .map(rows -> {
                                         long version = rows.iterator().next().getLong("version");
@@ -185,10 +188,10 @@ public final class PgCacheRepository {
         Tuple params = valueTuple(req);
 
         return pool.withTransaction(conn ->
-                conn.preparedQuery(CacheSql.DELETE_EXPIRED)
+                conn.preparedQuery(sql.DELETE_EXPIRED)
                         .execute(keyTuple)
                         .compose(ignored ->
-                                conn.preparedQuery(CacheSql.INSERT_IF_ABSENT)
+                        conn.preparedQuery(sql.INSERT_IF_ABSENT)
                                         .execute(params)
                                         .map(rows -> {
                                             if (rows.rowCount() == 0) {
@@ -205,7 +208,7 @@ public final class PgCacheRepository {
 
     private Future<CacheSetResult> setIfPresent(CacheSetRequest req) {
         Tuple params = valueTuple(req);
-        return pool.preparedQuery(CacheSql.UPDATE_IF_PRESENT)
+        return pool.preparedQuery(sql.UPDATE_IF_PRESENT)
                 .execute(params)
                 .map(rows -> {
                     if (rows.rowCount() == 0) {
@@ -232,7 +235,7 @@ public final class PgCacheRepository {
                 numericValue(req.value()),
                 ttlMillis(req.ttl())
         );
-        return pool.preparedQuery(CacheSql.UPDATE_IF_VERSION_MATCHES)
+        return pool.preparedQuery(sql.UPDATE_IF_VERSION_MATCHES)
                 .execute(params)
                 .map(rows -> {
                     if (rows.rowCount() == 0) {

@@ -5,6 +5,7 @@ import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
 import dev.mars.peegeeq.cache.api.model.SetMode;
+import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
 import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
@@ -24,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PgCacheRepositoryTest {
 
-    private static final PgTestSupport pg = new PgTestSupport("pgcache-repo-test");
+    private static final PgTestSupport pg = new PgTestSupport("pgcache-repo-test", "peegee_cache");
     private static Pool pool;
     private static PgCacheRepository repo;
 
@@ -32,7 +33,7 @@ class PgCacheRepositoryTest {
     static void startContainer(Vertx vertx) throws Exception {
         pg.start(vertx);
         pool = pg.createPool(vertx);
-        repo = new PgCacheRepository(pool);
+        repo = new PgCacheRepository(pool, "peegee_cache");
     }
 
     @AfterAll
@@ -227,5 +228,31 @@ class PgCacheRepositoryTest {
             assertFalse(deleted);
             ctx.completeNow();
         })));
+    }
+
+    @Test
+    @Order(30)
+    void repositoryUsesConfiguredSchema(VertxTestContext ctx) {
+        String schema = "custom_cache_repo";
+        PgCacheRepository customRepo = new PgCacheRepository(pool, schema);
+
+        CacheKey key = new CacheKey("ns", "custom-schema-key");
+        CacheValue value = CacheValue.ofString("schema-ok");
+        CacheSetRequest req = new CacheSetRequest(key, value, null, SetMode.UPSERT, null, false);
+
+        applySchema(schema)
+                .compose(v -> customRepo.set(req))
+                .compose(v -> customRepo.get(key))
+                .onComplete(ctx.succeeding(result -> ctx.verify(() -> {
+                    assertTrue(result.isPresent());
+                    assertEquals("schema-ok", result.get().value().asString());
+                    ctx.completeNow();
+                })));
+    }
+
+    private static io.vertx.core.Future<Void> applySchema(String schemaName) {
+        String sql = "DROP SCHEMA IF EXISTS " + schemaName + " CASCADE;\n"
+                + BootstrapSqlRenderer.loadForSchema(schemaName);
+        return pool.query(sql).execute().mapEmpty();
     }
 }

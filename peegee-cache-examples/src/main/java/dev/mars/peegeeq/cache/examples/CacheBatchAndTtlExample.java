@@ -33,7 +33,7 @@ public final class CacheBatchAndTtlExample {
 
         try {
             container = ExampleRuntimeSupport.startContainer();
-            ExampleRuntimeSupport.applyMigrations(vertx, container);
+            ExampleRuntimeSupport.applyBootstrapSql(vertx, container);
             pool = ExampleRuntimeSupport.createPool(vertx, container);
             log.info("Created PostgreSQL pool for example runtime");
             manager = ExampleRuntimeSupport.startDefaultManager(vertx, pool);
