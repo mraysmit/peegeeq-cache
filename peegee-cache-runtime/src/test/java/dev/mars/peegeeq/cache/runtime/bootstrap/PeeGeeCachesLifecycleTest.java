@@ -1,7 +1,6 @@
 package dev.mars.peegeeq.cache.runtime.bootstrap;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
-import dev.mars.peegeeq.cache.api.model.ScanRequest;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
@@ -152,24 +151,17 @@ class PeeGeeCachesLifecycleTest {
     }
 
     @Test
-    void scanAndPubSubStubsFailFastWithUnsupportedOperation(Vertx vertx, VertxTestContext ctx) {
+    void pubSubStubFailsFastWithUnsupportedOperation(Vertx vertx, VertxTestContext ctx) {
         PeeGeeCaches.create(vertx, pool)
                 .onComplete(ctx.succeeding(manager ->
                         manager.startReactive().onComplete(ctx.succeeding(v1 ->
-                                manager.cache().scan().scan(new ScanRequest("ns", "p", null, 10, false, false))
-                                        .onComplete(ctx.failing(scanErr -> {
+                                manager.cache().pubSub().publish(new PublishRequest("ch", "payload", "text/plain"))
+                                        .onComplete(ctx.failing(pubErr -> {
                                             ctx.verify(() -> {
-                                                assertInstanceOf(UnsupportedOperationException.class, scanErr);
-                                                assertTrue(scanErr.getMessage().contains("scan"));
+                                                assertInstanceOf(UnsupportedOperationException.class, pubErr);
+                                                assertTrue(pubErr.getMessage().contains("publish"));
                                             });
-                                            manager.cache().pubSub().publish(new PublishRequest("ch", "payload", "text/plain"))
-                                                    .onComplete(ctx.failing(pubErr -> {
-                                                        ctx.verify(() -> {
-                                                            assertInstanceOf(UnsupportedOperationException.class, pubErr);
-                                                            assertTrue(pubErr.getMessage().contains("publish"));
-                                                        });
-                                                        manager.stopReactive().onComplete(ctx.succeeding(v2 -> ctx.completeNow()));
-                                                    }));
+                                            manager.stopReactive().onComplete(ctx.succeeding(v2 -> ctx.completeNow()));
                                         }))
                         ))
                 ));
@@ -208,7 +200,8 @@ class PeeGeeCachesLifecycleTest {
                     ctx.verify(() -> {
                         PgPeeGeeCacheManager pgManager = (PgPeeGeeCacheManager) manager;
                         assertTrue(pgManager.isExpirySweeperRunning());
-                        assertTrue(pgManager.isListenerRunning());
+                        // No connectOptions → no real listener connection
+                        assertFalse(pgManager.isListenerRunning());
                     });
                     return manager.stopReactive().map(manager);
                 })

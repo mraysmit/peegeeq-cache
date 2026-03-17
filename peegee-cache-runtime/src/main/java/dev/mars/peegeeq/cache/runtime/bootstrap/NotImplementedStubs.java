@@ -4,7 +4,6 @@ import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.api.model.PubSubMessage;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import dev.mars.peegeeq.cache.api.pubsub.Subscription;
-import dev.mars.peegeeq.cache.api.scan.ScanService;
 import io.vertx.core.Future;
 
 import java.util.function.Consumer;
@@ -15,10 +14,6 @@ import java.util.function.Consumer;
 final class NotImplementedStubs {
 
     private NotImplementedStubs() {}
-
-    static ScanService scanService() {
-        return request -> Future.failedFuture(notImplemented("scan", request));
-    }
 
     static PubSubService pubSubService() {
         return new PubSubService() {

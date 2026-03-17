@@ -499,19 +499,27 @@ Write operations such as set-if-absent, counter create, and lock acquire should 
 
 ## 10. Pub/sub integration
 
-Phase 1 does not require a table for pub/sub if PostgreSQL `LISTEN/NOTIFY` is used.
+Phase 1 pub/sub uses PostgreSQL `LISTEN/NOTIFY` directly. No table is required.
 
-Suggested channel naming:
+### 10.1 Channel naming
+
+All channels are prefixed with the configured `pubSubChannelPrefix` from `PgCacheStoreConfig` (default `peegee_cache`), separated by a double underscore:
 
 ```text
-peegee_cache__{channel}
+{pubSubChannelPrefix}__{channel}
 ```
+
+Channel names supplied by callers must be non-null, non-blank, and must not contain null bytes. The implementation double-quotes the fully qualified channel name in SQL to allow mixed case and special characters.
+
+### 10.2 Publishing
 
 Publish via:
 
 ```sql
 SELECT pg_notify($1, $2);
 ```
+
+`$1` is the fully qualified channel name. `$2` is the payload string.
 
 One important architectural advantage over a separate Redis publish step is that `pg_notify` can be part of the same transaction as the underlying row changes. If the surrounding transaction rolls back, the notification should not be treated as committed state.
 
@@ -520,24 +528,90 @@ For domain flows that need "write plus notify" atomicity, prefer one of these pa
 - execute `pg_notify` in the same transaction as the data mutation
 - or use a trigger/outbox-style pattern so notification emission is coupled to committed database state
 
+Publishing uses the shared connection pool, not the dedicated listener connection. The return value `Future<Integer>` resolves to the number of notifications sent (always 1 on success, since PostgreSQL `pg_notify` is fire-and-forget to a single channel).
+
+### 10.3 Subscribing
+
+Subscribing issues a `LISTEN "channel"` command on the dedicated listener connection and registers a `Consumer<PubSubMessage>` handler for that channel. Multiple handlers may be registered for the same channel; each receives a copy of every notification.
+
+The returned `Subscription` holds the channel name and an `unsubscribe()` method that:
+
+1. removes the handler from the in-memory handler registry
+2. if no handlers remain for the channel, issues `UNLISTEN "channel"` on the dedicated connection
+
+### 10.4 Dedicated listener connection
+
+LISTEN requires a persistent connection — pooled connections return to the pool and lose their LISTEN registrations. The implementation must use a dedicated non-pooled `PgConnection`:
+
+```java
+PgConnection.connect(vertx, connectOptions)
+```
+
+This connection is created during `PgPeeGeeCacheManager.startReactive()` and closed during `stopReactive()`. The `PgConnectOptions` used for this connection are derived from the pool's connect options, supplied via `PeeGeeCacheBootstrapOptions`.
+
+The dedicated connection sets a single `notificationHandler` that dispatches incoming notifications to registered subscriber handlers via `vertx.runOnContext()` to ensure handlers execute on the Vert.x event loop.
+
+### 10.5 Reconnection
+
+The dedicated listener connection may drop due to network failures, PostgreSQL restarts, or idle timeouts. The implementation must handle this automatically:
+
+- register a close handler on the dedicated connection
+- on unexpected close (i.e., the manager is still started), schedule a reconnect attempt
+- use exponential backoff: base delay 1 second, doubling on each attempt, capped at 32 seconds
+- after successful reconnect, replay `LISTEN` for all channels that have active handlers
+- if the maximum number of reconnect attempts (5) is exceeded, log an error but do not crash the manager — the next `subscribe()` call will trigger a fresh connection attempt
+
+This is **not** durable subscription persistence. If the connection is down when a `NOTIFY` fires, the notification is lost. Reconnection only ensures that the LISTEN registrations are restored so that future notifications are received.
+
+### 10.6 Payload rules
+
 Important limitations:
-- `NOTIFY` payload is text and size-limited
-- binary payload passthrough should **not** be part of the Phase 1 public API
-- for Phase 1, payloads should be UTF-8 text or JSON strings with optional `contentType`
+- `NOTIFY` payload is text and limited to approximately 8000 bytes in PostgreSQL
+- binary payload passthrough is **not** part of the Phase 1 public API
+- for Phase 1, payloads must be UTF-8 text or JSON strings with advisory `contentType`
+- the implementation must reject payloads that exceed a configurable maximum size (default 7500 bytes) early, before passing them to `pg_notify`, returning a failed `Future` with `IllegalArgumentException`
 
-Phase 1 public contract:
+### 10.7 Phase 1 public contract
 
-- `PublishRequest.payload` is `String`
-- `PublishRequest.contentType` is advisory metadata such as `text/plain` or `application/json`
-- subscribers receive `PubSubMessage` with string payloads
-- pattern subscriptions are explicitly a V2 feature, not part of the Phase 1 API
+API types (already defined in `peegee-cache-api`):
 
-Operational guidance:
+- `PubSubService` — `publish(PublishRequest): Future<Integer>`, `subscribe(String channel, Consumer<PubSubMessage>): Future<Subscription>`
+- `PublishRequest(channel, payload, contentType)` — record, `contentType` is advisory metadata such as `text/plain` or `application/json`
+- `PubSubMessage(channel, payload, contentType, receivedAtEpochMillis)` — record delivered to handlers, `receivedAtEpochMillis` is set on receipt at the client side
+- `Subscription` — `channel(): String`, `unsubscribe(): Future<Void>`
 
-- use a dedicated PostgreSQL connection for the `LISTEN` loop
-- treat pub/sub as best-effort fan-out, not durable delivery
-- drop or reject oversized payloads early instead of silently truncating them
-- if durable notifications become a requirement, add a separate events table/module rather than stretching `NOTIFY`
+Phase 1 constraints:
+
+- pattern subscriptions (wildcard channels) are explicitly a V2 feature
+- publish-in-transaction support is a convenience layer, not part of the Phase 1 `PubSubService` API surface
+- subscribers receive string payloads only
+
+### 10.8 Configuration
+
+`PgCacheStoreConfig` already carries `pubSubChannelPrefix`. Additional pub/sub-specific configuration:
+
+- `maxPayloadBytes` — maximum payload size in bytes (default 7500). Publish requests exceeding this are rejected.
+
+This is part of `PgCacheStoreConfig` because it directly governs PostgreSQL-level behavior.
+
+### 10.9 Lifecycle integration
+
+Pub/sub lifecycle is owned by `PgPeeGeeCacheManager`:
+
+- `startReactive()`: opens the dedicated listener connection after other background components
+- `stopReactive()`: issues `UNLISTEN *` on the dedicated connection, closes it, and clears all handler registrations
+- `isListenerRunning()`: reports whether the dedicated connection is active (already exists as a lifecycle probe)
+
+The `PubSubService` implementation must reject `publish()` and `subscribe()` calls if the manager is not started, returning a failed `Future` with `IllegalStateException`.
+
+### 10.10 Delivery semantics
+
+- **best-effort fan-out** — notifications are not persisted, not acknowledged, and not retried
+- if no connection is LISTENing when a `NOTIFY` fires, the notification is gone
+- ordering within a single channel is preserved per PostgreSQL guarantees (same session order)
+- cross-channel ordering is not guaranteed
+
+### 10.11 Scope boundary
 
 Pub/sub in Phase 1 is for:
 - cache invalidation
@@ -545,6 +619,8 @@ Pub/sub in Phase 1 is for:
 - lightweight internal notifications
 
 It is **not** a durable messaging system and should not be sold as one.
+
+If durable notifications become a requirement, add a separate events table/module with consumer offsets and acknowledgement tracking rather than stretching `NOTIFY`. That is a Phase 2+ concern and a fundamentally different module.
 
 ---
 

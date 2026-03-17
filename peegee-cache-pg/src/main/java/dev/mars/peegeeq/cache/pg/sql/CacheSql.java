@@ -27,6 +27,7 @@ public final class CacheSql {
         public final String PERSIST;
         public final String TOUCH;
         public final String SCAN;
+        public final String SCAN_INCLUDING_EXPIRED;
 
         public static CacheSql forSchema(String schemaName) {
                 return new CacheSql(requireSchema(schemaName));
@@ -221,9 +222,21 @@ public final class CacheSql {
                    version, created_at, updated_at, expires_at, hit_count, last_accessed_at
                         FROM %s
             WHERE namespace = $1
-                                                        AND ($2 IS NULL OR cache_key LIKE $2 || '%%')
-              AND ($3 IS NULL OR cache_key > $3)
+                                                        AND ($2::text IS NULL OR cache_key LIKE $2::text || '%%')
+              AND ($3::text IS NULL OR cache_key > $3::text)
               AND (expires_at IS NULL OR expires_at > NOW())
+            ORDER BY cache_key
+            LIMIT $4
+                        """.formatted(entries);
+
+                /** Section 16.12 — keyset scan including expired entries. */
+                SCAN_INCLUDING_EXPIRED = """
+            SELECT namespace, cache_key, value_type, value_bytes, numeric_value,
+                   version, created_at, updated_at, expires_at, hit_count, last_accessed_at
+                        FROM %s
+            WHERE namespace = $1
+                                                        AND ($2::text IS NULL OR cache_key LIKE $2::text || '%%')
+              AND ($3::text IS NULL OR cache_key > $3::text)
             ORDER BY cache_key
             LIMIT $4
                         """.formatted(entries);

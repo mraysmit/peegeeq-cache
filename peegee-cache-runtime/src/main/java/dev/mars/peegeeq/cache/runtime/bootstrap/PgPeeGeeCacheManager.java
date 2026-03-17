@@ -6,14 +6,19 @@ import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.pg.repository.PgCacheRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgCounterRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgLockRepository;
+import dev.mars.peegeeq.cache.pg.repository.PgPubSubRepository;
+import dev.mars.peegeeq.cache.pg.repository.PgScanRepository;
 import dev.mars.peegeeq.cache.pg.service.PgCacheService;
 import dev.mars.peegeeq.cache.pg.service.PgCounterService;
 import dev.mars.peegeeq.cache.pg.service.PgLockService;
+import dev.mars.peegeeq.cache.pg.service.PgPubSubService;
+import dev.mars.peegeeq.cache.pg.service.PgScanService;
 import dev.mars.peegeeq.cache.runtime.Banner;
 import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
+import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,8 +42,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     private final Pool pool;
     private final PeeGeeCacheBootstrapOptions options;
     private final PeeGeeCache cache;
+    private final PgPubSubService pubSubService;
     private final AtomicBoolean started = new AtomicBoolean(false);
-    private final AtomicBoolean listenerRunning = new AtomicBoolean(false);
 
     private volatile long sweeperTimerId = -1L;
 
@@ -48,7 +53,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         this.options = normalizeOptions(options);
 
         // Wire the service graph
-        String schemaName = this.options.storeConfig().schemaName();
+        PgCacheStoreConfig storeConfig = this.options.storeConfig();
+        String schemaName = storeConfig.schemaName();
         PgCacheRepository cacheRepo = new PgCacheRepository(pool, schemaName);
         PgCounterRepository counterRepo = new PgCounterRepository(pool, schemaName);
         PgLockRepository lockRepo = new PgLockRepository(pool, schemaName);
@@ -57,13 +63,24 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         PgCounterService counterService = new PgCounterService(counterRepo);
         PgLockService lockService = new PgLockService(lockRepo);
 
-        // ScanService and PubSubService are not yet implemented — use stubs
+        PgScanRepository scanRepo = new PgScanRepository(pool, schemaName);
+        PgScanService scanService = new PgScanService(scanRepo);
+
+        PgPubSubRepository pubSubRepo = new PgPubSubRepository(pool, storeConfig);
+        PgConnectOptions connectOpts = this.options.connectOptions();
+        if (connectOpts != null) {
+            this.pubSubService = new PgPubSubService(vertx, pubSubRepo, connectOpts, storeConfig);
+        } else {
+            this.pubSubService = null;
+            log.info("No connectOptions provided — pub/sub will use stub (provide connectOptions for real pub/sub)");
+        }
+
         this.cache = new PgPeeGeeCache(
                 cacheService,
                 counterService,
                 lockService,
-                NotImplementedStubs.scanService(),
-                NotImplementedStubs.pubSubService()
+                scanService,
+                pubSubService != null ? pubSubService : NotImplementedStubs.pubSubService()
         );
     }
 
@@ -79,8 +96,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
                     log.info("PeeGeeCacheManager started (schema={})", options.storeConfig().schemaName());
                 })
                 .onFailure(err -> {
-                    stopBackgroundComponents();
-                    started.set(false);
+                    stopBackgroundComponents()
+                            .onComplete(v -> started.set(false));
                 });
     }
 
@@ -90,9 +107,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             return Future.failedFuture(new IllegalStateException("Manager is not started"));
         }
         log.info("PeeGeeCacheManager stopping");
-        stopBackgroundComponents();
-        log.info("PeeGeeCacheManager stopped");
-        return Future.succeededFuture();
+        return stopBackgroundComponents()
+                .onSuccess(v -> log.info("PeeGeeCacheManager stopped"));
     }
 
     @Override
@@ -139,7 +155,7 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     }
 
     boolean isListenerRunning() {
-        return listenerRunning.get();
+        return pubSubService != null && pubSubService.isListenerConnected();
     }
 
     private Future<Void> startBackgroundComponents() {
@@ -156,12 +172,17 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             log.info("Expiry sweeper started (interval={}ms, batchSize={})", intervalMillis, runtime.expirySweepBatchSize());
         }
 
-        listenerRunning.set(true);
-        log.info("Pub/Sub listener lifecycle started (placeholder implementation)");
+        if (pubSubService != null) {
+            return pubSubService.start()
+                    .onSuccess(v -> log.info("Pub/Sub listener started"))
+                    .onFailure(err -> log.error("Failed to start pub/sub listener", err));
+        }
+
+        log.info("Pub/Sub listener not configured (no connectOptions)");
         return Future.succeededFuture();
     }
 
-    private void stopBackgroundComponents() {
+    private Future<Void> stopBackgroundComponents() {
         long timerId = sweeperTimerId;
         if (timerId >= 0) {
             vertx.cancelTimer(timerId);
@@ -169,9 +190,12 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             log.info("Expiry sweeper stopped");
         }
 
-        if (listenerRunning.compareAndSet(true, false)) {
-            log.info("Pub/Sub listener lifecycle stopped");
+        if (pubSubService != null) {
+            return pubSubService.stop()
+                    .onSuccess(v -> log.info("Pub/Sub listener stopped"))
+                    .onFailure(err -> log.warn("Error stopping pub/sub listener", err));
         }
+        return Future.succeededFuture();
     }
 
     private static PeeGeeCacheBootstrapOptions normalizeOptions(PeeGeeCacheBootstrapOptions options) {
@@ -187,6 +211,6 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
                 ? resolved.storeConfig()
                 : PgCacheStoreConfig.defaults();
 
-        return new PeeGeeCacheBootstrapOptions(runtimeConfig, storeConfig);
+        return new PeeGeeCacheBootstrapOptions(runtimeConfig, storeConfig, resolved.connectOptions());
     }
 }

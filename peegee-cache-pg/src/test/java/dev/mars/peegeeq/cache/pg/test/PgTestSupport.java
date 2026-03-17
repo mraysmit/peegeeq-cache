@@ -82,7 +82,11 @@ public final class PgTestSupport {
         }
     }
 
-    private PgConnectOptions connectOptions() {
+    /**
+     * Returns PgConnectOptions for the test container, suitable for creating
+     * dedicated connections (e.g. LISTEN/NOTIFY).
+     */
+    public PgConnectOptions connectOptions() {
         return new PgConnectOptions()
                 .setHost(postgres.getHost())
                 .setPort(postgres.getFirstMappedPort())

@@ -332,6 +332,77 @@ Reasoning:
 - bulk operations are useful but do not change the core model
 - pub/sub should wait until the runtime lifecycle and payload rules are already stable
 
+#### Phase 6.4: Lightweight pub/sub implementation plan
+
+Prerequisite: the runtime lifecycle (Phase 5) is stable and `PgConnectOptions` are available in `PeeGeeCacheBootstrapOptions`.
+
+##### Module placement
+
+- `PgPubSubRepository` in `peegee-cache-pg` — SQL execution for `pg_notify`, `LISTEN`, `UNLISTEN`
+- `PgPubSubService` in `peegee-cache-pg` — implements `PubSubService`, manages dedicated listener connection, handler registry, reconnection
+- Wired into `PgPeeGeeCache` via `PgPeeGeeCacheManager`, replacing `NotImplementedStubs.pubSubService()`
+
+##### Implementation steps (TDD order)
+
+1. **PgPubSubRepository — publish**
+   - SQL: `SELECT pg_notify($1, $2)` with fully qualified channel name
+   - Channel name: `{prefix}__{channel}` using `PgCacheStoreConfig.pubSubChannelPrefix()`
+   - Validate: non-null/non-blank channel, payload size ≤ `maxPayloadBytes`
+   - Test: Testcontainers integration test — publish succeeds, oversized payload rejected
+
+2. **PgPubSubService — publish**
+   - Delegates validation and SQL to repository
+   - Returns `Future<Integer>` (always 1 on success)
+   - Test: service-level publish test
+
+3. **PgPubSubService — dedicated listener connection**
+   - Opens `PgConnection.connect(vertx, connectOptions)` during `start()`
+   - Sets `conn.notificationHandler()` to dispatch to registered handlers
+   - Closes connection during `stop()`
+   - Test: lifecycle test — connection opens on start, closes on stop
+
+4. **PgPubSubService — subscribe**
+   - Issues `LISTEN "channel"` on dedicated connection
+   - Registers handler in `ConcurrentHashMap<String, CopyOnWriteArrayList<Consumer<PubSubMessage>>>`
+   - Returns `Subscription` with `unsubscribe()` that removes handler and issues `UNLISTEN` when registry for channel is empty
+   - Test: subscribe receives published message, unsubscribe stops delivery
+
+5. **PgPubSubService — reconnection**
+   - Register close handler on dedicated connection
+   - On unexpected close: schedule reconnect with exponential backoff (1s base, 32s cap, 5 attempts)
+   - After reconnect: replay `LISTEN` for all channels with active handlers
+   - Test: kill connection, verify automatic reconnect and handler still receives after recovery
+
+6. **PgPeeGeeCacheManager wiring**
+   - Replace `NotImplementedStubs.pubSubService()` with real `PgPubSubService`
+   - `startReactive()` opens listener connection
+   - `stopReactive()` closes listener connection and clears handlers
+   - `isListenerRunning()` reflects real connection state
+   - Remove `NotImplementedStubs` class entirely when no stubs remain
+   - Test: existing lifecycle test still passes, stub test updated or removed
+
+7. **PeeGeeCacheBootstrapOptions update**
+   - Add `PgConnectOptions connectOptions` to `PeeGeeCacheBootstrapOptions`
+   - The connect options supply credentials and host for the dedicated listener connection
+   - When absent, derive from the pool's connection info or fail with clear error
+   - Test: options with and without explicit connect options
+
+##### Configuration additions
+
+`PgCacheStoreConfig` gains:
+
+- `maxPayloadBytes` (default 7500) — publish requests exceeding this size are rejected with `IllegalArgumentException`
+
+##### Exit criteria for Phase 6.4 — MET
+
+- ✅ `PgPubSubService` passes all tests including Testcontainers integration (9 tests)
+- ✅ publish delivers notification to subscriber handler (`subscriberReceivesPublishedMessage`)
+- ✅ unsubscribe stops delivery (`unsubscribeStopsDelivery`)
+- ✅ oversized payloads are rejected before reaching PostgreSQL (`publishRejectsOversizedPayload`)
+- ✅ dedicated connection reconnects automatically after connection loss (exponential backoff, 1s–32s)
+- ✅ `isListenerRunning()` accurately reflects connection state (delegates to `pubSubService.isListenerConnected()`)
+- ⚠️ `NotImplementedStubs.pubSubService()` retained as fallback when no `connectOptions` provided — this is intentional for backward compatibility
+
 Exit criteria:
 
 - all `V1` items in the design are implemented or explicitly deferred with rationale
@@ -393,7 +464,7 @@ Last reviewed: 2026-03-16
 | Phase 3: Repository and SQL statement catalogue | COMPLETE | Repositories and SQL catalogues are in place: `PgCacheRepository`, `PgCounterRepository`, `PgLockRepository` and `CacheSql`, `CounterSql`, `LockSql` in `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/` | None |
 | Phase 4: Service implementations for V1 Core | COMPLETE | Services are implemented and now share centralized argument validation via `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, wired in `PgCacheService`, `PgCounterService`, and `PgLockService`; service/repository/migration tests are green | None |
 | Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | Runtime bootstrap is implemented with explicit ownership of `Vertx`, `Pool`, expiry sweeper timer, and pub/sub listener lifecycle placeholder in `PgPeeGeeCacheManager`; lifecycle tests in `PeeGeeCachesLifecycleTest` verify start/stop ownership and invalid sweeper config guards | None |
-| Phase 6: V1 completion features | NOT STARTED | No confirmed scan/bulk/admin/pubsub completion markers yet | Implement phase scope in recommended order and prove through tests |
+| Phase 6: V1 completion features | IN PROGRESS | Scan: `PgScanRepository`, `PgScanService`, `CacheEntryMapper`, 17 tests green. Bulk ops: `getMany`/`setMany`/`deleteMany` in `PgCacheRepository`/`PgCacheService` with tests. Pub/sub: **Phase 6.4 COMPLETE** — `PubSubSql`, `PgPubSubRepository` (7 tests), `PgPubSubService` (9 tests), `PgCacheStoreConfig.maxPayloadBytes`, `PeeGeeCacheBootstrapOptions.connectOptions`, `PgPeeGeeCacheManager` wired with real pub/sub service, lifecycle tests updated. 185 tests green. Admin hooks: not started. | Implement admin hooks |
 | Phase 7: Native SQL contract hardening | NOT STARTED | No documented SQL function boundary implementation yet | Define and implement function-first write contract for correctness-sensitive operations |
 | Phase 8: V2 and later | DEFERRED | By strategy: V2 starts only after V1 is stable | Revisit after V1 completion and operational hardening |
 
@@ -617,7 +688,15 @@ Implement later:
 ### Phase 6 onward
 
 - scan behavior tests
-- pub/sub listener and reconnect tests
+- pub/sub integration tests:
+  - publish delivers to subscriber handler on same Vert.x instance
+  - multiple subscribers on same channel each receive notification
+  - unsubscribe stops delivery for that handler
+  - oversized payload rejected before reaching PostgreSQL
+  - channel name validation (null, blank)
+  - dedicated listener connection lifecycle (start opens, stop closes)
+  - automatic reconnection after connection loss with LISTEN replay
+  - publish and subscribe rejected when manager is not started
 - benchmark and profiling work on realistic combined flows
 
 The important benchmark is not isolated `GET` speed alone. It is the combined behavior of database-backed cache mutation, coordination, and notification flows.
