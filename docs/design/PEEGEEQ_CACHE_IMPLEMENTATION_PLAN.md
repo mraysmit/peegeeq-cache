@@ -454,7 +454,7 @@ Status legend:
 - NOT STARTED: no meaningful implementation work landed yet
 - DEFERRED: intentionally postponed with rationale
 
-Last reviewed: 2026-03-16
+Last reviewed: 2026-03-18
 
 | Phase | Status | Evidence snapshot | Remaining to exit |
 |---|---|---|---|
@@ -465,7 +465,7 @@ Last reviewed: 2026-03-16
 | Phase 4: Service implementations for V1 Core | COMPLETE | Services are implemented and now share centralized argument validation via `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, wired in `PgCacheService`, `PgCounterService`, and `PgLockService`; service/repository/migration tests are green | None |
 | Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | Runtime bootstrap is implemented with explicit ownership of `Vertx`, `Pool`, expiry sweeper timer, and pub/sub listener lifecycle placeholder in `PgPeeGeeCacheManager`; lifecycle tests in `PeeGeeCachesLifecycleTest` verify start/stop ownership and invalid sweeper config guards | None |
 | Phase 6: V1 completion features | COMPLETE | Scan: `PgScanRepository`, `PgScanService`, `CacheEntryMapper`, 17 tests green. Bulk ops: `getMany`/`setMany`/`deleteMany` in `PgCacheRepository`/`PgCacheService` with tests. Pub/sub: **Phase 6.4 COMPLETE** — `PubSubSql`, `PgPubSubRepository` (7 tests), `PgPubSubService` (9 tests), `PgCacheStoreConfig.maxPayloadBytes`, `PeeGeeCacheBootstrapOptions.connectOptions`, `PgPeeGeeCacheManager` wired with real pub/sub service, lifecycle tests updated. **Admin hooks: COMPLETE** — `MetricsSnapshot` (15-counter record), `EntryStats` record, `AdminService` interface in api; `CacheMetrics` (LongAdder-based, 8 unit tests) in core; `AdminSql`, `PgAdminRepository` (6 integration tests), `PgAdminService` (4 integration tests) in pg; `CacheMetrics` wired into `PgCacheService`, `PgCounterService`, `PgLockService`; `PeeGeeCache.admin()` added; `PgPeeGeeCacheManager` creates shared `CacheMetrics` and `PgAdminService`. 197 tests green across all modules. | None |
-| Phase 7: Native SQL contract hardening | NOT STARTED | No documented SQL function boundary implementation yet | Define and implement function-first write contract for correctness-sensitive operations |
+| Phase 7: Native SQL contract hardening | COMPLETE | `V002__create_sql_functions.sql` provides 8 PL/pgSQL functions: lock (`acquire_lock`, `renew_lock`, `release_lock`), counter (`increment_counter`, `set_counter`, `delete_counter`), cache entry (`set_entry` with UPSERT/NX/XX/CAS modes, `delete_entry`). `BootstrapSqlRenderer` loads V001+V002 in order. Integration tests: `NativeSqlLockFunctionTest` (12 tests), `NativeSqlCounterFunctionTest` (13 tests), `NativeSqlCacheFunctionTest` (13 tests) — all green. Direct-read vs function-write boundary is documented and implemented consistently. 235 tests green across all modules. | None |
 | Phase 8: V2 and later | DEFERRED | By strategy: V2 starts only after V1 is stable | Revisit after V1 completion and operational hardening |
 
 Tracking update rules:

@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
 public final class BootstrapSqlRenderer {
 
     public static final String DEFAULT_SCHEMA_NAME = "peegee_cache";
-    private static final String BOOTSTRAP_SQL_RESOURCE = "/db/bootstrap/V001__create_peegee_cache_schema.sql";
+    private static final String BOOTSTRAP_SQL_RESOURCE =
+            "/db/bootstrap/V001__create_peegee_cache_schema.sql";
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     private BootstrapSqlRenderer() {
@@ -34,7 +35,7 @@ public final class BootstrapSqlRenderer {
             }
             return new String(is.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to read bootstrap SQL", e);
+            throw new IllegalStateException("Failed to read bootstrap SQL: " + BOOTSTRAP_SQL_RESOURCE, e);
         }
     }
 
