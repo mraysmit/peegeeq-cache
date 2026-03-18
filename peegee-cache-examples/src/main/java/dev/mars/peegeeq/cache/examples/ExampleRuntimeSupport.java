@@ -11,6 +11,7 @@ import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
@@ -37,9 +38,9 @@ final class ExampleRuntimeSupport {
 
     
 
-    static ExamplePostgresContainer startContainer() {
+    static PostgreSQLContainer startContainer() {
         log.info("Starting PostgreSQL Testcontainer (image: {})", POSTGRES_IMAGE);
-        ExamplePostgresContainer container = new ExamplePostgresContainer(POSTGRES_IMAGE)
+        PostgreSQLContainer container = new PostgreSQLContainer(POSTGRES_IMAGE)
                 .withDatabaseName(DATABASE_NAME)
                 .withUsername(USERNAME)
                 .withPassword(PASSWORD)
@@ -54,14 +55,14 @@ final class ExampleRuntimeSupport {
         return container;
     }
 
-    static void stopContainer(ExamplePostgresContainer container) {
+    static void stopContainer(PostgreSQLContainer container) {
         if (container != null) {
             log.info("Stopping PostgreSQL Testcontainer");
             container.stop();
         }
     }
 
-    static Pool createPool(Vertx vertx, ExamplePostgresContainer container) {
+    static Pool createPool(Vertx vertx, PostgreSQLContainer container) {
         PgConnectOptions connectOptions = new PgConnectOptions()
                 .setHost(container.getHost())
                 .setPort(container.getFirstMappedPort())
@@ -74,11 +75,11 @@ final class ExampleRuntimeSupport {
         return Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(8));
     }
 
-    static void applyBootstrapSql(Vertx vertx, ExamplePostgresContainer container) throws Exception {
+    static void applyBootstrapSql(Vertx vertx, PostgreSQLContainer container) throws Exception {
         applyBootstrapSql(vertx, container, BootstrapSqlRenderer.DEFAULT_SCHEMA_NAME);
     }
 
-    static void applyBootstrapSql(Vertx vertx, ExamplePostgresContainer container, String schemaName) throws Exception {
+    static void applyBootstrapSql(Vertx vertx, PostgreSQLContainer container, String schemaName) throws Exception {
         log.info("Applying bootstrap SQL");
         String sql = BootstrapSqlRenderer.loadForSchema(schemaName);
         PgConnectOptions opts = new PgConnectOptions()
@@ -107,7 +108,7 @@ final class ExampleRuntimeSupport {
 
     static void runWithDefaultManager(Logger exampleLog, String exampleName, ExampleWork work) throws Exception {
         Vertx vertx = Vertx.vertx();
-        ExamplePostgresContainer container = null;
+        PostgreSQLContainer container = null;
         Pool pool = null;
         PeeGeeCacheManager manager = null;
 
@@ -132,7 +133,7 @@ final class ExampleRuntimeSupport {
     }
 
     static void shutdown(PeeGeeCacheManager manager, Pool pool, Vertx vertx,
-                          ExamplePostgresContainer container) throws Exception {
+                          PostgreSQLContainer container) throws Exception {
         log.info("Shutting down runtime resources");
         if (manager != null && manager.isStarted()) {
             log.debug("Stopping started manager");

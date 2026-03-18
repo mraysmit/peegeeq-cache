@@ -6,7 +6,6 @@ import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.pg.repository.PgPubSubRepository;
 import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
-import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;

@@ -1,7 +1,6 @@
 package dev.mars.peegeeq.cache.pg.bootstrap;
 
 import dev.mars.peegeeq.cache.pg.test.PostgreSQLTestConstants;
-import dev.mars.peegeeq.cache.pg.test.PgTestPostgresContainer;
 import dev.mars.peegeeq.cache.pg.test.SharedPostgresContainerManager;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -9,6 +8,8 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -28,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class BootstrapSmokeTest {
 
-    private static PgTestPostgresContainer postgres;
+    private static PostgreSQLContainer postgres;
 
     @BeforeAll
     static void startContainerAndApplyBootstrapSql() throws Exception {

@@ -1,12 +1,9 @@
 package dev.mars.peegeeq.cache.runtime.bootstrap;
 
-import dev.mars.peegeeq.cache.api.model.CacheEntry;
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
-import dev.mars.peegeeq.cache.api.model.CacheSetResult;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
 import dev.mars.peegeeq.cache.api.model.LockAcquireRequest;
-import dev.mars.peegeeq.cache.api.model.LockAcquireResult;
 import dev.mars.peegeeq.cache.api.model.LockKey;
 import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
 import dev.mars.peegeeq.cache.api.model.SetMode;
@@ -17,16 +14,17 @@ import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
+import io.vertx.junit5.VertxTestContext;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -44,69 +42,79 @@ class PgPeeGeeCacheManagerCustomSchemaIntegrationTest {
     private static final String USERNAME = "test";
     private static final String PASSWORD = "test";
 
-    @Test
-    void managerUsesConfiguredNonDefaultSchemaAcrossCacheCounterAndLock(Vertx vertx) throws Exception {
-        PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(DockerImageName.parse(POSTGRES_IMAGE))
-                .withDatabaseName(DATABASE_NAME)
-                .withUsername(USERNAME)
-                .withPassword(PASSWORD);
+    private static final PostgreSQLContainer postgres = new PostgreSQLContainer(POSTGRES_IMAGE)
+            .withDatabaseName(DATABASE_NAME)
+            .withUsername(USERNAME)
+            .withPassword(PASSWORD);
 
-        Pool pool = null;
-        PeeGeeCacheManager manager = null;
-        try {
-            postgres.start();
-            applyBootstrapSql(vertx, postgres, CUSTOM_SCHEMA_NAME);
+    private static Pool pool;
+    private static PeeGeeCacheManager manager;
 
-            pool = createPool(vertx, postgres);
-            PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
-                    PeeGeeCacheConfig.defaults(),
-                    new PgCacheStoreConfig(CUSTOM_SCHEMA_NAME, CUSTOM_SCHEMA_NAME)
-            );
+    @BeforeAll
+    static void setUp(Vertx vertx) throws Exception {
+        postgres.start();
+        applyBootstrapSql(vertx, CUSTOM_SCHEMA_NAME);
 
-            manager = await(PeeGeeCaches.create(vertx, pool, options), 10_000);
-            await(manager.startReactive(), 10_000);
+        pool = createPool(vertx);
+        PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
+                PeeGeeCacheConfig.defaults(),
+                new PgCacheStoreConfig(CUSTOM_SCHEMA_NAME, CUSTOM_SCHEMA_NAME)
+        );
 
-            CacheKey cacheKey = new CacheKey("ns", "k1");
-            CacheSetRequest setRequest = new CacheSetRequest(
-                    cacheKey,
-                    CacheValue.ofString("value-1"),
-                    null,
-                    SetMode.UPSERT,
-                    null,
-                    false
-            );
-
-            CacheSetResult setResult = await(manager.cache().cache().set(setRequest), 10_000);
-            assertTrue(setResult.applied());
-
-            Optional<CacheEntry> entry = await(manager.cache().cache().get(cacheKey), 10_000);
-            assertTrue(entry.isPresent());
-            assertEquals("value-1", entry.get().value().asString());
-
-            Long counterValue = await(manager.cache().counters().increment(new CacheKey("ns", "ctr")), 10_000);
-            assertEquals(1L, counterValue);
-
-            LockKey lockKey = new LockKey("ns", "lock-1");
-            LockAcquireResult acquireResult = await(manager.cache().locks().acquire(
-                    new LockAcquireRequest(lockKey, "owner-1", Duration.ofSeconds(5), false, true)
-            ), 10_000);
-            assertTrue(acquireResult.acquired());
-            assertNotNull(acquireResult.fencingToken());
-
-            Boolean released = await(manager.cache().locks().release(new LockReleaseRequest(lockKey, "owner-1")), 10_000);
-            assertTrue(released);
-        } finally {
-            if (manager != null && manager.isStarted()) {
-                await(manager.stopReactive(), 10_000);
-            }
-            if (pool != null) {
-                await(pool.close(), 10_000);
-            }
-            postgres.stop();
-        }
+        manager = await(PeeGeeCaches.create(vertx, pool, options), 10_000);
+        await(manager.startReactive(), 10_000);
     }
 
-    private static Pool createPool(Vertx vertx, PostgreSQLContainer<?> postgres) {
+    @AfterAll
+    static void tearDown() throws Exception {
+        if (manager != null && manager.isStarted()) {
+            await(manager.stopReactive(), 10_000);
+        }
+        if (pool != null) {
+            await(pool.close(), 10_000);
+        }
+        postgres.stop();
+    }
+
+    @Test
+    void managerUsesConfiguredNonDefaultSchemaAcrossCacheCounterAndLock(VertxTestContext ctx) {
+        CacheKey cacheKey = new CacheKey("ns", "k1");
+        CacheSetRequest setRequest = new CacheSetRequest(
+                cacheKey, CacheValue.ofString("value-1"), null, SetMode.UPSERT, null, false);
+
+        manager.cache().cache().set(setRequest)
+                .compose(setResult -> {
+                    ctx.verify(() -> assertTrue(setResult.applied()));
+                    return manager.cache().cache().get(cacheKey);
+                })
+                .compose(entry -> {
+                    ctx.verify(() -> {
+                        assertTrue(entry.isPresent());
+                        assertEquals("value-1", entry.get().value().asString());
+                    });
+                    return manager.cache().counters().increment(new CacheKey("ns", "ctr"));
+                })
+                .compose(counterValue -> {
+                    ctx.verify(() -> assertEquals(1L, counterValue));
+                    LockKey lockKey = new LockKey("ns", "lock-1");
+                    return manager.cache().locks().acquire(
+                            new LockAcquireRequest(lockKey, "owner-1", Duration.ofSeconds(5), false, true));
+                })
+                .compose(acquireResult -> {
+                    ctx.verify(() -> {
+                        assertTrue(acquireResult.acquired());
+                        assertNotNull(acquireResult.fencingToken());
+                    });
+                    LockKey lockKey = new LockKey("ns", "lock-1");
+                    return manager.cache().locks().release(new LockReleaseRequest(lockKey, "owner-1"));
+                })
+                .onComplete(ctx.succeeding(released -> ctx.verify(() -> {
+                    assertTrue(released);
+                    ctx.completeNow();
+                })));
+    }
+
+    private static Pool createPool(Vertx vertx) {
         PgConnectOptions connectOptions = new PgConnectOptions()
                 .setHost(postgres.getHost())
                 .setPort(postgres.getFirstMappedPort())
@@ -116,22 +124,24 @@ class PgPeeGeeCacheManagerCustomSchemaIntegrationTest {
         return Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(8));
     }
 
-    private static void applyBootstrapSql(Vertx vertx, PostgreSQLContainer<?> postgres, String schemaName) throws Exception {
+    private static void applyBootstrapSql(Vertx vertx, String schemaName) throws Exception {
         String renderedSql = BootstrapSqlRenderer.loadForSchema(schemaName);
 
-        PgConnectOptions connectOptions = new PgConnectOptions()
-                .setHost(postgres.getHost())
-                .setPort(postgres.getFirstMappedPort())
-                .setDatabase(postgres.getDatabaseName())
-                .setUser(postgres.getUsername())
-                .setPassword(postgres.getPassword());
-
-        Pool bootstrapPool = Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(1));
+        Pool bootstrapPool = Pool.pool(vertx, connectOptions(), new PoolOptions().setMaxSize(1));
         try {
             await(bootstrapPool.query(renderedSql).execute().mapEmpty(), 10_000);
         } finally {
             await(bootstrapPool.close(), 10_000);
         }
+    }
+
+    private static PgConnectOptions connectOptions() {
+        return new PgConnectOptions()
+                .setHost(postgres.getHost())
+                .setPort(postgres.getFirstMappedPort())
+                .setDatabase(postgres.getDatabaseName())
+                .setUser(postgres.getUsername())
+                .setPassword(postgres.getPassword());
     }
 
     private static <T> T await(Future<T> future, long timeoutMillis) throws Exception {

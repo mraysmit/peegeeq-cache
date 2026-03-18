@@ -8,6 +8,7 @@ import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -23,7 +24,7 @@ public final class PgTestSupport {
 
     private final String logLabel;
     private final String schemaName;
-    private PgTestPostgresContainer postgres;
+    private PostgreSQLContainer postgres;
 
     public PgTestSupport(String logLabel, String schemaName) {
         this.logLabel = logLabel;

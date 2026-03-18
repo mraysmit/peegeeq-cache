@@ -12,19 +12,16 @@ PostgreSQL-Backed Cache and Coordination Library
 **Date**: March 2026
 **Version**: 0.1
 
----
 
-# peegee-cache Design Document
+# Design Document
 
----
 
 # Part I — Design and Architecture
 
----
 
 ## 1. Overview
 
-**peegee-cache** is a PostgreSQL-backed, Redis-inspired cache and coordination library built for the **PeeGeeQ family** and intended to start on **Java 21+** and **Vert.x 5.0.x**.
+**peegee-cache** is a PostgreSQL-backed, Redis-inspired cache and coordination library built for the **PeeGeeQ family**.
 
 It is **library-first**, not daemon-first. The Java API is the primary product. PostgreSQL is the first storage implementation. Vert.x provides the asynchronous programming model and runtime integration.
 
@@ -2827,8 +2824,6 @@ These examples should remain small and executable, and should track the same API
 
 # Summary
 
----
-
 ## 33. Final summary
 
 `peegee-cache` should be built as a **library-first, PostgreSQL-backed, Vert.x-native cache and coordination library**.
@@ -2852,8 +2847,166 @@ These examples should remain small and executable, and should track the same API
 - broad list/set emulation
 - queue subsystem as Redis-list emulation
 
-### Architectural stance
+### Core Architectural Position
 
 This is not "Redis on PostgreSQL."
 
-It is a **transactional cache + lock + counter + lightweight coordination service backed by PostgreSQL**, designed for systems where PostgreSQL is already strategic and operational simplicity matters more than pretending to be Redis.
+It is a **transactional cache + lock + counter + lightweight coordination service backed by PostgreSQL**, designed for systems where PostgreSQL is already strategic and operational simplicity matters more than trying to replicate Redis.
+
+---
+# Appendix A - Real World Views
+
+**Real-world views**
+
+PostgreSQL can make the whole system simpler and sometimes faster end-to-end, even when individual Redis-like operations are slower.
+
+**What is complelling:**
+1. Centers transactional locality as the main win.
+2. Shows where PostgreSQL features map well:
+1. Cache-like tables
+2. LISTEN/NOTIFY for signaling
+3. SKIP LOCKED for work claiming
+3. Includes “keep Redis” cases.
+
+**Where the argument is less compelling:**
+1. “Faster” is mostly architectural, not primitive-level.
+1. Performance can show PostgreSQL slower for set/get/pubsub/queue pop.
+2. Speedup is use-case dependant appears only when combining multiple steps in one transaction/connection.
+2. Benchmark rigor essential.
+1. No p95/p99 latency.
+2. No sustained throughput under contention.
+3. No failure tests (node crash, network partition, restart).
+4. No explicit comparison of identical topology (same AZ, same hop count, same client pooling strategy).
+3. Feature equivalence is not fully true.
+1. It is already noted that LISTEN/NOTIFY is not a durable queue or stream, althought it could be build this way.
+2. Notification payload is small and delivery is easy to miss on disconnect - this need careful control.
+3. It is noted that Redis and PostgreSQL have different behavior under extreme burst loads.
+
+**Possible hidden production concerns:**
+1. UNLOGGED tables:
+    - Great for disposable cache, but truncated after crash/restart.
+    - Not replicated in the same way as logged tables.
+2. Queue tables:
+    - SKIP LOCKED solves claiming, not full queue semantics.
+    - You still need retries, backoff, dead-lettering, visibility timeout, idempotency keys.
+    - High churn causes bloat and vacuum pressure if table design is naive.
+3. Rate limiting in SQL:
+    - Can create hot-row contention for popular tenants/users.
+    - Needs careful indexing/windowing/partition strategy.
+4. Listener model:
+    - LISTEN consumers usually need dedicated long-lived connections.
+    - Poor connection management can become your bottleneck.
+
+**What would make the claim credible:**
+1. Add load profiles:
+    - Read-heavy cache
+    - Write-heavy cache
+    - Burst queue workload
+    - Mixed transactional workflow
+2. Report:
+    - p50/p95/p99 latency
+    - Throughput at saturation
+    - CPU, IOPS, WAL volume, vacuum debt
+    - Error behavior during failover/restart
+3. Include correctness tests:
+    - No lost jobs
+    - Duplicate-processing rate
+    - Notification loss behavior and recovery path
+
+**How to apply this safely in PeeGeeQ context:**
+1. Treat PostgreSQL as coordination and source of truth first.
+2. Treat notifications as hints/signals, not guaranteed delivery.
+3. Use durable patterns for critical events:
+    - Outbox table + poller/worker
+    - Queue rows with explicit state transitions
+4. Keep Redis optional for edge cases:
+    - Very high QPS hot cache
+    - Strict sub-millisecond requirements
+    - Redis-specific structures
+5. Keep the design library-first:
+    - Expose primitives and policies
+    - Do not require a resident daemon to be useful
+    - Allow host application to choose runtime topology
+
+---
+# Appendix B - Architecture Review Checklist (Pass/Fail)
+
+Use this checklist before promoting any feature to "production ready." A feature passes only if all mandatory items pass.
+
+## A. Library-first contract (mandatory)
+
+- PASS if the capability is usable as an embedded Java library API without requiring a standalone daemon process
+- PASS if lifecycle is explicit and Vert.x-native (start/stop/close via library runtime components)
+- PASS if public async APIs use `io.vertx.core.Future<T>`
+- FAIL if behavior depends on hidden background services that are not part of the host application's runtime
+- FAIL if configuration is implicit or hardcoded instead of caller-supplied and validated
+
+## B. Transactional locality and correctness (mandatory)
+
+- PASS if "business write + cache/coordination write + notification" can be performed in one PostgreSQL transaction when needed
+- PASS if cache invalidation and state transitions are atomic with source-of-truth writes
+- PASS if operations are idempotent or explicitly documented as non-idempotent
+- PASS if lock ownership checks and fencing tokens are enforced at write boundaries
+- FAIL if correctness requires cross-system best-effort sequencing
+
+## C. Notification semantics (mandatory when pub/sub is used)
+
+- PASS if `LISTEN/NOTIFY` is treated as signaling, not as a durable event log
+- PASS if reconnect behavior and missed-notification recovery path are defined
+- PASS if payload size and channel naming constraints are documented
+- FAIL if feature correctness assumes guaranteed delivery from `NOTIFY`
+
+## D. Queue/work-claim semantics (mandatory when queueing is used)
+
+- PASS if worker claim uses `FOR UPDATE SKIP LOCKED` (or equivalent safe claim strategy)
+- PASS if retry policy, backoff, max attempts, and dead-letter behavior are defined
+- PASS if duplicate processing is tolerated or prevented via idempotency keys
+- PASS if queue table bloat and autovacuum strategy are specified
+- FAIL if exactly-once behavior is claimed without a verifiable mechanism
+
+## E. Cache and TTL behavior (mandatory for cache primitives)
+
+- PASS if key semantics are explicit: namespace, key format, value encoding, max size expectations
+- PASS if TTL semantics are explicit: relative vs absolute expiry, touch semantics, clock source assumptions
+- PASS if expired-row cleanup strategy is explicit (sweeper and/or lazy expiration)
+- PASS if indexing strategy is documented for hot paths and expiry scans
+- FAIL if expiry correctness depends on unbounded periodic cleanup delays
+
+## F. Performance and SLO evidence (mandatory)
+
+- PASS if benchmarks include p50/p95/p99 latency and sustained throughput under concurrency
+- PASS if tests include mixed workflows, not only isolated primitive calls
+- PASS if results include at least one failure scenario (restart, connection loss, worker crash)
+- PASS if acceptance thresholds are defined per capability
+- FAIL if only single-operation averages are reported
+
+## G. Operational safety (mandatory)
+
+- PASS if backup/recovery expectations are documented for each table class (logged vs UNLOGGED)
+- PASS if migrations are forward-safe and rollback strategy is documented
+- PASS if metrics/telemetry cover saturation, lock contention, queue depth, expiry lag, and notification lag
+- PASS if pool sizing and timeout defaults are explicit and environment-configurable
+- FAIL if production operation depends on undocumented manual procedures
+
+## H. Redis comparison gate (advisory, but required for go/no-go record)
+
+- Record "why PostgreSQL-first" in terms of correctness/ops, not raw micro-bench marketing
+- Record explicit non-goals (for example: sub-millisecond p99, advanced Redis structures)
+- Record workload boundaries where Redis remains preferred
+
+## Exit criteria template
+
+A capability is ready for production when:
+
+- all mandatory checklist sections above pass
+- automated tests (unit/integration/concurrency) are green
+- performance evidence meets declared thresholds
+- failure-mode behavior is validated and documented
+- known limitations are explicit in API and docs
+
+Suggested release decision labels:
+
+- `GO`: all mandatory checks pass
+- `GO-WITH-LIMITS`: mandatory checks pass but with documented SLO or scale limits
+- `NO-GO`: one or more mandatory checks fail
+

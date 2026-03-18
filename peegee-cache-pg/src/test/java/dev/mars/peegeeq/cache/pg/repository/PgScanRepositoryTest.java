@@ -4,7 +4,6 @@ import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
 import dev.mars.peegeeq.cache.api.model.ScanRequest;
-import dev.mars.peegeeq.cache.api.model.ScanResult;
 import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
 import io.vertx.core.Future;
@@ -17,9 +16,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-
-import java.time.Duration;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 

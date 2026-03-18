@@ -10,6 +10,7 @@ import io.vertx.core.Vertx;
 import io.vertx.sqlclient.Pool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.time.Duration;
 import java.util.List;
@@ -26,7 +27,7 @@ public final class CacheBatchAndTtlExample {
 
     public static void main(String[] args) throws Exception {
         Vertx vertx = Vertx.vertx();
-        ExamplePostgresContainer container = null;
+        PostgreSQLContainer container = null;
         Pool pool = null;
         PeeGeeCacheManager manager = null;
         log.info("Starting CacheBatchAndTtlExample");
