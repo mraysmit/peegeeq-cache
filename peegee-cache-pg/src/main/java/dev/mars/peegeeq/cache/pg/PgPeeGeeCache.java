@@ -1,6 +1,7 @@
 package dev.mars.peegeeq.cache.pg;
 
 import dev.mars.peegeeq.cache.api.PeeGeeCache;
+import dev.mars.peegeeq.cache.api.admin.AdminService;
 import dev.mars.peegeeq.cache.api.cache.CacheService;
 import dev.mars.peegeeq.cache.api.counter.CounterService;
 import dev.mars.peegeeq.cache.api.lock.LockService;
@@ -19,19 +20,22 @@ public final class PgPeeGeeCache implements PeeGeeCache {
     private final LockService lockService;
     private final ScanService scanService;
     private final PubSubService pubSubService;
+    private final AdminService adminService;
 
     public PgPeeGeeCache(
             CacheService cacheService,
             CounterService counterService,
             LockService lockService,
             ScanService scanService,
-            PubSubService pubSubService
+            PubSubService pubSubService,
+            AdminService adminService
     ) {
         this.cacheService = Objects.requireNonNull(cacheService, "cacheService");
         this.counterService = Objects.requireNonNull(counterService, "counterService");
         this.lockService = Objects.requireNonNull(lockService, "lockService");
         this.scanService = Objects.requireNonNull(scanService, "scanService");
         this.pubSubService = Objects.requireNonNull(pubSubService, "pubSubService");
+        this.adminService = Objects.requireNonNull(adminService, "adminService");
     }
 
     @Override
@@ -57,5 +61,10 @@ public final class PgPeeGeeCache implements PeeGeeCache {
     @Override
     public PubSubService pubSub() {
         return pubSubService;
+    }
+
+    @Override
+    public AdminService admin() {
+        return adminService;
     }
 }

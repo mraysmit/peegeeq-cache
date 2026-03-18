@@ -1,13 +1,16 @@
 package dev.mars.peegeeq.cache.runtime.bootstrap;
 
 import dev.mars.peegeeq.cache.api.PeeGeeCache;
+import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
 import dev.mars.peegeeq.cache.pg.PgPeeGeeCache;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
+import dev.mars.peegeeq.cache.pg.repository.PgAdminRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgCacheRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgCounterRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgLockRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgPubSubRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgScanRepository;
+import dev.mars.peegeeq.cache.pg.service.PgAdminService;
 import dev.mars.peegeeq.cache.pg.service.PgCacheService;
 import dev.mars.peegeeq.cache.pg.service.PgCounterService;
 import dev.mars.peegeeq.cache.pg.service.PgLockService;
@@ -55,16 +58,21 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         // Wire the service graph
         PgCacheStoreConfig storeConfig = this.options.storeConfig();
         String schemaName = storeConfig.schemaName();
+        CacheMetrics metrics = new CacheMetrics();
+
         PgCacheRepository cacheRepo = new PgCacheRepository(pool, schemaName);
         PgCounterRepository counterRepo = new PgCounterRepository(pool, schemaName);
         PgLockRepository lockRepo = new PgLockRepository(pool, schemaName);
 
-        PgCacheService cacheService = new PgCacheService(cacheRepo);
-        PgCounterService counterService = new PgCounterService(counterRepo);
-        PgLockService lockService = new PgLockService(lockRepo);
+        PgCacheService cacheService = new PgCacheService(cacheRepo, metrics);
+        PgCounterService counterService = new PgCounterService(counterRepo, metrics);
+        PgLockService lockService = new PgLockService(lockRepo, metrics);
 
         PgScanRepository scanRepo = new PgScanRepository(pool, schemaName);
         PgScanService scanService = new PgScanService(scanRepo);
+
+        PgAdminRepository adminRepo = new PgAdminRepository(pool, schemaName);
+        PgAdminService adminService = new PgAdminService(adminRepo, metrics);
 
         PgPubSubRepository pubSubRepo = new PgPubSubRepository(pool, storeConfig);
         PgConnectOptions connectOpts = this.options.connectOptions();
@@ -80,7 +88,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
                 counterService,
                 lockService,
                 scanService,
-                pubSubService != null ? pubSubService : NotImplementedStubs.pubSubService()
+                pubSubService != null ? pubSubService : NotImplementedStubs.pubSubService(),
+                adminService
         );
     }
 

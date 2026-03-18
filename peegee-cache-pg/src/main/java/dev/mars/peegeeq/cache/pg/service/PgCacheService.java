@@ -3,6 +3,7 @@ package dev.mars.peegeeq.cache.pg.service;
 import dev.mars.peegeeq.cache.api.cache.CacheService;
 import dev.mars.peegeeq.cache.api.exception.CacheException;
 import dev.mars.peegeeq.cache.api.exception.CacheStoreException;
+import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
 import dev.mars.peegeeq.cache.api.model.CacheEntry;
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
@@ -25,14 +26,20 @@ import java.util.Optional;
 public final class PgCacheService implements CacheService {
 
     private final PgCacheRepository repository;
+    private final CacheMetrics metrics;
 
-    public PgCacheService(PgCacheRepository repository) {
+    public PgCacheService(PgCacheRepository repository, CacheMetrics metrics) {
         this.repository = CoreValidation.requireNonNull(repository, "repository");
+        this.metrics = CoreValidation.requireNonNull(metrics, "metrics");
     }
 
     @Override
     public Future<Optional<CacheEntry>> get(CacheKey key) {
-        return wrapStoreFailure("get", repository.get(key));
+        return wrapStoreFailure("get", repository.get(key)
+                .map(entry -> {
+                    metrics.recordCacheGet(entry.isPresent());
+                    return entry;
+                }));
     }
 
     @Override
@@ -41,6 +48,7 @@ public final class PgCacheService implements CacheService {
         for (CacheKey key : keys) {
             chain = chain.compose(map -> repository.get(key)
                     .map(value -> {
+                        metrics.recordCacheGet(value.isPresent());
                         map.put(key, value);
                         return map;
                     }));
@@ -50,7 +58,11 @@ public final class PgCacheService implements CacheService {
 
     @Override
     public Future<CacheSetResult> set(CacheSetRequest request) {
-        return wrapStoreFailure("set", repository.set(request));
+        return wrapStoreFailure("set", repository.set(request)
+                .map(result -> {
+                    metrics.recordCacheSet(result.applied());
+                    return result;
+                }));
     }
 
     @Override
@@ -59,6 +71,7 @@ public final class PgCacheService implements CacheService {
         for (CacheSetRequest request : requests) {
             chain = chain.compose(map -> repository.set(request)
                     .map(result -> {
+                        metrics.recordCacheSet(result.applied());
                         map.put(request.key(), result);
                         return map;
                     }));
@@ -68,7 +81,11 @@ public final class PgCacheService implements CacheService {
 
     @Override
     public Future<Boolean> delete(CacheKey key) {
-        return wrapStoreFailure("delete", repository.delete(key));
+        return wrapStoreFailure("delete", repository.delete(key)
+                .map(deleted -> {
+                    if (deleted) metrics.recordCacheDelete();
+                    return deleted;
+                }));
     }
 
     @Override
@@ -76,7 +93,10 @@ public final class PgCacheService implements CacheService {
         Future<Long> chain = Future.succeededFuture(0L);
         for (CacheKey key : keys) {
             chain = chain.compose(count -> repository.delete(key)
-                    .map(deleted -> deleted ? count + 1 : count));
+                    .map(deleted -> {
+                        if (deleted) metrics.recordCacheDelete();
+                        return deleted ? count + 1 : count;
+                    }));
         }
         return wrapStoreFailure("deleteMany", chain);
     }

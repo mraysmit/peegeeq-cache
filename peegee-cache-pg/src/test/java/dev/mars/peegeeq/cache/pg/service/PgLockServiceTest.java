@@ -33,7 +33,7 @@ class PgLockServiceTest {
     static void startContainer(Vertx vertx) throws Exception {
         pg.start(vertx);
         pool = pg.createPool(vertx);
-        service = new PgLockService(new PgLockRepository(pool, "peegee_cache"));
+        service = new PgLockService(new PgLockRepository(pool, "peegee_cache"), new dev.mars.peegeeq.cache.core.metrics.CacheMetrics());
     }
 
     @AfterAll

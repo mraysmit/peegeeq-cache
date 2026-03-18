@@ -1,5 +1,6 @@
 package dev.mars.peegeeq.cache.pg;
 
+import dev.mars.peegeeq.cache.api.admin.AdminService;
 import dev.mars.peegeeq.cache.api.cache.CacheService;
 import dev.mars.peegeeq.cache.api.counter.CounterService;
 import dev.mars.peegeeq.cache.api.lock.LockService;
@@ -8,12 +9,14 @@ import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheSetResult;
 import dev.mars.peegeeq.cache.api.model.CounterOptions;
+import dev.mars.peegeeq.cache.api.model.EntryStats;
 import dev.mars.peegeeq.cache.api.model.LockAcquireRequest;
 import dev.mars.peegeeq.cache.api.model.LockAcquireResult;
 import dev.mars.peegeeq.cache.api.model.LockKey;
 import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
 import dev.mars.peegeeq.cache.api.model.LockRenewRequest;
 import dev.mars.peegeeq.cache.api.model.LockState;
+import dev.mars.peegeeq.cache.api.model.MetricsSnapshot;
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.api.model.PubSubMessage;
 import dev.mars.peegeeq.cache.api.model.ScanRequest;
@@ -41,16 +44,18 @@ class PgPeeGeeCacheTest {
     private static final LockService LOCKS = new NoopLockService();
     private static final ScanService SCAN = new NoopScanService();
     private static final PubSubService PUBSUB = new NoopPubSubService();
+    private static final AdminService ADMIN = new NoopAdminService();
 
     @Test
     void facadeReturnsTheServicesItWasConstructedWith() {
-        PgPeeGeeCache cache = new PgPeeGeeCache(CACHE, COUNTERS, LOCKS, SCAN, PUBSUB);
+        PgPeeGeeCache cache = new PgPeeGeeCache(CACHE, COUNTERS, LOCKS, SCAN, PUBSUB, ADMIN);
 
         assertSame(CACHE, cache.cache());
         assertSame(COUNTERS, cache.counters());
         assertSame(LOCKS, cache.locks());
         assertSame(SCAN, cache.scan());
         assertSame(PUBSUB, cache.pubSub());
+        assertSame(ADMIN, cache.admin());
     }
 
     private static final class NoopScanService implements ScanService {
@@ -205,6 +210,18 @@ class PgPeeGeeCacheTest {
         @Override
         public Future<Subscription> subscribe(String channel, Consumer<PubSubMessage> handler) {
             return Future.failedFuture(new UnsupportedOperationException("not implemented"));
+        }
+    }
+
+    private static final class NoopAdminService implements AdminService {
+        @Override
+        public Future<EntryStats> entryStats(String namespace) {
+            return Future.succeededFuture(new EntryStats(namespace, 0, 0, 0));
+        }
+
+        @Override
+        public MetricsSnapshot metrics() {
+            return MetricsSnapshot.empty();
         }
     }
 }

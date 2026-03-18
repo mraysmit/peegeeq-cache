@@ -3,6 +3,7 @@ package dev.mars.peegeeq.cache.pg.service;
 import dev.mars.peegeeq.cache.api.counter.CounterService;
 import dev.mars.peegeeq.cache.api.exception.CacheException;
 import dev.mars.peegeeq.cache.api.exception.CacheStoreException;
+import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CounterOptions;
 import dev.mars.peegeeq.cache.api.model.TtlResult;
@@ -21,9 +22,11 @@ public final class PgCounterService implements CounterService {
     private static final CounterOptions DEFAULTS = CounterOptions.defaults();
 
     private final PgCounterRepository repository;
+    private final CacheMetrics metrics;
 
-    public PgCounterService(PgCounterRepository repository) {
+    public PgCounterService(PgCounterRepository repository, CacheMetrics metrics) {
         this.repository = CoreValidation.requireNonNull(repository, "repository");
+        this.metrics = CoreValidation.requireNonNull(metrics, "metrics");
     }
 
     @Override
@@ -33,7 +36,11 @@ public final class PgCounterService implements CounterService {
 
     @Override
     public Future<Long> incrementBy(CacheKey key, long delta) {
-        return wrapStoreFailure("incrementBy", repository.increment(key, delta, DEFAULTS));
+        return wrapStoreFailure("incrementBy", repository.increment(key, delta, DEFAULTS)
+                .map(result -> {
+                    metrics.recordCounterIncrement();
+                    return result;
+                }));
     }
 
     @Override
@@ -46,7 +53,11 @@ public final class PgCounterService implements CounterService {
         if (delta < 0) {
             return Future.failedFuture(new IllegalArgumentException("delta must be >= 0"));
         }
-        return wrapStoreFailure("decrementBy", repository.increment(key, -delta, DEFAULTS));
+        return wrapStoreFailure("decrementBy", repository.increment(key, -delta, DEFAULTS)
+                .map(result -> {
+                    metrics.recordCounterIncrement();
+                    return result;
+                }));
     }
 
     @Override
@@ -58,7 +69,11 @@ public final class PgCounterService implements CounterService {
     public Future<Long> setValue(CacheKey key, long value, CounterOptions options) {
         try {
             CoreValidation.requireNonNull(options, "options");
-            return wrapStoreFailure("setValue", repository.setValue(key, value, options));
+            return wrapStoreFailure("setValue", repository.setValue(key, value, options)
+                    .map(result -> {
+                        metrics.recordCounterSet();
+                        return result;
+                    }));
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
         }
@@ -86,7 +101,11 @@ public final class PgCounterService implements CounterService {
 
     @Override
     public Future<Boolean> delete(CacheKey key) {
-        return wrapStoreFailure("delete", repository.delete(key));
+        return wrapStoreFailure("delete", repository.delete(key)
+                .map(deleted -> {
+                    if (deleted) metrics.recordCounterDelete();
+                    return deleted;
+                }));
     }
 
     private static <T> Future<T> wrapStoreFailure(String operation, Future<T> future) {

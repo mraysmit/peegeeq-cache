@@ -4,6 +4,7 @@ import dev.mars.peegeeq.cache.api.exception.CacheException;
 import dev.mars.peegeeq.cache.api.exception.CacheStoreException;
 import dev.mars.peegeeq.cache.api.exception.LockNotHeldException;
 import dev.mars.peegeeq.cache.api.lock.LockService;
+import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
 import dev.mars.peegeeq.cache.api.model.LockAcquireRequest;
 import dev.mars.peegeeq.cache.api.model.LockAcquireResult;
 import dev.mars.peegeeq.cache.api.model.LockKey;
@@ -22,9 +23,11 @@ import java.util.Optional;
 public final class PgLockService implements LockService {
 
     private final PgLockRepository repository;
+    private final CacheMetrics metrics;
 
-    public PgLockService(PgLockRepository repository) {
+    public PgLockService(PgLockRepository repository, CacheMetrics metrics) {
         this.repository = CoreValidation.requireNonNull(repository, "repository");
+        this.metrics = CoreValidation.requireNonNull(metrics, "metrics");
     }
 
     @Override
@@ -34,7 +37,11 @@ public final class PgLockService implements LockService {
             CoreValidation.requireNonNull(request.key(), "key");
             CoreValidation.requireNonBlank(request.ownerToken(), "ownerToken");
             CoreValidation.requirePositiveDuration(request.leaseTtl(), "leaseTtl");
-            return wrapStoreFailure("acquire", repository.acquire(request));
+            return wrapStoreFailure("acquire", repository.acquire(request)
+                    .map(result -> {
+                        metrics.recordLockAcquire(result.acquired());
+                        return result;
+                    }));
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
         }
@@ -49,9 +56,12 @@ public final class PgLockService implements LockService {
             CoreValidation.requirePositiveDuration(request.leaseTtl(), "leaseTtl");
 
             Future<Boolean> chained = repository.renew(request)
-                    .compose(renewed -> renewed
-                            ? Future.succeededFuture(true)
-                            : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for renew")));
+                    .compose(renewed -> {
+                        if (renewed) metrics.recordLockRenew();
+                        return renewed
+                                ? Future.succeededFuture(true)
+                                : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for renew"));
+                    });
             return wrapStoreFailure("renew", chained);
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);
@@ -66,9 +76,12 @@ public final class PgLockService implements LockService {
             CoreValidation.requireNonBlank(request.ownerToken(), "ownerToken");
 
             Future<Boolean> chained = repository.release(request)
-                    .compose(released -> released
-                            ? Future.succeededFuture(true)
-                            : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for release")));
+                    .compose(released -> {
+                        if (released) metrics.recordLockRelease();
+                        return released
+                                ? Future.succeededFuture(true)
+                                : Future.failedFuture(new LockNotHeldException("Lock is not held by owner for release"));
+                    });
             return wrapStoreFailure("release", chained);
         } catch (IllegalArgumentException ex) {
             return Future.failedFuture(ex);

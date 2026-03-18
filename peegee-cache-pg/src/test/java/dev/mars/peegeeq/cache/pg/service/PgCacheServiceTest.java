@@ -37,7 +37,7 @@ class PgCacheServiceTest {
     static void startContainer(Vertx vertx) throws Exception {
         pg.start(vertx);
         pool = pg.createPool(vertx);
-        service = new PgCacheService(new PgCacheRepository(pool, "peegee_cache"));
+        service = new PgCacheService(new PgCacheRepository(pool, "peegee_cache"), new dev.mars.peegeeq.cache.core.metrics.CacheMetrics());
     }
 
     @AfterAll
