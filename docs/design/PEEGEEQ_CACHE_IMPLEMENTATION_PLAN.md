@@ -440,10 +440,65 @@ Scope candidates:
 - delayed jobs
 - rate limiting
 - keyspace notifications
+- write-behind write buffering for `CacheService` (see section 12a of the design document)
 
 Explicit non-goal unless strategy changes:
 
 - full Redis protocol compatibility
+
+### Phase 8.1: Write-behind write buffering
+
+**Reference design:** `PEEGEEQ_CACHE_DESIGN.md` section 12a — read the full section before starting implementation.
+
+**Prerequisite:** Phase 1 (Phases 0–7) is stable and tests are green on `master`.
+
+**Module placement:**
+
+- `WriteBehindConfig` → `peegee-cache-runtime` (`dev.mars.peegeeq.cache.runtime.config`)
+- `PendingWrite`, `WriteBehindBuffer` → `peegee-cache-core` (`dev.mars.peegeeq.cache.core.writebehind`) — no PostgreSQL dependency; pure unit-testable logic
+- `WriteBehindFlusher`, `WriteBehindCacheService` → `peegee-cache-runtime` (`dev.mars.peegeeq.cache.runtime.writebehind`) — uses `CacheService` interface, not PostgreSQL directly
+- `PgPeeGeeCacheManager` wiring → `peegee-cache-runtime`
+
+**TDD implementation steps (strict order — do not skip ahead):**
+
+1. **`WriteBehindConfig` record and validation** (`peegee-cache-runtime`)
+   - Failing tests: valid config constructs correctly; invalid `flushInterval`, `maxBufferSize`, `flushBatchSize` (out of range), and `maxRetries` (negative) are all rejected at construction time
+   - Implement: record with compact constructor validation; `disabled()` factory
+   - Tests in: `WriteBehindConfigTest` (pure unit, no DB)
+
+2. **`PendingWrite` model and `WriteBehindBuffer`** (`peegee-cache-core`)
+   - Failing tests: set→set coalesces to last; set→delete coalesces to DELETE marker; delete→set coalesces to SET; bounded capacity returns `overflow = true` when `maxBufferSize` is reached; `drain()` returns all entries and empties the buffer
+   - Implement: `PendingWrite` record; `WriteBehindBuffer` using `ConcurrentHashMap`
+   - Tests in: `WriteBehindBufferTest` (pure unit, no DB)
+
+3. **`WriteBehindFlusher` with test-double `CacheService`** (`peegee-cache-runtime`)
+   - Failing tests: flush calls `deleteMany` before `setMany`; flush retries up to `maxRetries` on failure; entries with elapsed TTL are dropped without calling `setMany`; `drain()` flushes all remaining entries on shutdown
+   - Implement: `WriteBehindFlusher` using a Vert.x periodic timer
+   - Tests in: `WriteBehindFlusherTest` (unit tests with `CacheService` test double, no DB)
+
+4. **`WriteBehindCacheService` decorator** (`peegee-cache-runtime`)
+   - Failing tests: `set`/`setMany`/`delete`/`deleteMany` accept into buffer and return succeeded `Future`; `get`/`exists`/`ttl`/`expire`/`persist`/`touch` delegate to underlying `CacheService`, bypassing buffer
+   - Implement: `WriteBehindCacheService implements CacheService`
+   - Tests in: `WriteBehindCacheServiceTest` (unit tests with `CacheService` test double)
+
+5. **Integration test: flush delivers to PostgreSQL** (`peegee-cache-pg` or `peegee-cache-runtime`)
+   - Failing tests: `set` accepted into buffer; after flush, `get` from PostgreSQL returns correct value; computed TTL adjusted for buffer dwell time; `delete` removes row after flush
+   - Testcontainers integration test using `WriteBehindCacheService` wrapping `PgCacheService`
+   - Tests in: `WriteBehindIntegrationTest`
+
+6. **Lifecycle wiring in `PgPeeGeeCacheManager`**
+   - Failing tests: manager lifecycle test — write-behind flusher starts after pool is ready; `isWriteBehindRunning()` returns `true` when started; `stopReactive()` drains buffer before pool close; `isWriteBehindRunning()` returns `false` after stop
+   - Implement: `startReactive()`/`stopReactive()` changes; `isWriteBehindRunning()` probe; conditional wiring based on `WriteBehindConfig.enabled`
+   - Tests in: update `PeeGeeCachesLifecycleTest`
+
+**Exit criteria for Phase 8.1:**
+
+- all 6 implementation steps have passing tests
+- `WriteBehindBuffer` coalescing is verified under concurrent access (two threads writing same key)
+- integration test confirms TTL adjustment is correct when flush is delayed
+- `PgPeeGeeCacheManager` lifecycle test confirms drain on `stopReactive()`
+- `PeeGeeCacheConfig.writeBehind` is documented in the runtime config
+- `WriteBehindConfig.disabled()` is the default — existing behaviour is unchanged when write-behind is not configured
 
 ## 3.1 Implementation tracking
 

@@ -302,6 +302,7 @@ These are the features that provide real value and map well to PostgreSQL:
 | Redis persistence model | RDB/AOF semantics | Low | Very High | Poor | No | PostgreSQL durability replaces this |
 | In-memory eviction policies | LRU/LFU/random eviction | Medium | High | Fair | V2 partial | Worth doing later |
 | Replication/follower reads | Read replicas style scaling | Medium | High | Good | Later | Adds consistency complexity |
+| Write-behind buffering | In-memory write buffer with async PostgreSQL flush | Medium | High | Good | V2 | Reduces write pressure; trades durability for throughput; CacheService writes only |
 
 ### V1 core shortlist
 
@@ -330,6 +331,7 @@ These are the features that provide real value and map well to PostgreSQL:
 - keyspace notifications
 - compare-and-set richer APIs
 - partial eviction policy support
+- write-behind write buffering for `CacheService`
 
 ### Things explicitly rejected for Phase 1
 
@@ -339,6 +341,7 @@ These are the features that provide real value and map well to PostgreSQL:
 - Lua scripting
 - full RESP compatibility
 - cluster semantics
+- write-behind buffering (deferred to V2; see section 12a)
 
 ---
 
@@ -791,7 +794,278 @@ The correct "clustering" answer for peegee-cache is: **let PostgreSQL handle it*
 
 ---
 
-# Part II — Module and Schema Design
+## 12a. Write-Behind Write Buffering
+
+Write-behind buffering is a V2 feature. It is designed here in full so that the implementation plan, configuration model, and API surface can be locked down before coding begins.
+
+### 12a.1 Purpose and scope
+
+Write-behind buffering allows `CacheService` write operations (`set`, `setMany`, `delete`, `deleteMany`) to return immediately to the caller after being placed in an in-memory buffer. A background flusher drains the buffer to PostgreSQL asynchronously in batches.
+
+**Primary motivation:**
+
+- reduces per-operation write latency for callers in high-frequency set/delete workloads
+- reduces PostgreSQL write pressure by coalescing multiple mutations to the same key into a single database operation
+- is especially effective on UNLOGGED `cache_entries` tables where write throughput is already elevated
+
+**Contrast with synchronous write-through (the current model):**
+
+In write-through mode (Phase 1 default), every `set` or `delete` call issues SQL immediately and the `Future` resolves only when PostgreSQL confirms. In write-behind mode, the `Future` resolves as soon as the write is accepted into the buffer. PostgreSQL is updated asynchronously and the caller has no visibility into the commit result after acknowledgement.
+
+**Scope boundary:**
+
+Write-behind applies exclusively to `CacheService`. It MUST NOT be applied to `CounterService` or `LockService`. Counters and locks are coordination primitives where correctness depends on synchronous, transactionally visible writes. Buffering them would silently break rate limiting, distributed locking, and any consumer relying on counter atomicity.
+
+### 12a.2 Buffer design
+
+The in-memory buffer is a `LinkedHashMap`-style structure keyed by composite `(namespace, cache_key)`. Only the **most recent** write per key is kept — last-write-wins coalescing. This means:
+
+- if a key is set five times before a flush, only the fifth value is written to PostgreSQL
+- if a key is set and then deleted before a flush, only the delete is written — intermediate sets are discarded
+- ordering between different keys is not guaranteed within a single flush batch
+
+**Pending write model:**
+
+Each entry in the buffer holds a `PendingWrite` record:
+
+```
+PendingWrite(
+    namespace,
+    cache_key,
+    operation,       // SET or DELETE
+    value,           // null for DELETE
+    acceptedAtNanos  // JVM clock at the moment the caller's write was accepted
+)
+```
+
+**`acceptedAtNanos` is used for TTL accounting.** When the flusher finally writes to PostgreSQL, the remaining TTL is computed as `originalTtl - (currentTimeNanos - acceptedAtNanos)`. If the remaining TTL has already elapsed by flush time, the write is silently dropped — the key has logically expired before it was even persisted.
+
+**Flush triggers:**
+
+The buffer flushes when either condition is met:
+
+1. The periodic timer fires (configurable `flushIntervalMillis`, default 500 ms)
+2. The buffer reaches `maxBufferSize` entries (default 10 000)
+
+Condition 2 triggers an immediate synchronous flush of up to `flushBatchSize` entries before the accepting thread returns, to shed buffer pressure.
+
+**Capacity overflow fallback:**
+
+When the buffer is at `maxBufferSize` and a flush cannot keep up, incoming writes fall back to **synchronous write-through** for those individual operations. They are not rejected and the `Future` does not fail. Overflow is silent from the caller's perspective but must be recorded in metrics (`writeBehindOverflowCount`).
+
+### 12a.3 Flush mechanism
+
+The `WriteBehindFlusher` is a background component that owns a Vert.x periodic timer. On each tick:
+
+1. Drain up to `flushBatchSize` entries from the head of the buffer into a snapshot
+2. Partition the snapshot into two groups: `SET` operations and `DELETE` operations
+3. Issue `setMany(List<CacheSetRequest>)` for the `SET` group via the existing `PgCacheRepository`/`PgCacheService` SQL path
+4. Issue `deleteMany(List<CacheKey>)` for the `DELETE` group via the same path
+5. On success: remove the flushed entries from the buffer
+6. On failure: see section 12a.5
+
+Both `setMany` and `deleteMany` are already part of the V1 `CacheService` contract and have corresponding batch SQL in `PgCacheRepository`. The flusher reuses those paths rather than introducing new SQL.
+
+**Flush order within a batch:**
+
+All `DELETE` operations in a batch are issued before `SET` operations. This preserves the logical intent when a key was first set and then deleted within the same flush window — the delete wins.
+
+### 12a.4 Read-after-write semantics
+
+Two options exist for `get` and `exists` calls when write-behind is enabled:
+
+**Option A — Buffer-participates-in-reads (strong read-after-write):**
+`get` and `exists` consult the buffer first before issuing SQL. If the key is in the buffer with a pending `SET`, return the buffered value. If the key is in the buffer with a pending `DELETE`, return empty. This gives the caller fully consistent read-after-write semantics at the cost of coupling the read path to the buffer.
+
+**Option B — PostgreSQL-only reads (acknowledged stale window):**
+`get` and `exists` always query PostgreSQL directly, bypassing the buffer. Callers may observe a stale state for up to one flush interval after a write.
+
+**Recommendation for V2:** implement Option B. It is simpler, requires no lock coordination between the flush path and the read path, and is honest with callers that write-behind mode explicitly trades read-after-write consistency for throughput. The TTL window for staleness is bounded by `flushIntervalMillis`.
+
+Option A can be added later as a V3 enhancement if strong read-after-write is needed without switching back to write-through mode.
+
+### 12a.5 Error handling
+
+Write failures in write-behind mode are **late and asynchronous**. The caller was already told "success" when the write was accepted into the buffer. This means:
+
+- failed flush operations MUST NOT fail any caller `Future` — those futures have already completed
+- flush failures must be surfaced through the metrics layer (`writeBehindFlushFailureCount`) and the lifecycle event log
+- the flusher retries failed entries up to `maxRetries` times (default 3) with a short fixed delay between attempts
+- entries that exceed `maxRetries` are discarded with an ERROR-level log and a metrics increment (`writeBehindDiscardCount`)
+- no dead-letter table is written in Phase 1; if durable error capture is needed it is a V3 concern
+
+The lifecycle contract is: data acknowledged by write-behind mode is **best-effort persistent**. Callers that need guaranteed durability must use write-through mode (the default) or accept the loss window.
+
+### 12a.6 Constraints
+
+The following constraints are non-negotiable and must be enforced in the implementation:
+
+1. **`LockService` and `CounterService` MUST NOT be buffered.** Only `CacheService` write operations are eligible.
+2. **UNLOGGED + write-behind is explicitly valid.** Both independently reduce durability guarantees for cache data; combining them is intentional for maximum write throughput on reconstructable entries.
+3. **TTL clock starts at buffer-entry time, not flush time.** The flusher adjusts `expires_at` to account for time elapsed in the buffer. Entries whose TTL expires before flush are silently dropped.
+4. **Flush interval must be configured significantly smaller than the minimum TTL of buffered keys.** A flush interval of 500 ms against keys with a TTL of 100 ms is an invalid configuration. The bootstrap options must validate and reject `flushIntervalMillis > minimumTtlMillis` when a minimum TTL is available.
+5. **Shutdown must drain the buffer.** `stopReactive()` must perform a best-effort synchronous drain of all pending writes before closing the pool. Remaining entries that cannot be flushed before a configurable shutdown drain timeout are discarded with a WARNING log.
+6. **Concurrent writes to the same key from different callers must not corrupt buffer state.** The buffer must be thread-safe; `ConcurrentHashMap` is the minimum acceptable implementation.
+
+### 12a.7 API surface
+
+Write-behind does not introduce new public service interfaces. The `CacheService` contract is unchanged. Write-behind is a **transparent decorator** that wraps `CacheService`.
+
+**Internal classes (not public API):**
+
+```java
+// peegee-cache-runtime or peegee-cache-core
+enum WriteBehindMode {
+    DISABLED,
+    ASYNC_FLUSH
+}
+
+record PendingWrite(
+    String namespace,
+    String cacheKey,
+    WriteBehindMode.Operation operation,  // SET or DELETE
+    CacheSetRequest request,              // null for DELETE
+    long acceptedAtNanos
+) {}
+
+class WriteBehindBuffer { ... }      // bounded ConcurrentHashMap, coalescing logic
+class WriteBehindFlusher { ... }     // Vert.x timer, batch flush logic, retry
+class WriteBehindCacheService implements CacheService { ... }   // decorator
+```
+
+**`WriteBehindCacheService` behaviour contract:**
+
+- `set` / `setMany`: accept into buffer, return succeeded `Future` immediately
+- `delete` / `deleteMany`: accept into buffer as DELETE marker, return succeeded `Future` immediately
+- `get` / `getMany` / `exists` / `ttl` / `expire` / `persist` / `touch`: delegate directly to the underlying `CacheService` (PostgreSQL), bypassing the buffer (Option B semantics from 12a.4)
+
+### 12a.8 Configuration
+
+A dedicated `WriteBehindConfig` record holds all write-behind parameters:
+
+```java
+package dev.mars.peegeeq.cache.runtime.config;
+
+import java.time.Duration;
+
+public record WriteBehindConfig(
+        boolean enabled,
+        Duration flushInterval,          // default: Duration.ofMillis(500)
+        int maxBufferSize,               // default: 10_000 entries
+        int flushBatchSize,              // default: 500 entries per flush
+        int maxRetries,                  // default: 3 attempts on flush failure
+        Duration shutdownDrainTimeout    // default: Duration.ofSeconds(5)
+) {
+    public static WriteBehindConfig disabled() {
+        return new WriteBehindConfig(false, Duration.ofMillis(500), 10_000, 500, 3, Duration.ofSeconds(5));
+    }
+}
+```
+
+`WriteBehindConfig` is a field in `PeeGeeCacheConfig` (see section 19). When `enabled = false`, the `WriteBehindCacheService` decorator is not instantiated and all `CacheService` calls go directly to `PgCacheService`.
+
+**Validation rules at bootstrap:**
+
+- `flushInterval` must be positive and non-null
+- `maxBufferSize` must be >= 100
+- `flushBatchSize` must be >= 1 and <= `maxBufferSize`
+- `maxRetries` must be >= 0
+- `shutdownDrainTimeout` must be positive and non-null
+
+### 12a.9 Lifecycle integration
+
+`WriteBehindFlusher` is a background component owned by `PgPeeGeeCacheManager`, parallel in lifecycle status to the expiry sweeper.
+
+**Startup sequence (inside `startReactive()`):**
+
+1. If `WriteBehindConfig.enabled = false`, skip entirely
+2. Create `WriteBehindBuffer` with config parameters
+3. Create `WriteBehindCacheService` wrapping `PgCacheService` with the buffer
+4. Register the `WriteBehindFlusher` Vert.x periodic timer
+5. Replace the `CacheService` reference inside `PgPeeGeeCache` with the `WriteBehindCacheService`
+
+**Shutdown sequence (inside `stopReactive()`):**
+
+1. Cancel the periodic timer
+2. Perform drain flush: issue synchronous `setMany`/`deleteMany` for all remaining buffer entries, respecting `shutdownDrainTimeout`
+3. Log a WARNING for any entries still in the buffer after the drain timeout elapses
+4. Proceed with pool close
+
+**`isWriteBehindRunning()` probe** — a lifecycle probe method parallel to `isListenerRunning()` and `isSweeperRunning()` — reports whether the flusher timer is active.
+
+### 12a.10 Tradeoffs
+
+**Advantages:**
+
+- reduces per-operation write latency; callers are not blocked on PostgreSQL round-trips
+- coalescing eliminates redundant writes for rapidly mutating keys (e.g. session refreshes)
+- natural fit with UNLOGGED `cache_entries` — both reduce durability; combining them is coherent
+- batch flushes improve PostgreSQL throughput vs individual row inserts
+- no new infrastructure — uses existing `setMany`/`deleteMany` SQL paths
+
+**Disadvantages:**
+
+- **data loss on crash**: any writes in the buffer but not yet flushed are lost if the JVM crashes or is killed without a clean shutdown
+- **stale reads**: with Option B semantics, `get` may return data that is one flush interval behind
+- **async error visibility**: flush failures are not visible to the original caller; they surface only through metrics and logs
+- **buffer pressure**: a slow PostgreSQL instance can cause buffer growth and overflow fallback
+- **TTL complexity**: TTL must be adjusted for elapsed buffer time; misconfigured short TTLs with long flush intervals produce silent drops
+
+**When to prefer write-through (the default):**
+
+- when the cache participates in correctness-critical flows (even if not locks or counters)
+- when the caller needs to know immediately if a write failed
+- when key TTLs are short relative to the expected flush interval
+- when crash-loss of cache state is not acceptable
+
+**When write-behind is the right choice:**
+
+- high-frequency session refresh or activity tracking where slight staleness is acceptable
+- write-heavy hot namespaces with rapidly changing values
+- UNLOGGED table deployments where cache data is already explicitly non-durable
+- systems where reducing PostgreSQL write IOPS is a concrete operational requirement
+
+### 12a.11 TDD implementation order
+
+Strict TDD order for V2 implementation. Each step must pass before the next begins.
+
+1. **`WriteBehindConfig` record and validation**
+   - Write unit tests for valid and invalid config combinations
+   - Implement the record with `disabled()` factory and validation logic
+   - No database required
+
+2. **`PendingWrite` model and `WriteBehindBuffer`**
+   - Write unit tests for coalescing: set→set coalesces to last, set→delete coalesces to DELETE, delete→set coalesces to SET
+   - Test bounded capacity: overflow triggers synchronous fallback flag
+   - Test drain: drain returns all pending entries and clears the buffer
+   - Implement `WriteBehindBuffer` using `ConcurrentHashMap`
+   - No database required
+
+3. **`WriteBehindFlusher` with a fake `CacheService`**
+   - Write unit tests verifying flush calls `setMany` and `deleteMany` on the delegate in correct order (DELETEs before SETs)
+   - Test retry behaviour on simulated failure
+   - Test TTL drop: entries whose computed remaining TTL ≤ 0 are not passed to `setMany`
+   - Test shutdown drain
+   - Use a test double for `CacheService` (pure interface, no Testcontainers yet)
+
+4. **`WriteBehindCacheService` decorator**
+   - Write unit tests verifying that `set`/`delete` accept into the buffer
+   - Verify that `get`/`exists`/`ttl` delegate directly to the underlying service
+   - Use a test double for the underlying `CacheService`
+
+5. **Integration test: flush delivers writes to PostgreSQL**
+   - Testcontainers integration test
+   - Call `set` on `WriteBehindCacheService`, assert buffer accepted
+   - Wait for flush (or trigger manual flush), then query PostgreSQL directly
+   - Verify correct value was written with correct TTL adjustment
+   - Verify `delete` removes the row after flush
+
+6. **Lifecycle wiring in `PgPeeGeeCacheManager`**
+   - Update `startReactive()` / `stopReactive()` for write-behind lifecycle
+   - Add `isWriteBehindRunning()` probe
+   - Integration test: manager lifecycle test confirms write-behind starts, flushes, and drains on stop
+
+---
 
 ---
 
@@ -1965,8 +2239,31 @@ public record PeeGeeCacheConfig(
         boolean enablePubSub,
         boolean enableExpirySweeper,
         boolean sampleReadMetrics,
-        int readMetricSampleRate
+        int readMetricSampleRate,
+        WriteBehindConfig writeBehind     // null or WriteBehindConfig.disabled() = write-through (default)
 ) {}
+```
+
+```java
+package dev.mars.peegeeq.cache.runtime.config;
+
+import java.time.Duration;
+
+public record WriteBehindConfig(
+        boolean enabled,
+        Duration flushInterval,          // default: Duration.ofMillis(500)
+        int maxBufferSize,               // default: 10_000 entries
+        int flushBatchSize,              // default: 500 entries per flush
+        int maxRetries,                  // default: 3 attempts on flush failure
+        Duration shutdownDrainTimeout    // default: Duration.ofSeconds(5)
+) {
+    public static WriteBehindConfig disabled() {
+        return new WriteBehindConfig(false, Duration.ofMillis(500), 10_000, 500, 3, Duration.ofSeconds(5));
+    }
+}
+```
+
+**Write-behind is disabled by default.** Callers that want write-behind must explicitly construct a `WriteBehindConfig` with `enabled = true`. See section 12a for the full design, tradeoffs, and constraints before enabling this mode.
 ```
 
 ### PostgreSQL-specific config
