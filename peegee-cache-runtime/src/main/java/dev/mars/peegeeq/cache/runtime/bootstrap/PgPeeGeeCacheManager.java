@@ -4,7 +4,7 @@ import dev.mars.peegeeq.cache.api.PeeGeeCache;
 import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
 import dev.mars.peegeeq.cache.pg.PgPeeGeeCache;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
-import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
+import dev.mars.peegeeq.cache.pg.bootstrap.PgSchemaMigrator;
 import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
 import dev.mars.peegeeq.cache.pg.repository.PgAdminRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgCacheRepository;
@@ -95,7 +95,7 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
                 counterService,
                 lockService,
                 scanService,
-                pubSubService != null ? pubSubService : NotImplementedStubs.pubSubService(),
+                pubSubService != null ? pubSubService : NotImplementedStubs.pubSubService(this.metrics),
                 adminService
         );
     }
@@ -188,9 +188,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             return Future.succeededFuture();
         }
         return metrics.<Void>observe(CacheOperation.SCHEMA_BOOTSTRAP,
-                () -> pool.query(BootstrapSqlRenderer.loadForSchema(options.storeConfig().schemaName()))
-                        .execute().mapEmpty())
-                .onSuccess(ignored -> log.info("Applied bundled schema bootstrap (schema={})",
+                () -> new PgSchemaMigrator(pool, options.storeConfig().schemaName()).migrate())
+                .onSuccess(ignored -> log.info("Applied bundled schema migrations (schema={})",
                         options.storeConfig().schemaName()));
     }
 

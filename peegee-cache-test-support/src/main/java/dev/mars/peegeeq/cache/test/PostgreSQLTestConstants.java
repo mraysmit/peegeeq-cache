@@ -3,12 +3,18 @@ package dev.mars.peegeeq.cache.test;
 /** Stable PostgreSQL defaults shared by peegee-cache integration suites. */
 public final class PostgreSQLTestConstants {
 
-    public static final String POSTGRES_IMAGE = "postgres:18.3-alpine";
+    public static final String DEFAULT_POSTGRES_IMAGE = "postgres:18.3-alpine";
+    public static final String POSTGRES_IMAGE_PROPERTY = "peegeeq.test.postgres.image";
     public static final String DEFAULT_DATABASE_NAME = "testdb";
     public static final String DEFAULT_USERNAME = "test";
     public static final String DEFAULT_PASSWORD = "test";
 
     private PostgreSQLTestConstants() {
         throw new UnsupportedOperationException("Utility class");
+    }
+
+    /** Returns the Testcontainers image selected for this verification run. */
+    public static String postgresImage() {
+        return System.getProperty(POSTGRES_IMAGE_PROPERTY, DEFAULT_POSTGRES_IMAGE);
     }
 }

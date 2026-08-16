@@ -4,6 +4,8 @@ import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
 import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
 import dev.mars.peegeeq.cache.runtime.bootstrap.PeeGeeCacheBootstrapOptions;
 import dev.mars.peegeeq.cache.runtime.bootstrap.PeeGeeCaches;
+import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
+import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
@@ -63,16 +65,20 @@ final class ExampleRuntimeSupport {
     }
 
     static Pool createPool(Vertx vertx, PostgreSQLContainer container) {
-        PgConnectOptions connectOptions = new PgConnectOptions()
+        PgConnectOptions connectOptions = connectOptions(container);
+        log.info("Creating Vert.x SQL pool - host={} port={} database={} user={}",
+                connectOptions.getHost(), connectOptions.getPort(),
+                connectOptions.getDatabase(), connectOptions.getUser());
+        return Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(8));
+    }
+
+    static PgConnectOptions connectOptions(PostgreSQLContainer container) {
+        return new PgConnectOptions()
                 .setHost(container.getHost())
                 .setPort(container.getFirstMappedPort())
                 .setDatabase(DATABASE_NAME)
                 .setUser(USERNAME)
                 .setPassword(PASSWORD);
-        log.info("Creating Vert.x SQL pool - host={} port={} database={} user={}",
-                connectOptions.getHost(), connectOptions.getPort(),
-                connectOptions.getDatabase(), connectOptions.getUser());
-        return Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(8));
     }
 
     static void applyBootstrapSql(Vertx vertx, PostgreSQLContainer container) throws Exception {
@@ -106,7 +112,25 @@ final class ExampleRuntimeSupport {
         return manager;
     }
 
+    static PeeGeeCacheManager startConfiguredManager(
+            Vertx vertx, Pool pool, PostgreSQLContainer container) throws Exception {
+        PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
+                PeeGeeCacheConfig.defaults(), PgCacheStoreConfig.defaults(), connectOptions(container));
+        PeeGeeCacheManager manager = await(PeeGeeCaches.create(vertx, pool, options));
+        await(manager.startReactive());
+        return manager;
+    }
+
     static void runWithDefaultManager(Logger exampleLog, String exampleName, ExampleWork work) throws Exception {
+        runWithManager(exampleLog, exampleName, work, false);
+    }
+
+    static void runWithConfiguredManager(Logger exampleLog, String exampleName, ExampleWork work) throws Exception {
+        runWithManager(exampleLog, exampleName, work, true);
+    }
+
+    private static void runWithManager(Logger exampleLog, String exampleName, ExampleWork work,
+                                       boolean configurePubSub) throws Exception {
         Vertx vertx = Vertx.vertx();
         PostgreSQLContainer container = null;
         Pool pool = null;
@@ -118,7 +142,9 @@ final class ExampleRuntimeSupport {
             applyBootstrapSql(vertx, container);
             pool = createPool(vertx, container);
             exampleLog.info("Created PostgreSQL pool for example runtime");
-            manager = startDefaultManager(vertx, pool);
+            manager = configurePubSub
+                    ? startConfiguredManager(vertx, pool, container)
+                    : startDefaultManager(vertx, pool);
             exampleLog.info("Started peegee-cache manager");
             work.run(manager);
         } catch (Exception ex) {

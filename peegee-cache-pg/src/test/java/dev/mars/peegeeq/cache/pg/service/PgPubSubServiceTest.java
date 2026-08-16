@@ -250,6 +250,26 @@ class PgPubSubServiceTest {
     }
 
     @Test
+    void subscriberReceivesMessageOnChannelContainingSqlMetacharacters(Vertx vertx, VertxTestContext ctx)
+            throws Exception {
+        String channel = "orders\"; SELECT pg_sleep(10); --";
+        Promise<PubSubMessage> received = Promise.promise();
+
+        service.subscribe(channel, received::complete)
+                .compose(subscription -> delay(vertx, 200))
+                .compose(v -> service.publish(new PublishRequest(channel, "safe", "text/plain")))
+                .onFailure(ctx::failNow);
+
+        received.future().onComplete(ctx.succeeding(message -> ctx.verify(() -> {
+            assertEquals(channel, message.channel());
+            assertEquals("safe", message.payload());
+            ctx.completeNow();
+        })));
+
+        assertTrue(ctx.awaitCompletion(5, TimeUnit.SECONDS), "Test timed out");
+    }
+
+    @Test
     void reconnectsAndReplaysSubscriptionsAfterConnectionLoss(Vertx vertx, VertxTestContext ctx) throws Exception {
         Promise<PubSubMessage> received = Promise.promise();
 

@@ -4,7 +4,7 @@
 
 This document turns the design in `docs/design/PEEGEEQ_CACHE_DESIGN.md` into an implementation sequence.
 
-It is not a second design document. It is a delivery plan for building Phase 1 in a controlled order, with explicit boundaries between:
+It is not a second design document. It is the authoritative delivery and current-status plan for building Phase 1 in a controlled order, with explicit boundaries between:
 
 - `V1 Core`
 - remaining `V1`
@@ -77,12 +77,15 @@ Test discipline rules:
 - treat suspiciously fast or empty-success test runs as invalid until actual test execution is confirmed
 - use integration tests for database behavior instead of fabricating confidence with mocks
 
-## 2.3 No mocking and mandatory Testcontainers for database work
+## 2.3 No mocking frameworks and mandatory Testcontainers for database work
 
-For this project, mocking is prohibited for database-facing behavior.
+Mockito is prohibited everywhere in this project. Do not add Mockito dependencies, imports, extensions, agents, configuration, examples, or generated tests. Do not substitute another mocking framework to evade this rule.
+
+Purpose-built fakes or test doubles are allowed only where they exercise a pure, non-database boundary through its real public contract. They must remain small, explicit, and behavior-focused.
 
 Mandatory rules:
 
+- do not use mocking frameworks in unit or integration tests
 - do not mock PostgreSQL connections, pools, repositories, or SQL execution
 - do not substitute H2, HSQLDB, or in-memory databases for PostgreSQL behavior
 - do not skip database tests because Testcontainers is slower than mocks
@@ -143,7 +146,7 @@ Objective:
 Scope:
 
 - multi-module Maven parent
-- module boundaries for `api`, `core`, `pg`, `runtime`, `observability`, `test-support`, and `examples`
+- module boundaries for `api`, `core`, `pg`, `runtime`, `observability`, `test-support`, `benchmarks`, and `examples`
 - baseline Java and Vert.x version alignment
 
 Exit criteria:
@@ -189,7 +192,7 @@ Exit criteria:
 - the public async surface is consistently Vert.x 5.x `Future`-based
 Status: **COMPLETE**
 
-- 33 source files: 5 service interfaces, 4 enums, 3 validated records, 12 data records, 4 exception classes, 1 facade
+- 36 current source files, including 6 service interfaces, the subscription contract, public models and exceptions, and the `PeeGeeCache` facade
 - 34 unit tests (CacheKeyTest 8, CacheValueTest 13, LockKeyTest 7, ExceptionHierarchyTest 6)
 - `PeeGeeCacheManager` deferred to Phase 5 — its signature depends on config records that belong in the runtime bootstrap phase
 ### Phase 2: PostgreSQL schema and bootstrap
@@ -219,7 +222,7 @@ Exit criteria:
 
 Status: **COMPLETE**
 
-- single bootstrap resource: `db/bootstrap/V001__create_peegee_cache_schema.sql` (schema, 3 tables, 1 sequence, 5 indexes, and 8 supported SQL functions)
+- single bootstrap resource: `db/bootstrap/V001__create_peegee_cache_schema.sql` (schema, 3 domain tables, migration ledger, 1 sequence, 5 indexes, 8 supported SQL functions, and 3 stable read views)
 - 27 integration tests against real PostgreSQL via Testcontainers
 - all check constraints, primary keys, indexes, and sequence monotonicity verified
 
@@ -254,6 +257,8 @@ Exit criteria:
 - expiry-aware semantics are implemented with database-clock logic
 - lock semantics use owner token checks and database-derived lease expiry
 
+Status: **COMPLETE**
+
 ### Phase 4: Service implementations for V1 Core
 
 Objective:
@@ -278,6 +283,8 @@ Exit criteria:
 - `V1 Core` public interfaces are backed by working implementations
 - type and option validation is consistent
 - service behavior matches the design document for expiry, counters, and lock ownership
+
+Status: **COMPLETE**
 
 ### Phase 5: Runtime bootstrap and managed lifecycle
 
@@ -305,6 +312,8 @@ Exit criteria:
 - ownership of `Vertx`, `Pool`, sweeper, and listener resources is explicit
 - shutdown order is deterministic and non-accidental
 
+Status: **COMPLETE**
+
 ### Phase 6: V1 completion features
 
 Objective:
@@ -318,6 +327,7 @@ Scope:
 - metadata/versioning exposure
 - lightweight pub/sub
 - admin and metrics hooks
+- production telemetry and schema readiness
 
 Recommended order inside this phase:
 
@@ -325,12 +335,14 @@ Recommended order inside this phase:
 2. bulk operations
 3. admin hooks
 4. lightweight pub/sub
+5. production observability and readiness hardening
 
 Reasoning:
 
 - scan and metadata support debugging and operational verification early
 - bulk operations are useful but do not change the core model
 - pub/sub should wait until the runtime lifecycle and payload rules are already stable
+- production observability is a release gate and is completed after the service and lifecycle surfaces it must observe are stable
 
 #### Phase 6.4: Lightweight pub/sub implementation plan
 
@@ -338,9 +350,9 @@ Prerequisite: the runtime lifecycle (Phase 5) is stable and `PgConnectOptions` a
 
 ##### Module placement
 
-- `PgPubSubRepository` in `peegee-cache-pg` — SQL execution for `pg_notify`, `LISTEN`, `UNLISTEN`
-- `PgPubSubService` in `peegee-cache-pg` — implements `PubSubService`, manages dedicated listener connection, handler registry, reconnection
-- Wired into `PgPeeGeeCache` via `PgPeeGeeCacheManager`, replacing `NotImplementedStubs.pubSubService()`
+- `PgPubSubRepository` in `peegee-cache-pg` — validation and parameterized `pg_notify` execution through the shared pool
+- `PgPubSubService` in `peegee-cache-pg` — implements `PubSubService` and owns `LISTEN`/`UNLISTEN`, the dedicated listener connection, handler registry, and reconnection
+- `PgPeeGeeCacheManager` wires the real service when `PgConnectOptions` are supplied and exposes the unavailable-service fallback otherwise
 
 ##### Implementation steps (TDD order)
 
@@ -365,7 +377,11 @@ Prerequisite: the runtime lifecycle (Phase 5) is stable and `PgConnectOptions` a
    - Issues `LISTEN "channel"` on dedicated connection
    - Registers handler in `ConcurrentHashMap<String, CopyOnWriteArrayList<Consumer<PubSubMessage>>>`
    - Returns `Subscription` with `unsubscribe()` that removes handler and issues `UNLISTEN` when registry for channel is empty
+   - Quotes the fully qualified channel as a PostgreSQL identifier by doubling embedded double quotes before constructing `LISTEN`/`UNLISTEN`
+   - Rejects NUL and qualified channel names longer than PostgreSQL's 63-byte identifier limit instead of relying on server truncation
+   - Never interpolates an unescaped caller-controlled identifier into SQL
    - Test: subscribe receives published message, unsubscribe stops delivery
+   - Test: quotes, semicolons, whitespace, and other SQL metacharacters round-trip as channel data without executing unintended SQL; NUL and overlength identifiers are rejected
 
 5. **PgPubSubService — reconnection**
    - Register close handler on dedicated connection
@@ -374,17 +390,17 @@ Prerequisite: the runtime lifecycle (Phase 5) is stable and `PgConnectOptions` a
    - Test: kill connection, verify automatic reconnect and handler still receives after recovery
 
 6. **PgPeeGeeCacheManager wiring**
-   - Replace `NotImplementedStubs.pubSubService()` with real `PgPubSubService`
+   - Use real `PgPubSubService` when dedicated listener connection options are configured
    - `startReactive()` opens listener connection
    - `stopReactive()` closes listener connection and clears handlers
    - `isListenerRunning()` reflects real connection state
-   - Remove `NotImplementedStubs` class entirely when no stubs remain
-   - Test: existing lifecycle test still passes, stub test updated or removed
+   - Retain an explicit unavailable-service fallback when pub/sub is not configured
+   - Test: lifecycle and unavailable-service behavior remain explicit
 
 7. **PeeGeeCacheBootstrapOptions update**
    - Add `PgConnectOptions connectOptions` to `PeeGeeCacheBootstrapOptions`
    - The connect options supply credentials and host for the dedicated listener connection
-   - When absent, derive from the pool's connection info or fail with clear error
+   - When absent, leave pub/sub unavailable while allowing cache, counter, lock, scan, and admin services to operate
    - Test: options with and without explicit connect options
 
 ##### Configuration additions
@@ -393,20 +409,67 @@ Prerequisite: the runtime lifecycle (Phase 5) is stable and `PgConnectOptions` a
 
 - `maxPayloadBytes` (default 7500) — publish requests exceeding this size are rejected with `IllegalArgumentException`
 
-##### Exit criteria for Phase 6.4 — MET
+##### Current status for Phase 6.4
 
-- ✅ `PgPubSubService` passes all tests including Testcontainers integration (11 tests)
+- ✅ `PgPubSubService` passes all tests including Testcontainers integration (12 tests)
 - ✅ publish delivers notification to subscriber handler (`subscriberReceivesPublishedMessage`)
 - ✅ unsubscribe stops delivery (`unsubscribeStopsDelivery`)
 - ✅ oversized payloads are rejected before reaching PostgreSQL (`publishRejectsOversizedPayload`)
 - ✅ dedicated connection reconnects automatically after connection loss (exponential backoff, 1s–32s)
 - ✅ `isListenerRunning()` accurately reflects connection state (delegates to `pubSubService.isListenerConnected()`)
-- ⚠️ `NotImplementedStubs.pubSubService()` retained as fallback when no `connectOptions` provided — this is intentional for backward compatibility
+- ✅ unavailable-service fallback retained when no `connectOptions` are provided
+- ✅ caller-controlled `LISTEN`/`UNLISTEN` identifiers use PostgreSQL quote doubling, reject NUL, and enforce the 63-byte UTF-8 identifier limit
+- ✅ adversarial PostgreSQL coverage round-trips embedded quotes, semicolons, whitespace, and SQL metacharacters without unintended execution
+- ✅ the unavailable-service fallback emits bounded failure telemetry and does not include request payloads in errors
 
 Exit criteria:
 
 - all `V1` items in the design are implemented or explicitly deferred with rationale
 - operational behavior is documented well enough for first external adopters
+
+Status: **COMPLETE** — the V1 completion surface, safe pub/sub handling, production observability, comprehensive readiness, and benchmark evidence are implemented and verified.
+
+#### Phase 6.5: Production observability
+
+Objective:
+
+- make observability an operational contract of the runtime rather than an optional demonstration adapter
+
+Scope:
+
+- vendor-neutral telemetry SPI and composite fan-out in `peegee-cache-core`
+- runtime injection through `PeeGeeCacheBootstrapOptions`
+- Micrometer metrics and OpenTelemetry metrics/tracing adapters
+- bounded operation and outcome dimensions with no user-controlled keys, namespaces, channels, payloads, SQL, or exception messages
+- complete asynchronous service-operation timing, failure capture, and trace context propagation
+- lock contention, expiry sweep, pub/sub reconnect, notification dispatch, subscription, schema-bootstrap, and lifecycle signals
+- PostgreSQL readiness covering runtime state, connectivity, and every database object required for enabled services
+- exporter failure isolation so telemetry cannot alter cache behavior
+
+Implemented evidence:
+
+- ✅ `CacheTelemetry`, `CompositeCacheTelemetry`, and bounded `CacheOperation` are implemented
+- ✅ Micrometer and OpenTelemetry adapters have behavior tests without mocking frameworks
+- ✅ runtime and service wiring record successful and failed asynchronous operations
+- ✅ expiry, contention, pub/sub, subscription, notification-dispatch, bootstrap, and lifecycle signals are present
+- ✅ telemetry implementation failures are isolated from product behavior
+- ✅ readiness verifies all required tables, indexes, the fencing sequence, migration ledger, stable views, and exact supported function signatures
+- ✅ one real-runtime contract test exercises the complete asynchronous service surface and requires all 30 bounded operations to start and complete
+- ✅ unavailable pub/sub records a bounded failed operation without exposing request payloads
+- ✅ the benchmark interleaves noop and Micrometer traffic under the same interval and reports throughput and p99 overhead
+
+Exit criteria:
+
+- all asynchronous service operations are observed, including validation and lifecycle rejection failures
+- metric and span dimensions remain bounded under adversarial caller inputs
+- telemetry callbacks remain bounded and non-blocking by contract, and exporter failures cannot fail product operations
+- a contract test maps every asynchronous service method to its bounded `CacheOperation`, including validation and lifecycle rejection failures
+- benchmark evidence characterizes enabled-versus-noop telemetry overhead under representative traffic
+- readiness verifies `cache_entries`, `cache_counters`, `cache_locks`, `lock_fencing_seq`, and the supported SQL functions required by the configured runtime
+- readiness reports `DOWN` with a safe diagnostic when any required object is absent
+- Micrometer, OpenTelemetry, lifecycle, and readiness behavior is covered by real implementations and real PostgreSQL where applicable
+
+Status: **COMPLETE** — observability is runtime-wired, contract-tested across all operations, failure-isolated, schema-comprehensive, and represented in the benchmark harness.
 
 ### Phase 7: Native SQL contract hardening
 
@@ -416,15 +479,29 @@ Objective:
 
 Scope:
 
-- documented read views
+- documented direct-read table contract and optional read views where they materially simplify operations
 - correctness-sensitive SQL functions for locks and counters first
 - optional cache write functions if non-Java callers are required in the first release
-- compatibility policy for SQL functions if exposed publicly
+- compatibility and migration policy for every SQL function exposed publicly
 
 Exit criteria:
 
 - direct-read versus function-write support boundaries are documented and implemented consistently
 - external SQL callers are not forced to reconstruct concurrency-sensitive multi-statement logic from prose alone
+
+Implemented evidence:
+
+- ✅ 8 PL/pgSQL functions cover lock, counter, and cache-entry mutations
+- ✅ 38 native SQL integration tests exercise serialization, concurrency semantics, failure behavior, and return values against PostgreSQL
+- ✅ `docs/PEEGEEQ_CACHE_NATIVE_SQL_API.md` documents the exact supported function identities, return columns, modes, and TTL units
+- ✅ `live_entries`, `live_counters`, and `active_locks` are the supported direct-read contract; backing tables are explicitly internal to application callers
+- ✅ `schema_migrations` records ordered versions and `PgSchemaMigrator` serializes managed upgrades with an advisory lock and per-migration transactions
+- ✅ baseline migration tests prove data preservation, repeat-run idempotence, and rejection of schemas newer than the running library; because the project is unreleased, the stable read views are consolidated into V001
+- ✅ pre-1.0 compatibility, post-1.0 breaking-change, forward migration, and operational rollback policies are documented
+
+Completion tasks: none for the V1 SQL contract.
+
+Status: **COMPLETE** — public SQL reads, writes, compatibility, migration behavior, and upgrade verification are explicit.
 
 ### Phase 8: V2 and later
 
@@ -515,13 +592,13 @@ Last reviewed: 2026-08-16
 |---|---|---|---|
 | Phase 0: Repository and build foundation | COMPLETE | Multi-module structure present and builds; Java 21 + Vert.x baseline already aligned in repository setup | None |
 | Phase 1: API skeleton | COMPLETE | API interfaces and models exist in `peegee-cache-api/src/main/java/dev/mars/peegeeq/cache/api/**`; unit tests for core value objects and exceptions are present and previously documented | None |
-| Phase 2: PostgreSQL schema and bootstrap | COMPLETE | `peegee-cache-pg/src/main/resources/db/bootstrap/V001__create_peegee_cache_schema.sql` contains the schema, indexes, sequence, and supported SQL functions; bootstrap/invariant tests execute it against PostgreSQL | None |
+| Phase 2: PostgreSQL schema and bootstrap | COMPLETE | The single unreleased V001 baseline provides the core schema, functions, stable read views, and migration ledger; `PgSchemaMigrator` is retained for future ordered transactional upgrades | None |
 | Phase 3: Repository and SQL statement catalogue | COMPLETE | Repositories and SQL catalogues are in place: `PgCacheRepository`, `PgCounterRepository`, `PgLockRepository` and `CacheSql`, `CounterSql`, `LockSql` in `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/` | None |
 | Phase 4: Service implementations for V1 Core | COMPLETE | Services are implemented and now share centralized argument validation via `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, wired in `PgCacheService`, `PgCounterService`, and `PgLockService`; service/repository/migration tests are green | None |
 | Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
-| Phase 6: V1 completion features | COMPLETE | Scan and bulk operations are implemented. Configured pub/sub has repository/service coverage plus real listener termination, subscription replay, unsubscribe, and stop-during-backoff tests. Production observability is wired through the runtime with Micrometer, OpenTelemetry, readiness, operation timing/failures, contention, expiry lag, reconnect, subscription, notification-dispatch, and lifecycle signals. | None |
-| Phase 7: Native SQL contract hardening | COMPLETE | The consolidated bootstrap `V001__create_peegee_cache_schema.sql` provides 8 PL/pgSQL functions: lock (`acquire_lock`, `renew_lock`, `release_lock`), counter (`increment_counter`, `set_counter`, `delete_counter`), and cache entry (`set_entry`, `delete_entry`). Native SQL integration suites contribute 38 passing tests. The expanded reactor has 258 automated tests validated by `mvn clean verify`. | None |
-| Phase 8: V2 and later | DEFERRED | By strategy: V2 starts only after V1 is stable | Revisit after V1 completion and operational hardening |
+| Phase 6: V1 completion features | COMPLETE | Safe/recovering pub/sub, scan, bulk operations, all-operation telemetry contracts, comprehensive readiness, and interleaved telemetry/lock/pub-sub benchmark scenarios are implemented and green. | None |
+| Phase 7: Native SQL contract hardening | COMPLETE | Eight mutation functions have exact documented signatures; three stable read views, migration ledger/runner, compatibility policy, and real baseline idempotence and forward-version rejection tests are present. | None |
+| Phase 8: V2 and later | DEFERRED | By strategy: V2 starts only after V1 Phases 0–7 meet their exit criteria | Revisit after Phase 6 and Phase 7 completion and operational hardening. |
 
 Tracking update rules:
 
@@ -530,63 +607,51 @@ Tracking update rules:
 3. include concrete evidence (classes, migrations, tests) in each status change
 4. if status changes are uncertain, keep the lower status and add a verification task
 
-## 3.2 Strict verification (2026-03-16)
+## 3.2 Current strict verification (2026-08-16)
 
-This section records a criteria-by-criteria verification pass for the currently active delivery phases.
+The current verification record is based on the complete reactor rather than historical module subsets.
 
-### Phase 3 strict verification
+Execution evidence:
 
-Verdict: COMPLETE
+- `mvn clean verify` — BUILD SUCCESS
+- final `mvn verify` after all code and benchmark changes — BUILD SUCCESS
+- `mvn verify -Pcentral-release '-Dgpg.skip=true'` — BUILD SUCCESS with the Central release profile loaded and signing intentionally skipped
+- `mvn package -Pcentral-release -DskipTests` — BUILD SUCCESS with source and Javadoc artifacts generated
+- `mvn validate -Pcentral-release` — all 9 reactor projects passed Enforcer and profile validation
+- expanded one-second benchmark smoke — BUILD SUCCESS across telemetry comparison, counter contention, lock contention, pub/sub latency, expiry lag, and forced pool recovery
+- full-reactor PostgreSQL compatibility matrix — 269 tests passed with zero failures/errors/skips on PostgreSQL 15.17, 16.13, 17.11, and 18.3; the subsequently added real-PostgreSQL benchmark-pool regression also passed on all four majors
+- post-fix default-duration local benchmark — three identical executions passed every unchanged gate with zero scenario timeouts and zero Vert.x `Promise already completed` signatures
+- Java-first repeatable benchmark capture — typed benchmark results feed one self-contained structured HTML report with aggregate/per-run results, environment details, and embedded raw logs, without console-output parsing or platform-specific orchestration scripts
+- no publication or external upload occurred during verification
 
-| Exit criterion | Result | Evidence | Notes |
-|---|---|---|---|
-| repository methods exist for every `V1 Core` primitive | PASS | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCacheRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCounterRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgLockRepository.java` | Core primitive coverage exists for cache/counter/lock repository operations |
-| expiry-aware semantics are implemented with database-clock logic | PASS | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/CacheSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/CounterSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCacheRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCounterRepository.java` | UPSERT/insert/update TTL paths now use SQL `NOW() + interval` expressions with TTL millis parameters |
-| lock semantics use owner token checks and database-derived lease expiry | PASS | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/LockSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgLockRepository.java` | SQL uses `NOW() + interval` and owner-token-guarded renew/release semantics |
+The interleaved local telemetry smoke measured 0.22% Micrometer throughput overhead and 20.67% p99 overhead. Before the pool-layout fix, two of three identical full-duration executions timed out in different scenarios. Diagnosis isolated client-side pool saturation: eight workers shared an eight-connection pool with two independent sweepers, while PostgreSQL sampling found no one-second SQL or lock wait. The strict-TDD fix reserves connection headroom, removes sweepers from sustained-workload managers, and uses one dedicated expiry-measurement manager. Three identical post-fix runs passed; the worst p99 was 30.628 ms, expiry lag was 16–28 ms, and failover recovery was 13–16 ms. These local-container figures remain regression evidence, not production SLOs.
 
-### Phase 4 strict verification
+Observed automated test inventory:
 
-Verdict: COMPLETE
+| Module | Tests | Failures | Errors | Skipped |
+|---|---:|---:|---:|---:|
+| `peegee-cache-api` | 34 | 0 | 0 | 0 |
+| `peegee-cache-core` | 14 | 0 | 0 | 0 |
+| `peegee-cache-pg` | 191 | 0 | 0 | 0 |
+| `peegee-cache-runtime` | 21 | 0 | 0 | 0 |
+| `peegee-cache-observability` | 4 | 0 | 0 | 0 |
+| `peegee-cache-test-support` | 3 | 0 | 0 | 0 |
+| `peegee-cache-benchmarks` | 13 | 0 | 0 | 0 |
+| **Total** | **280** | **0** | **0** | **0** |
 
-| Exit criterion | Result | Evidence | Notes |
-|---|---|---|---|
-| `V1 Core` public interfaces are backed by working implementations | PASS (for cache/counter/lock) | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCacheService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCounterService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgLockService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/PgPeeGeeCache.java` | Implementations exist and are wired through `PgPeeGeeCache` |
-| type and option validation is consistent | PASS | `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, `peegee-cache-core/src/test/java/dev/mars/peegeeq/cache/core/validation/CoreValidationTest.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCacheService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgCounterService.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/service/PgLockService.java`, `peegee-cache-pg/src/test/java/dev/mars/peegeeq/cache/pg/service/PgLockServiceTest.java` | Shared core validation now enforces non-null, non-blank, and positive-duration argument rules across services |
-| service behavior matches the design document for expiry, counters, and lock ownership | PASS (for implemented V1 Core surface) | `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCacheRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgCounterRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/repository/PgLockRepository.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/CacheSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/CounterSql.java`, `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/sql/LockSql.java` | TTL writes use database-clock SQL interval expressions and lock ownership checks are enforced in SQL/repository behavior |
+Criteria verdicts:
 
-### Phase 5 strict verification
-
-Verdict: COMPLETE
-
-| Exit criterion | Result | Evidence | Notes |
-|---|---|---|---|
-| callers can create a manager and start/stop it cleanly | PASS | `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/bootstrap/PeeGeeCaches.java`, `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/bootstrap/PgPeeGeeCacheManager.java`, `peegee-cache-runtime/src/test/java/dev/mars/peegeeq/cache/runtime/bootstrap/PeeGeeCachesLifecycleTest.java` | Lifecycle tests cover create/start/stop, duplicate start/stop guards, and close delegation |
-| ownership of `Vertx`, `Pool`, sweeper, and listener resources is explicit | PASS | `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/bootstrap/PgPeeGeeCacheManager.java`, `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/config/PeeGeeCacheConfig.java`, `peegee-cache-runtime/src/test/java/dev/mars/peegeeq/cache/runtime/bootstrap/PeeGeeCachesLifecycleTest.java` | Manager now owns sweeper timer lifecycle and listener lifecycle state with explicit start/stop behavior and config validation |
-| shutdown order is deterministic and non-accidental | PASS | `peegee-cache-runtime/src/main/java/dev/mars/peegeeq/cache/runtime/bootstrap/PgPeeGeeCacheManager.java`, `peegee-cache-runtime/src/test/java/dev/mars/peegeeq/cache/runtime/bootstrap/PeeGeeCachesLifecycleTest.java` | Stop path transitions started state and then stops background components in a deterministic order |
-
-Execution evidence from strict run:
-
-- command executed: `mvn -pl peegee-cache-pg -am test`
-- reactor result: BUILD SUCCESS
-- module tests observed:
-  - `peegee-cache-api`: 34 tests passed
-  - `peegee-cache-core`: 4 tests passed (`CoreValidationTest`)
-  - `peegee-cache-pg`: 88 tests passed (migration, repository, and service suites)
-- command executed: `mvn -pl peegee-cache-runtime -am test`
-- reactor result: BUILD SUCCESS
-- module tests observed:
-  - `peegee-cache-runtime`: 13 tests passed (`PeeGeeCachesLifecycleTest`)
-
-Conclusion:
-
-- test suite is green for current implementation
-- Phase 3 exit criteria are satisfied
-- Phase 4 exit criteria are now satisfied
-- Phase 5 exit criteria are now satisfied
+- Phase 3: COMPLETE — repository, database-clock expiry, and ownership-aware lock criteria are satisfied
+- Phase 4: COMPLETE — cache, counter, and lock services are implemented with centralized validation and real PostgreSQL coverage
+- Phase 5: COMPLETE — bootstrap, managed lifecycle, bounded expiry sweeping, default TTL, and deterministic shutdown criteria are satisfied
+- Phase 6: COMPLETE — pub/sub identifier safety, comprehensive readiness, all-operation telemetry coverage, and overhead evidence satisfy the exit criteria
+- Phase 7: COMPLETE — stable reads, exact function signatures, compatibility policy, migration runner, and upgrade tests satisfy the SQL contract
 
 ## 4. Feature rollout by milestone
 
 ### Milestone A: V1 Core alpha
+
+Status: **COMPLETE**
 
 Target outcome:
 
@@ -600,7 +665,7 @@ Must include:
 - atomic counters
 - namespaces
 - lock service
-- migrations
+- schema bootstrap
 - managed bootstrap
 
 Must not include:
@@ -611,6 +676,8 @@ Must not include:
 - durable queue features
 
 ### Milestone B: V1 beta
+
+Status: **COMPLETE**
 
 Target outcome:
 
@@ -626,6 +693,8 @@ Must include:
 
 ### Milestone C: V1 release candidate
 
+Status: **COMPLETE**
+
 Target outcome:
 
 - complete Phase 1 surface as currently defined
@@ -637,58 +706,64 @@ Must include:
 - documented SQL support boundaries
 - examples and operator guidance
 
-## 5. Module-by-module implementation order
+Remaining release-candidate gates: none in the repository. Public Central publication remains a separate credentialed release action.
+
+## 5. Current module inventory and remaining work
 
 ### `peegee-cache-api`
 
-Implement first:
+Current:
 
-- all public interfaces and models for `V1 Core`
+- public cache, counter, lock, scan, pub/sub, subscription, and admin interfaces
+- public request, result, entry, TTL, metrics, scan, pub/sub, and lock models
+- the `PeeGeeCache` facade and exception hierarchy
 
-Implement later:
+Remaining V1 work:
 
-- remaining `V1` request/response types for scan and pub/sub where needed
+- none currently identified; additions require an explicit Phase 6 exit-criteria change
 
 ### `peegee-cache-core`
 
-Implement first:
+Current:
 
 - validation utilities
-- TTL normalization helpers
-- key and namespace rules
+- thread-safe in-memory metric snapshots
+- vendor-neutral telemetry SPI, bounded operation names, and composite exporter fan-out
 
-Implement later:
+Remaining V1 work:
 
-- shared result builders and metrics support utilities
+- none currently identified beyond changes required by open Phase 6 observability criteria
 
 ### `peegee-cache-pg`
 
-Implement first:
+Current:
 
-- migrations
+- ordered, idempotent schema migrations and migration ledger
 - repositories
 - SQL catalogue
 - row mapping
-- core PostgreSQL-backed services
+- cache, counter, lock, scan, admin, and pub/sub services
+- 8 native SQL mutation functions
+- 3 stable read views
 
-Implement later:
+Remaining V1 work:
 
-- scan repository
-- pub/sub runtime integration details
-- SQL function layer for external callers
+- none currently identified
 
 ### `peegee-cache-runtime`
 
-Implement first:
+Current:
 
 - bootstrap options
 - manager lifecycle
 - explicit startup and shutdown
+- bounded expiry sweeper scheduling and graceful in-flight shutdown
+- external-by-default schema policy with opt-in managed bootstrap
+- dedicated pub/sub listener lifecycle when connection options are configured
 
-Implement later:
+Remaining V1 work:
 
-- sweeper scheduling
-- dedicated pub/sub listener management
+- none currently identified
 
 ### `peegee-cache-observability`
 
@@ -701,27 +776,54 @@ Production scope:
 - bounded-cardinality operation and outcome dimensions
 - expiry lag, lock contention, saturation-demand, reconnect, notification dispatch, and lifecycle signals
 
+Remaining V1 work:
+
+- none currently identified
+
 ### `peegee-cache-test-support`
 
-Implement first:
+Current:
 
 - PostgreSQL Testcontainers helpers
 - schema bootstrap fixtures
-- concurrency-test helpers
+- Vert.x Future awaiting for non-event-loop harnesses
+- latency percentile and throughput calculation
 
-Implement later:
+Potential later work:
 
 - higher-level DSLs for repetitive test flows
 
+### `peegee-cache-benchmarks`
+
+Current:
+
+- sustained mixed SET/GET throughput and p50/p95/p99 latency
+- interleaved noop-versus-Micrometer throughput and p99 overhead
+- contended counter throughput and latency
+- contended distributed-lock throughput and latency
+- publish-to-receive notification throughput and latency
+- physical expiry lag
+- pool recovery after forced backend termination
+- configurable regression thresholds
+- repeatable Java evidence capture producing one portable HTML report with hardware/toolchain/Docker/Git metadata, aggregate/per-run results, raw logs, and immutable PostgreSQL image identity
+
+Remaining release-hardening work: execute the benchmark on the intended production topology before turning the local regression figures into capacity or SLO commitments. The intermittent local operation stalls are fixed and the benchmark contract is complete.
+
 ### `peegee-cache-examples`
 
-Implement first:
+Current:
 
-- one embedded example using the managed runtime
+- managed runtime bootstrap
+- basic integration
+- batch and TTL behavior
+- read-through caching
+- version-aware updates
+- distributed locks and configured pub/sub
+- stable SQL read-view inspection
 
-Implement later:
+Remaining release-candidate work:
 
-- examples for SQL inspection, locks, and pub/sub
+- none currently identified
 
 ## 6. Testing plan by phase
 
@@ -753,9 +855,16 @@ Implement later:
   - dedicated listener connection lifecycle (start opens, stop closes)
   - automatic reconnection after connection loss with LISTEN replay
   - publish and subscribe rejected when manager is not started
+  - caller-controlled channel identifiers containing quotes and SQL metacharacters are safely quoted, while NUL and overlength qualified identifiers are rejected
+- observability tests:
+  - Micrometer operation duration, outcome, active-operation, and operational signals
+  - OpenTelemetry span completion, failure status, metrics, and context activation
+  - exporter exceptions cannot change operation outcomes
+  - lifecycle, schema bootstrap, expiry, contention, reconnect, subscription, and notification signals
+  - readiness returns `DOWN` with named missing objects for a partially installed schema
 - benchmark and profiling work on realistic combined flows
 
-The important benchmark is not isolated `GET` speed alone. It is the combined behavior of database-backed cache mutation, coordination, and notification flows.
+The executable benchmark covers interleaved noop-versus-Micrometer cache traffic, counter contention, lock contention, publish-to-receive notification latency, expiry lag, and connection recovery.
 
 ## 7. Key risks and control points
 
@@ -791,17 +900,40 @@ Control:
 - keep manager ownership explicit
 - test shutdown order and background component cleanup early
 
+### Risk: unsafe dynamic PostgreSQL identifiers
+
+Control:
+
+- never concatenate an unescaped caller-controlled identifier into `LISTEN`, `UNLISTEN`, or other SQL
+- double embedded quotes, enforce PostgreSQL's qualified identifier byte limit, and reject NUL
+- test quotes, SQL metacharacters, NUL, and overlength identifiers against real PostgreSQL
+
+### Risk: shallow readiness reports false-positive health
+
+Control:
+
+- define the exact schema objects required by each enabled runtime capability
+- report `DOWN` when any required table, sequence, or supported function is absent
+- verify partial-schema states against real PostgreSQL
+
 ## 8. Release-hardening status
 
 Completed:
 
-1. production Micrometer, OpenTelemetry, and readiness adapters are implemented and runtime-wired
+1. production Micrometer, OpenTelemetry, and comprehensive readiness adapters are implemented and runtime-wired
 2. reusable PostgreSQL fixtures live in `peegee-cache-test-support` and are consumed by PostgreSQL/runtime tests
 3. the opt-in benchmark module reports sustained throughput, p50/p95/p99, expiry lag, and forced-connection-loss recovery
 4. schema bootstrap is external by default with tested opt-in `SchemaBootstrapMode.APPLY`
-5. operator, compatibility, benchmark, and release-artifact guidance is documented; build gates enforce Java/Maven versions and dependency convergence
+5. operator, database-compatibility, benchmark, and release-artifact guidance is documented; build gates enforce Java/Maven versions and dependency convergence
+6. dynamic pub/sub identifiers are safely quoted and byte-bounded with adversarial PostgreSQL coverage
+7. readiness validates the complete required schema contract and names missing objects
+8. all 30 asynchronous operation identifiers are covered by one real-runtime telemetry contract test
+9. native SQL has stable read views, exact supported signatures, a compatibility policy, and baseline migration safety tests
+10. benchmarks cover telemetry overhead, lock contention, and publish-to-receive latency; matching runnable examples are present
 
 Maven Central publication defaults are now configured: Apache-2.0 licensing, canonical GitHub project/SCM/developer metadata, source and Javadoc artifacts, GPG best-practices signing, and Sonatype Central Portal upload with manual promotion. Actual publication remains gated only on namespace verification, a non-SNAPSHOT version, and credentials/signing keys supplied outside the repository.
+
+Remaining release automation: encode the PostgreSQL 15–18 matrix in CI. Representative production-topology benchmarking remains an operational capacity-validation action, not an open repository defect or a reason to weaken the local gates.
 
 ## 9. Summary
 
@@ -812,3 +944,10 @@ The correct delivery strategy is:
 - complete the runtime lifecycle before broadening the surface area
 - treat native SQL support as deliberate product surface, not accidental table exposure
 - defer Redis-shaped expansion until the PostgreSQL-native core is proven
+
+Current conclusion:
+
+- Phases 0–5 are complete
+- Phase 6 is complete
+- Phase 7 is complete
+- Phase 8 remains intentionally deferred pending an explicit V2 scope decision

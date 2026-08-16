@@ -21,7 +21,7 @@ Metric attributes never include user-controlled keys, namespaces, channel names,
 
 ## Health and alerting
 
-Construct `PgCacheHealthIndicator` with the caller-owned pool, configured schema, and `manager::isStarted`. `UP` requires the runtime to be started, a successful database query, and the configured `cache_entries` table to exist. `STOPPED` is distinct from database failure.
+Construct `PgCacheHealthIndicator` with the caller-owned pool, configured schema, and `manager::isStarted`. `UP` requires the runtime to be started, a successful database query, and all required tables, indexes, sequence, function signatures, migration ledger, and stable read views to exist. `STOPPED` is distinct from database failure, and `DOWN` names missing schema objects.
 
 Suggested initial alerts, to be tuned from benchmark and production baselines:
 
@@ -36,9 +36,9 @@ Suggested initial alerts, to be tuned from benchmark and production baselines:
 
 `SchemaBootstrapMode.EXTERNAL` is the default and recommended production policy. Deployment tooling applies `BootstrapSqlRenderer.loadForSchema(schema)` before application startup and owns forward/rollback coordination.
 
-`SchemaBootstrapMode.APPLY` is an opt-in embedded policy. Runtime startup applies the bundled idempotent bootstrap before starting the sweeper or pub/sub listener. It requires DDL permission and is unsuitable where schema changes require a separate approval window.
+`SchemaBootstrapMode.APPLY` is an opt-in embedded policy. Runtime startup takes a schema-scoped advisory lock and applies only missing migrations, in order and in individual transactions, before starting the sweeper or pub/sub listener. It requires DDL permission and is unsuitable where schema changes require a separate approval window.
 
-The current V001 bootstrap is additive/idempotent. Rollback is operationally manual: stop writers, preserve or export required data, and drop only explicitly selected peegee-cache objects. The library never automatically drops schema objects.
+Applied versions are recorded in `<schema>.schema_migrations`. Rollback is operationally manual: stop writers, preserve or export required data, and use the release-specific recovery procedure. The library never automatically drops schema objects. The supported SQL surface and compatibility rules are documented in [PEEGEEQ_CACHE_NATIVE_SQL_API.md](PEEGEEQ_CACHE_NATIVE_SQL_API.md).
 
 ## PostgreSQL operations
 
@@ -55,8 +55,17 @@ The current V001 bootstrap is additive/idempotent. Rollback is operationally man
 | Java | 21 through 25; enforced by Maven Enforcer |
 | Maven | 3.9.x; enforced by Maven Enforcer |
 | Vert.x | 5.0.8 dependency baseline |
-| PostgreSQL | Intended for 15+ SQL semantics; automated compatibility currently runs on 18.3 |
+| PostgreSQL | 15+; full-reactor validation completed on 15.17, 16.13, 17.11, and 18.3 |
 | Micrometer | 1.17.0 |
 | OpenTelemetry Java API | 1.64.0 BOM |
 
-PostgreSQL 15–17 should be added to a CI matrix before claiming those versions as release-validated rather than compatible-by-design.
+The Testcontainers image is selected with `peegeeq.test.postgres.image`. The 2026-08-16 manual release matrix ran the complete 269-test reactor successfully on every supported major version:
+
+```shell
+mvn verify '-Dpeegeeq.test.postgres.image=postgres:15-alpine'
+mvn verify '-Dpeegeeq.test.postgres.image=postgres:16-alpine'
+mvn verify '-Dpeegeeq.test.postgres.image=postgres:17-alpine'
+mvn verify '-Dpeegeeq.test.postgres.image=postgres:18.3-alpine'
+```
+
+The resolved server patch releases were 15.17, 16.13, 17.11, and 18.3. Each full-reactor matrix run completed with 269 tests, zero failures, zero errors, and zero skips. The subsequently added real-PostgreSQL pool-headroom/sweeper regression passed separately on all four majors; the current PostgreSQL 18.3 reactor contains 275 tests. This matrix is repeatable locally but should still be encoded in CI so future commits cannot bypass it.

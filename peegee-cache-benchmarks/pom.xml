@@ -16,11 +16,20 @@
 
     <properties>
         <peegeeq.benchmark.concurrency>8</peegeeq.benchmark.concurrency>
+        <peegeeq.benchmark.poolSize>12</peegeeq.benchmark.poolSize>
         <peegeeq.benchmark.durationSeconds>30</peegeeq.benchmark.durationSeconds>
         <peegeeq.benchmark.minimumThroughput>50</peegeeq.benchmark.minimumThroughput>
         <peegeeq.benchmark.maximumP99Millis>1000</peegeeq.benchmark.maximumP99Millis>
         <peegeeq.benchmark.maximumFailoverRecoveryMillis>10000</peegeeq.benchmark.maximumFailoverRecoveryMillis>
         <peegeeq.benchmark.maximumExpiryLagMillis>1000</peegeeq.benchmark.maximumExpiryLagMillis>
+        <peegeeq.benchmark.maximumTelemetryOverheadPercent>100</peegeeq.benchmark.maximumTelemetryOverheadPercent>
+        <peegeeq.benchmark.mainClass>dev.mars.peegeeq.cache.benchmark.CacheBenchmarkMain</peegeeq.benchmark.mainClass>
+        <peegeeq.benchmark.capture.runs>3</peegeeq.benchmark.capture.runs>
+        <peegeeq.benchmark.capture.outputRoot>benchmark-results</peegeeq.benchmark.capture.outputRoot>
+        <peegeeq.benchmark.capture.topology>Local benchmark JVM and Testcontainers PostgreSQL on the same Docker engine</peegeeq.benchmark.capture.topology>
+        <peegeeq.benchmark.capture.requireCleanGit>false</peegeeq.benchmark.capture.requireCleanGit>
+        <peegeeq.benchmark.capture.stopOnFailure>false</peegeeq.benchmark.capture.stopOnFailure>
+        <peegeeq.test.postgres.image>postgres:18.3-alpine</peegeeq.test.postgres.image>
     </properties>
 
     <dependencies>
@@ -71,14 +80,23 @@
                     <executable>java</executable>
                     <arguments>
                         <argument>-Dpeegeeq.benchmark.concurrency=${peegeeq.benchmark.concurrency}</argument>
+                        <argument>-Dpeegeeq.benchmark.poolSize=${peegeeq.benchmark.poolSize}</argument>
                         <argument>-Dpeegeeq.benchmark.durationSeconds=${peegeeq.benchmark.durationSeconds}</argument>
                         <argument>-Dpeegeeq.benchmark.minimumThroughput=${peegeeq.benchmark.minimumThroughput}</argument>
                         <argument>-Dpeegeeq.benchmark.maximumP99Millis=${peegeeq.benchmark.maximumP99Millis}</argument>
                         <argument>-Dpeegeeq.benchmark.maximumFailoverRecoveryMillis=${peegeeq.benchmark.maximumFailoverRecoveryMillis}</argument>
                         <argument>-Dpeegeeq.benchmark.maximumExpiryLagMillis=${peegeeq.benchmark.maximumExpiryLagMillis}</argument>
+                        <argument>-Dpeegeeq.benchmark.maximumTelemetryOverheadPercent=${peegeeq.benchmark.maximumTelemetryOverheadPercent}</argument>
+                        <argument>-Dpeegeeq.benchmark.capture.runs=${peegeeq.benchmark.capture.runs}</argument>
+                        <argument>-Dpeegeeq.benchmark.capture.outputRoot=${peegeeq.benchmark.capture.outputRoot}</argument>
+                        <argument>-Dpeegeeq.benchmark.capture.repositoryRoot=${maven.multiModuleProjectDirectory}</argument>
+                        <argument>-Dpeegeeq.benchmark.capture.topology=${peegeeq.benchmark.capture.topology}</argument>
+                        <argument>-Dpeegeeq.benchmark.capture.requireCleanGit=${peegeeq.benchmark.capture.requireCleanGit}</argument>
+                        <argument>-Dpeegeeq.benchmark.capture.stopOnFailure=${peegeeq.benchmark.capture.stopOnFailure}</argument>
+                        <argument>-Dpeegeeq.test.postgres.image=${peegeeq.test.postgres.image}</argument>
                         <argument>-classpath</argument>
                         <classpath/>
-                        <argument>dev.mars.peegeeq.cache.benchmark.CacheBenchmarkMain</argument>
+                        <argument>${peegeeq.benchmark.mainClass}</argument>
                     </arguments>
                 </configuration>
             </plugin>
@@ -96,6 +114,29 @@
                         <executions>
                             <execution>
                                 <id>run-cache-benchmark</id>
+                                <phase>integration-test</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>benchmark-capture</id>
+            <properties>
+                <peegeeq.benchmark.mainClass>dev.mars.peegeeq.cache.benchmark.BenchmarkCaptureMain</peegeeq.benchmark.mainClass>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>capture-cache-benchmarks</id>
                                 <phase>integration-test</phase>
                                 <goals>
                                     <goal>exec</goal>

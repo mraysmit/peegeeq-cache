@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -81,15 +82,20 @@ public final class PgTestSupport {
     }
 
     private String renderBootstrapSql() {
-        try (InputStream input = PgTestSupport.class.getResourceAsStream(
-                "/db/bootstrap/V001__create_peegee_cache_schema.sql")) {
-            if (input == null) {
-                throw new IllegalStateException("peegee-cache bootstrap SQL is not on the test classpath");
+        List<String> resources = List.of(
+                "/db/bootstrap/V001__create_peegee_cache_schema.sql");
+        StringBuilder sql = new StringBuilder();
+        for (String resource : resources) {
+            try (InputStream input = PgTestSupport.class.getResourceAsStream(resource)) {
+                if (input == null) {
+                    throw new IllegalStateException(
+                            "peegee-cache migration SQL is not on the test classpath: " + resource);
+                }
+                sql.append(new String(input.readAllBytes(), StandardCharsets.UTF_8)).append('\n');
+            } catch (IOException failure) {
+                throw new IllegalStateException("Failed to load peegee-cache migration SQL: " + resource, failure);
             }
-            return new String(input.readAllBytes(), StandardCharsets.UTF_8)
-                    .replace("peegee_cache", schemaName);
-        } catch (IOException failure) {
-            throw new IllegalStateException("Failed to load peegee-cache bootstrap SQL", failure);
         }
+        return sql.toString().replace("peegee_cache", schemaName);
     }
 }

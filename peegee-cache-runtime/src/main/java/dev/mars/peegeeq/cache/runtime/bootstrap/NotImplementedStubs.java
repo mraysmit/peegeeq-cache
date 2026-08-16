@@ -4,35 +4,39 @@ import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.api.model.PubSubMessage;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import dev.mars.peegeeq.cache.api.pubsub.Subscription;
+import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
+import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
 import io.vertx.core.Future;
 
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Temporary no-op service implementations for APIs scheduled for a later phase.
+ * Fail-fast service implementations for capabilities unavailable in the current configuration.
  */
 final class NotImplementedStubs {
 
     private NotImplementedStubs() {}
 
-    static PubSubService pubSubService() {
+    static PubSubService pubSubService(CacheMetrics metrics) {
+        Objects.requireNonNull(metrics, "metrics");
         return new PubSubService() {
             @Override
             public Future<Integer> publish(PublishRequest request) {
-                return Future.failedFuture(notImplemented("publish", request));
+                return metrics.observe(CacheOperation.PUBSUB_PUBLISH,
+                        () -> Future.failedFuture(pubSubUnavailable()));
             }
 
             @Override
             public Future<Subscription> subscribe(String channel, Consumer<PubSubMessage> handler) {
-                return Future.failedFuture(notImplemented("subscribe", channel));
+                return metrics.observe(CacheOperation.PUBSUB_SUBSCRIBE,
+                        () -> Future.failedFuture(pubSubUnavailable()));
             }
         };
     }
 
-    private static UnsupportedOperationException notImplemented(String operation, Object detail) {
+    private static UnsupportedOperationException pubSubUnavailable() {
         return new UnsupportedOperationException(
-                "Operation '" + operation + "' is not implemented yet for PostgreSQL runtime bootstrap"
-                        + (detail != null ? " (detail=" + detail + ")" : "")
-        );
+                "PostgreSQL pub/sub is unavailable because connectOptions were not configured");
     }
 }

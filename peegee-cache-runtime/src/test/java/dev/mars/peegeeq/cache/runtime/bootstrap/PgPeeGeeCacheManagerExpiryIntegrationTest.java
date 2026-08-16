@@ -1,8 +1,16 @@
 package dev.mars.peegeeq.cache.runtime.bootstrap;
 
+import dev.mars.peegeeq.cache.api.PeeGeeCache;
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
+import dev.mars.peegeeq.cache.api.model.CounterOptions;
+import dev.mars.peegeeq.cache.api.model.LockAcquireRequest;
+import dev.mars.peegeeq.cache.api.model.LockKey;
+import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
+import dev.mars.peegeeq.cache.api.model.LockRenewRequest;
+import dev.mars.peegeeq.cache.api.model.PublishRequest;
+import dev.mars.peegeeq.cache.api.model.ScanRequest;
 import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.api.model.TtlState;
 import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
@@ -23,6 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -160,6 +170,74 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
                 })));
     }
 
+    @Test
+    void everyConfiguredAsyncOperationHasACompletedTelemetryContract(Vertx vertx, VertxTestContext ctx) {
+        RecordingTelemetry telemetry = new RecordingTelemetry();
+        PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
+                PeeGeeCacheConfig.defaults(), new PgCacheStoreConfig(SCHEMA, SCHEMA),
+                pg.connectOptions(), telemetry, SchemaBootstrapMode.APPLY);
+
+        PeeGeeCaches.create(vertx, pool, options)
+                .compose(manager -> manager.startReactive().map(manager))
+                .compose(manager -> exerciseEveryAsyncOperation(manager.cache())
+                        .compose(ignored -> manager.stopReactive()))
+                .onComplete(ctx.succeeding(ignored -> ctx.verify(() -> {
+                    EnumSet<CacheOperation> expected = EnumSet.allOf(CacheOperation.class);
+                    assertEquals(expected, EnumSet.copyOf(telemetry.started));
+                    assertEquals(expected, EnumSet.copyOf(telemetry.completed));
+                    assertTrue(telemetry.failed.isEmpty());
+                    ctx.completeNow();
+                })));
+    }
+
+    private static Future<Void> exerciseEveryAsyncOperation(PeeGeeCache cache) {
+        CacheKey entry = new CacheKey("telemetry", "entry");
+        CacheKey batchOne = new CacheKey("telemetry", "batch-one");
+        CacheKey batchTwo = new CacheKey("telemetry", "batch-two");
+        CacheSetRequest entrySet = new CacheSetRequest(
+                entry, CacheValue.ofString("value"), null, SetMode.UPSERT, null, false);
+        List<CacheSetRequest> batch = List.of(
+                new CacheSetRequest(batchOne, CacheValue.ofString("one"), null, SetMode.UPSERT, null, false),
+                new CacheSetRequest(batchTwo, CacheValue.ofString("two"), null, SetMode.UPSERT, null, false));
+        CacheKey counter = new CacheKey("telemetry", "counter");
+        LockKey lock = new LockKey("telemetry", "lock");
+        String owner = "telemetry-owner";
+
+        return cache.cache().set(entrySet)
+                .compose(ignored -> cache.cache().get(entry))
+                .compose(ignored -> cache.cache().getMany(List.of(entry, batchOne)))
+                .compose(ignored -> cache.cache().exists(entry))
+                .compose(ignored -> cache.cache().ttl(entry))
+                .compose(ignored -> cache.cache().expire(entry, Duration.ofMinutes(1)))
+                .compose(ignored -> cache.cache().persist(entry))
+                .compose(ignored -> cache.cache().touch(entry, Duration.ofMinutes(1)))
+                .compose(ignored -> cache.cache().setMany(batch))
+                .compose(ignored -> cache.cache().delete(entry))
+                .compose(ignored -> cache.cache().deleteMany(List.of(batchOne, batchTwo)))
+                .compose(ignored -> cache.counters().increment(counter))
+                .compose(ignored -> cache.counters().decrement(counter))
+                .compose(ignored -> cache.counters().getValue(counter))
+                .compose(ignored -> cache.counters().setValue(counter, 7, CounterOptions.defaults()))
+                .compose(ignored -> cache.counters().ttl(counter))
+                .compose(ignored -> cache.counters().expire(counter, Duration.ofMinutes(1)))
+                .compose(ignored -> cache.counters().persist(counter))
+                .compose(ignored -> cache.counters().delete(counter))
+                .compose(ignored -> cache.locks().acquire(
+                        new LockAcquireRequest(lock, owner, Duration.ofMinutes(1), false, true)))
+                .compose(ignored -> cache.locks().renew(new LockRenewRequest(lock, owner, Duration.ofMinutes(1))))
+                .compose(ignored -> cache.locks().isHeldBy(lock, owner))
+                .compose(ignored -> cache.locks().currentLock(lock))
+                .compose(ignored -> cache.locks().release(new LockReleaseRequest(lock, owner)))
+                .compose(ignored -> cache.scan().scan(new ScanRequest("telemetry", "", null, 10, false, false)))
+                .compose(ignored -> cache.pubSub().subscribe("telemetry-contract", message -> {}))
+                .compose(subscription -> cache.pubSub().publish(
+                                new PublishRequest("telemetry-contract", "event", "text/plain"))
+                        .map(subscription))
+                .compose(subscription -> subscription.unsubscribe())
+                .compose(ignored -> cache.admin().entryStats("telemetry"))
+                .mapEmpty();
+    }
+
     private static Future<Void> awaitAllRowsDeleted(Vertx vertx, int attemptsRemaining) {
         String countSql = "SELECT "
                 + "(SELECT COUNT(*) FROM " + SCHEMA + ".cache_entries) + "
@@ -180,14 +258,19 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
     }
 
     private static final class RecordingTelemetry implements CacheTelemetry {
+        private final CopyOnWriteArrayList<CacheOperation> started = new CopyOnWriteArrayList<>();
         private final CopyOnWriteArrayList<CacheOperation> completed = new CopyOnWriteArrayList<>();
+        private final CopyOnWriteArrayList<CacheOperation> failed = new CopyOnWriteArrayList<>();
         private final CopyOnWriteArrayList<Boolean> lifecycle = new CopyOnWriteArrayList<>();
 
         @Override
         public OperationSpan startOperation(CacheOperation operation) {
+            started.add(operation);
             return failure -> {
                 if (failure == null) {
                     completed.add(operation);
+                } else {
+                    failed.add(operation);
                 }
             };
         }

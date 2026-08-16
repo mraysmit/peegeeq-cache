@@ -2,10 +2,18 @@ package dev.mars.peegeeq.cache.benchmark;
 
 import dev.mars.peegeeq.cache.api.cache.CacheService;
 import dev.mars.peegeeq.cache.api.counter.CounterService;
+import dev.mars.peegeeq.cache.api.lock.LockService;
+import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
+import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
+import dev.mars.peegeeq.cache.api.model.LockAcquireRequest;
+import dev.mars.peegeeq.cache.api.model.LockKey;
+import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
+import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.api.model.SetMode;
+import dev.mars.peegeeq.cache.core.telemetry.CacheTelemetry;
 import dev.mars.peegeeq.cache.observability.metrics.MicrometerCacheTelemetry;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
@@ -17,6 +25,7 @@ import dev.mars.peegeeq.cache.test.PgTestSupport;
 import dev.mars.peegeeq.cache.test.VertxAwait;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnection;
 import io.vertx.sqlclient.Pool;
@@ -26,9 +35,12 @@ import io.vertx.sqlclient.Tuple;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -47,7 +59,7 @@ public final class CacheBenchmarkMain {
     public static void main(String[] args) {
         int exitCode = 0;
         try {
-            run();
+            run(BenchmarkConfig.fromSystemProperties());
         } catch (Throwable failure) {
             failure.printStackTrace(System.err);
             exitCode = 1;
@@ -55,68 +67,170 @@ public final class CacheBenchmarkMain {
         System.exit(exitCode);
     }
 
-    private static void run() throws Exception {
-        BenchmarkConfig config = BenchmarkConfig.fromSystemProperties();
-        System.out.printf("benchmark-config concurrency=%d duration-seconds=%d%n",
-                config.concurrency(), config.duration().toSeconds());
+    static BenchmarkRunResult run(BenchmarkConfig config) throws Exception {
+        System.out.printf("benchmark-config concurrency=%d pool-size=%d duration-seconds=%d%n",
+                config.concurrency(), config.poolSize(), config.duration().toSeconds());
         Vertx vertx = Vertx.vertx();
         PgTestSupport postgres = new PgTestSupport("cache-benchmark", SCHEMA);
         Pool pool = null;
-        PeeGeeCacheManager manager = null;
+        PeeGeeCacheManager noopManager = null;
+        PeeGeeCacheManager observedManager = null;
+        PeeGeeCacheManager expiryManager = null;
+        SimpleMeterRegistry registry = null;
         try {
             postgres.start(vertx);
             pool = Pool.pool(vertx,
                     postgres.connectOptions().addProperty("application_name", APPLICATION_NAME),
-                    new PoolOptions().setMaxSize(config.concurrency()));
-            SimpleMeterRegistry registry = new SimpleMeterRegistry();
-            PeeGeeCacheConfig runtime = new PeeGeeCacheConfig(
-                    null, Duration.ofMillis(50), 250, true);
-            PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
-                    runtime, new PgCacheStoreConfig(SCHEMA, SCHEMA), null,
+                    foregroundPoolOptions(config));
+            registry = new SimpleMeterRegistry();
+            PeeGeeCacheConfig runtime = sustainedWorkloadRuntime();
+            PgCacheStoreConfig store = new PgCacheStoreConfig(SCHEMA, SCHEMA);
+            PeeGeeCacheBootstrapOptions noopOptions = new PeeGeeCacheBootstrapOptions(
+                    runtime, store, postgres.connectOptions(), CacheTelemetry.noop());
+            PeeGeeCacheBootstrapOptions observedOptions = new PeeGeeCacheBootstrapOptions(
+                    runtime, store, postgres.connectOptions(),
                     new MicrometerCacheTelemetry(registry));
-            manager = VertxAwait.await(PeeGeeCaches.create(vertx, pool, options), Duration.ofSeconds(10));
-            VertxAwait.await(manager.startReactive(), Duration.ofSeconds(10));
+            noopManager = VertxAwait.await(PeeGeeCaches.create(vertx, pool, noopOptions), Duration.ofSeconds(10));
+            observedManager = VertxAwait.await(
+                    PeeGeeCaches.create(vertx, pool, observedOptions), Duration.ofSeconds(10));
+            VertxAwait.await(noopManager.startReactive(), Duration.ofSeconds(10));
+            VertxAwait.await(observedManager.startReactive(), Duration.ofSeconds(10));
 
-            CacheService cache = manager.cache().cache();
-            CounterService counters = manager.cache().counters();
-            LatencyHistogram.Snapshot mixed = runSustained(config,
-                    mixedOperation(cache, new AtomicLong()));
-            LatencyHistogram.Snapshot contention = runSustained(config,
+            CacheService noopCache = noopManager.cache().cache();
+            CacheService observedCache = observedManager.cache().cache();
+            CounterService counters = observedManager.cache().counters();
+            TelemetryComparison telemetryComparison = runTelemetryComparison(config,
+                    mixedOperation(noopCache, new AtomicLong(), "noop"),
+                    mixedOperation(observedCache, new AtomicLong(), "observed"));
+            LatencyHistogram.Snapshot noopMixed = telemetryComparison.noop();
+            LatencyHistogram.Snapshot observedMixed = telemetryComparison.enabled();
+            List<BenchmarkScenarioResult> scenarios = new ArrayList<>();
+            print("mixed-set-get-noop-telemetry", noopMixed);
+            print("mixed-set-get-micrometer", observedMixed);
+            scenarios.add(BenchmarkScenarioResult.from("mixed-set-get-noop-telemetry", noopMixed));
+            scenarios.add(BenchmarkScenarioResult.from("mixed-set-get-micrometer", observedMixed));
+            printTelemetryOverhead(noopMixed, observedMixed);
+            enforce("mixed-set-get-noop-telemetry", noopMixed, config);
+            enforce("mixed-set-get-micrometer", observedMixed, config);
+            enforceTelemetryOverhead(noopMixed, observedMixed, config);
+
+            LatencyHistogram.Snapshot contention = runSustained("counter-contention", config,
                     () -> counters.increment(new CacheKey("benchmark", "contended-counter")).mapEmpty());
-            Duration expiryLag = measureExpiryLag(pool, config.maximumExpiryLag());
-            Duration failoverRecovery = measurePoolFailover(vertx, postgres, pool, cache,
-                    config.maximumFailoverRecovery());
-
-            print("mixed-set-get", mixed);
             print("counter-contention", contention);
-            System.out.printf("expiry-lag-ms=%d%n", expiryLag.toMillis());
-            System.out.printf("pool-failover-recovery-ms=%d%n", failoverRecovery.toMillis());
-            enforce("mixed-set-get", mixed, config);
+            scenarios.add(BenchmarkScenarioResult.from("counter-contention", contention));
             enforce("counter-contention", contention, config);
+
+            LatencyHistogram.Snapshot lockContention = runSustained("lock-contention", config,
+                    lockOperation(observedManager.cache().locks(), new AtomicLong()));
+            print("lock-contention", lockContention);
+            scenarios.add(BenchmarkScenarioResult.from("lock-contention", lockContention));
+            enforce("lock-contention", lockContention, config);
+
+            LatencyHistogram.Snapshot notificationLatency = runPubSubLatency(
+                    observedManager.cache().pubSub(), config);
+            print("pubsub-publish-to-receive", notificationLatency);
+            scenarios.add(BenchmarkScenarioResult.from("pubsub-publish-to-receive", notificationLatency));
+            enforce("pubsub-publish-to-receive", notificationLatency, config);
+
+            PeeGeeCacheBootstrapOptions expiryOptions = new PeeGeeCacheBootstrapOptions(
+                    expiryMeasurementRuntime(), store, null, CacheTelemetry.noop());
+            expiryManager = VertxAwait.await(
+                    PeeGeeCaches.create(vertx, pool, expiryOptions), Duration.ofSeconds(10));
+            VertxAwait.await(expiryManager.startReactive(), Duration.ofSeconds(10));
+            Duration expiryLag = measureExpiryLag(pool, config.maximumExpiryLag());
+            System.out.printf("expiry-lag-ms=%d%n", expiryLag.toMillis());
+            VertxAwait.await(expiryManager.stopReactive(), Duration.ofSeconds(10));
+            Duration failoverRecovery = measurePoolFailover(vertx, postgres, pool, observedCache,
+                    config.maximumFailoverRecovery());
+            System.out.printf("pool-failover-recovery-ms=%d%n", failoverRecovery.toMillis());
+            return new BenchmarkRunResult(config, scenarios,
+                    new BenchmarkTelemetryResult(
+                            throughputOverheadPercent(noopMixed, observedMixed),
+                            p99OverheadPercent(noopMixed, observedMixed)),
+                    expiryLag, failoverRecovery);
         } finally {
-            if (manager != null && manager.isStarted()) {
-                VertxAwait.await(manager.stopReactive(), Duration.ofSeconds(10));
+            if (expiryManager != null && expiryManager.isStarted()) {
+                VertxAwait.await(expiryManager.stopReactive(), Duration.ofSeconds(10));
+            }
+            if (observedManager != null && observedManager.isStarted()) {
+                VertxAwait.await(observedManager.stopReactive(), Duration.ofSeconds(10));
+            }
+            if (noopManager != null && noopManager.isStarted()) {
+                VertxAwait.await(noopManager.stopReactive(), Duration.ofSeconds(10));
             }
             if (pool != null) {
                 VertxAwait.await(pool.close(), Duration.ofSeconds(10));
             }
             postgres.stop();
             VertxAwait.await(vertx.close(), Duration.ofSeconds(10));
+            if (registry != null) {
+                registry.close();
+            }
         }
     }
 
-    private static Supplier<Future<Void>> mixedOperation(CacheService cache, AtomicLong sequence) {
+    static PeeGeeCacheConfig sustainedWorkloadRuntime() {
+        return new PeeGeeCacheConfig(null, null, 0, false);
+    }
+
+    static PoolOptions foregroundPoolOptions(BenchmarkConfig config) {
+        return new PoolOptions().setMaxSize(config.poolSize());
+    }
+
+    static PeeGeeCacheConfig expiryMeasurementRuntime() {
+        return new PeeGeeCacheConfig(null, Duration.ofMillis(50), 250, true);
+    }
+
+    private static Supplier<Future<Void>> mixedOperation(
+            CacheService cache, AtomicLong sequence, String telemetryMode) {
         return () -> {
             long id = sequence.incrementAndGet();
-            CacheKey key = new CacheKey("benchmark", "mixed-" + (id % 1_000));
+            CacheKey key = new CacheKey("benchmark", telemetryMode + "-mixed-" + (id % 1_000));
             CacheSetRequest request = new CacheSetRequest(key, CacheValue.ofString("value-" + id),
                     Duration.ofMinutes(5), SetMode.UPSERT, null, false);
             return cache.set(request).compose(ignored -> cache.get(key)).mapEmpty();
         };
     }
 
-    private static LatencyHistogram.Snapshot runSustained(BenchmarkConfig config,
-                                                            Supplier<Future<Void>> operation) throws Exception {
+    private static Supplier<Future<Void>> lockOperation(LockService locks, AtomicLong sequence) {
+        LockKey key = new LockKey("benchmark", "contended-lock");
+        return () -> {
+            String owner = "owner-" + sequence.incrementAndGet();
+            LockAcquireRequest acquire = new LockAcquireRequest(
+                    key, owner, Duration.ofSeconds(1), false, true);
+            return locks.acquire(acquire).compose(result -> result.acquired()
+                    ? locks.release(new LockReleaseRequest(key, owner)).mapEmpty()
+                    : Future.succeededFuture());
+        };
+    }
+
+    private static LatencyHistogram.Snapshot runPubSubLatency(
+            PubSubService pubSub, BenchmarkConfig config) throws Exception {
+        ConcurrentHashMap<String, Promise<Void>> pending = new ConcurrentHashMap<>();
+        AtomicLong sequence = new AtomicLong();
+        Subscription subscription = VertxAwait.await(pubSub.subscribe("benchmark-latency", message -> {
+            Promise<Void> completion = pending.remove(message.payload());
+            if (completion != null) {
+                completion.tryComplete();
+            }
+        }), Duration.ofSeconds(10));
+        try {
+            return runSustained("pubsub-publish-to-receive", config, () -> {
+                String payload = Long.toString(sequence.incrementAndGet());
+                Promise<Void> completion = Promise.promise();
+                pending.put(payload, completion);
+                return pubSub.publish(new PublishRequest("benchmark-latency", payload, "text/plain"))
+                        .compose(ignored -> completion.future())
+                        .onFailure(ignored -> pending.remove(payload));
+            });
+        } finally {
+            pending.clear();
+            VertxAwait.await(subscription.unsubscribe(), Duration.ofSeconds(10));
+        }
+    }
+
+    static LatencyHistogram.Snapshot runSustained(
+            String scenario, BenchmarkConfig config, Supplier<Future<Void>> operation) throws Exception {
         LatencyHistogram histogram = new LatencyHistogram(config.concurrency() * 1_000);
         long startedAt = System.nanoTime();
         long deadline = startedAt + config.duration().toNanos();
@@ -132,11 +246,53 @@ public final class CacheBenchmarkMain {
             });
         }
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            for (java.util.concurrent.Future<Void> worker : executor.invokeAll(workers)) {
-                worker.get();
-            }
+            awaitWorkers(scenario, executor.invokeAll(workers));
         }
         return histogram.snapshot(Duration.ofNanos(System.nanoTime() - startedAt));
+    }
+
+    private static TelemetryComparison runTelemetryComparison(
+            BenchmarkConfig config, Supplier<Future<Void>> noopOperation,
+            Supplier<Future<Void>> enabledOperation) throws Exception {
+        LatencyHistogram noopHistogram = new LatencyHistogram(config.concurrency() * 500);
+        LatencyHistogram enabledHistogram = new LatencyHistogram(config.concurrency() * 500);
+        long startedAt = System.nanoTime();
+        long deadline = startedAt + config.duration().toNanos();
+        List<Callable<Void>> workers = new ArrayList<>();
+        for (int worker = 0; worker < config.concurrency(); worker++) {
+            int workerIndex = worker;
+            workers.add(() -> {
+                long iteration = workerIndex;
+                while (System.nanoTime() < deadline) {
+                    boolean noop = (iteration++ & 1L) == 0;
+                    long operationStartedAt = System.nanoTime();
+                    VertxAwait.await((noop ? noopOperation : enabledOperation).get(),
+                            config.maximumP99().multipliedBy(5));
+                    (noop ? noopHistogram : enabledHistogram).record(
+                            Duration.ofNanos(System.nanoTime() - operationStartedAt));
+                }
+                return null;
+            });
+        }
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            awaitWorkers("telemetry-comparison", executor.invokeAll(workers));
+        }
+        Duration elapsed = Duration.ofNanos(System.nanoTime() - startedAt);
+        return new TelemetryComparison(noopHistogram.snapshot(elapsed), enabledHistogram.snapshot(elapsed));
+    }
+
+    private static void awaitWorkers(
+            String scenario, List<java.util.concurrent.Future<Void>> workers) throws Exception {
+        for (java.util.concurrent.Future<Void> worker : workers) {
+            try {
+                worker.get();
+            } catch (ExecutionException failure) {
+                Throwable cause = failure.getCause();
+                String outcome = cause instanceof TimeoutException ? "timed out" : "failed";
+                throw new IllegalStateException(
+                        "Benchmark scenario '" + scenario + "' " + outcome, cause);
+            }
+        }
     }
 
     private static Duration measureExpiryLag(Pool pool, Duration maximumLag) throws Exception {
@@ -208,6 +364,33 @@ public final class CacheBenchmarkMain {
         }
     }
 
+    private static void enforceTelemetryOverhead(
+            LatencyHistogram.Snapshot noop, LatencyHistogram.Snapshot enabled, BenchmarkConfig config) {
+        double throughputOverhead = throughputOverheadPercent(noop, enabled);
+        if (throughputOverhead > config.maximumTelemetryOverheadPercent()) {
+            throw new IllegalStateException("Micrometer throughput overhead exceeded threshold: "
+                    + throughputOverhead + "%");
+        }
+    }
+
+    private static void printTelemetryOverhead(
+            LatencyHistogram.Snapshot noop, LatencyHistogram.Snapshot enabled) {
+        System.out.printf("telemetry=micrometer throughput-overhead-percent=%.2f p99-overhead-percent=%.2f%n",
+                throughputOverheadPercent(noop, enabled), p99OverheadPercent(noop, enabled));
+    }
+
+    private static double p99OverheadPercent(
+            LatencyHistogram.Snapshot noop, LatencyHistogram.Snapshot enabled) {
+        return ((double) enabled.p99().toNanos()
+                / Math.max(1L, noop.p99().toNanos()) - 1.0) * 100.0;
+    }
+
+    private static double throughputOverheadPercent(
+            LatencyHistogram.Snapshot noop, LatencyHistogram.Snapshot enabled) {
+        return Math.max(0.0, (1.0 - enabled.throughputPerSecond()
+                / noop.throughputPerSecond()) * 100.0);
+    }
+
     private static void print(String name, LatencyHistogram.Snapshot result) {
         System.out.printf("scenario=%s operations=%d throughput-per-second=%.2f p50-ms=%.3f p95-ms=%.3f p99-ms=%.3f%n",
                 name, result.operations(), result.throughputPerSecond(), millis(result.p50()),
@@ -216,5 +399,9 @@ public final class CacheBenchmarkMain {
 
     private static double millis(Duration value) {
         return value.toNanos() / 1_000_000.0;
+    }
+
+    private record TelemetryComparison(
+            LatencyHistogram.Snapshot noop, LatencyHistogram.Snapshot enabled) {
     }
 }

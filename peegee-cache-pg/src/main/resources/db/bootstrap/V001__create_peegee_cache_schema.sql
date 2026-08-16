@@ -1,7 +1,7 @@
 -- V001: peegee-cache bootstrap DDL.
 --
 -- Creates the peegee_cache schema, all V1 Core tables, sequences, indexes,
--- and PL/pgSQL functions for correctness-sensitive writes.
+-- PL/pgSQL functions for correctness-sensitive writes, and stable read views.
 -- This is a greenfield bootstrap — there is no prior schema to evolve from.
 
 -- Schema
@@ -639,3 +639,38 @@ BEGIN
     RETURN QUERY SELECT (v_count > 0);
 END;
 $$;
+
+
+-- Stable read-only SQL surface for external PostgreSQL clients.
+
+CREATE OR REPLACE VIEW peegee_cache.live_entries AS
+SELECT namespace, cache_key, value_type, value_bytes, numeric_value, version,
+       created_at, updated_at, expires_at, hit_count, last_accessed_at
+FROM peegee_cache.cache_entries
+WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP;
+
+CREATE OR REPLACE VIEW peegee_cache.live_counters AS
+SELECT namespace, counter_key, counter_value, version,
+       created_at, updated_at, expires_at
+FROM peegee_cache.cache_counters
+WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP;
+
+CREATE OR REPLACE VIEW peegee_cache.active_locks AS
+SELECT namespace, lock_key, owner_token, fencing_token, version,
+       created_at, updated_at, lease_expires_at
+FROM peegee_cache.cache_locks
+WHERE lease_expires_at > CURRENT_TIMESTAMP;
+
+
+-- Version ledger used by the managed migration runner. This is deliberately
+-- part of V001 so installations created from the standalone SQL retain the
+-- same upgrade metadata as managed runtime installations.
+CREATE TABLE IF NOT EXISTS peegee_cache.schema_migrations (
+    version       INTEGER PRIMARY KEY,
+    description   TEXT        NOT NULL,
+    applied_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO peegee_cache.schema_migrations(version, description)
+VALUES (1, 'create peegee-cache V1 baseline')
+ON CONFLICT (version) DO NOTHING;

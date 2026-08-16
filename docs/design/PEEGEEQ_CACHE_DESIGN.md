@@ -3096,6 +3096,10 @@ To keep adoption friction low, the repository should carry runnable examples tha
     - purpose: optimistic concurrency using `ONLY_IF_VERSION_MATCHES` and conflict handling
 - `peegee-cache-examples/src/main/java/dev/mars/peegeeq/cache/examples/CacheBatchAndTtlExample.java`
     - purpose: batch get/set/delete flows plus TTL lifecycle operations (`expire`, `touch`, `persist`)
+- `peegee-cache-examples/src/main/java/dev/mars/peegeeq/cache/examples/CoordinationAndPubSubExample.java`
+    - purpose: distributed lock acquire/renew/release plus configured LISTEN/NOTIFY delivery
+- `peegee-cache-examples/src/main/java/dev/mars/peegeeq/cache/examples/SqlInspectionExample.java`
+    - purpose: inspect live cache state through the stable native-SQL read views
 
 Each example is runnable and uses the same runtime bootstrap path (`PeeGeeCaches.create(...)` + `startReactive()` + `stopReactive()`).
 

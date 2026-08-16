@@ -56,7 +56,7 @@ For anything that touches **real PostgreSQL semantics**:
 - Counter increment/decrement atomicity
 - Transaction semantics (expired-row pre-delete for NX)
 
-**Framework:** JUnit Jupiter 5.x + Testcontainers 2.0.2 (`PostgreSQLContainer` with PostgreSQL 18.3-alpine).
+**Framework:** JUnit Jupiter 5.x + Testcontainers 2.0.2 (`PostgreSQLContainer`); the default image is PostgreSQL 18.3-alpine and the full suite is parameterized for the PostgreSQL 15–18 matrix.
 
 **Mocking is prohibited.** No mocked connections, pools, repositories, or SQL execution. No H2/HSQLDB substitutes.
 
@@ -80,12 +80,12 @@ Last verified: 2026-08-16 with `mvn clean verify`.
 |---|---:|---|
 | `peegee-cache-api` | 34 | Keys, values, and exception contracts |
 | `peegee-cache-core` | 14 | Validation, in-memory metrics, telemetry isolation, and async observation |
-| `peegee-cache-pg` | 184 | Bootstrap, repositories, services, native SQL, pub/sub recovery, and contention |
-| `peegee-cache-runtime` | 20 | Lifecycle, external/managed schema policy, custom schemas, telemetry injection, default TTL, and physical expiry sweeping |
-| `peegee-cache-observability` | 3 | Micrometer export, OpenTelemetry spans, and real PostgreSQL readiness |
-| `peegee-cache-test-support` | 1 | Latency percentile/throughput calculation |
-| `peegee-cache-benchmarks` | 2 | Benchmark configuration and threshold validation |
-| **Total** | **258** | Validated by the clean reactor verification |
+| `peegee-cache-pg` | 191 | Consolidated baseline bootstrap, migration-runner safety, repositories, services, native SQL, adversarial pub/sub, recovery, and contention |
+| `peegee-cache-runtime` | 21 | Lifecycle, external/managed schema policy, custom schemas, complete operation telemetry, default TTL, and physical expiry sweeping |
+| `peegee-cache-observability` | 4 | Micrometer export, OpenTelemetry spans, and complete/partial-schema PostgreSQL readiness |
+| `peegee-cache-test-support` | 3 | Latency percentile/throughput calculation and configurable PostgreSQL matrix image selection |
+| `peegee-cache-benchmarks` | 13 | Benchmark configuration, typed results, self-contained HTML evidence generation, exact pool headroom, runtime layout, timeout diagnostics, and real-PostgreSQL pool-headroom/sweeper regression |
+| **Total** | **280** | Full reactor green on PostgreSQL 18.3; the 269-test pre-fix reactor and the added pool regression are both validated on PostgreSQL 15–18 |
 
 ### peegee-cache-api (34 tests)
 
@@ -162,7 +162,7 @@ Each repository method gets a Testcontainers integration test against real Postg
 
 ### Testcontainers setup
 
-PostgreSQL 18.3-alpine via Testcontainers 2.0.2 and the standard `PostgreSQLContainer` integration.
+PostgreSQL via Testcontainers 2.0.2 and the standard `PostgreSQLContainer` integration. `peegeeq.test.postgres.image` selects the matrix image; the default remains `postgres:18.3-alpine`.
 
 Container lifecycle is managed per-test-class using `@BeforeAll` / `@AfterAll`. Tests apply the bundled bootstrap SQL through `BootstrapSqlRenderer` before exercising the database contract.
 

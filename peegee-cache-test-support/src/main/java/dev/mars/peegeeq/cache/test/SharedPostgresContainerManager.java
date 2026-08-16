@@ -17,9 +17,10 @@ public final class SharedPostgresContainerManager {
 
     public static synchronized PostgreSQLContainer acquire(String ownerLabel) {
         if (sharedContainer == null) {
+            String postgresImage = PostgreSQLTestConstants.postgresImage();
             log.info("Starting shared PostgreSQL Testcontainer for '{}' (image: {})",
-                    ownerLabel, PostgreSQLTestConstants.POSTGRES_IMAGE);
-            sharedContainer = new PostgreSQLContainer(PostgreSQLTestConstants.POSTGRES_IMAGE)
+                    ownerLabel, postgresImage);
+            sharedContainer = new PostgreSQLContainer(postgresImage)
                     .withDatabaseName(PostgreSQLTestConstants.DEFAULT_DATABASE_NAME)
                     .withUsername(PostgreSQLTestConstants.DEFAULT_USERNAME)
                     .withPassword(PostgreSQLTestConstants.DEFAULT_PASSWORD)

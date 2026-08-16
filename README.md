@@ -45,7 +45,7 @@ PostgreSQL's shared buffer caching, prepared statement plan reuse, HOT updates, 
 
 - **Java** 21–25 (enforced by the build)
 - **Vert.x** 5.0.8
-- **PostgreSQL** 15+; the integration suite currently validates PostgreSQL 18.3
+- **PostgreSQL** 15+; the full reactor was manually validated against PostgreSQL 15.17, 16.13, 17.11, and 18.3
 
 ## Quick start
 
@@ -96,7 +96,7 @@ pool.query(BootstrapSqlRenderer.loadBootstrapSql()).execute()
 
 Enable physical expiry cleanup with a `PeeGeeCacheConfig` whose `enableExpirySweeper` value is `true`. Logical expiry remains authoritative even when the sweeper is disabled. Pub/sub publishing and subscribing require `PgConnectOptions`; the default two-argument `PeeGeeCaches.create(vertx, pool)` path intentionally leaves pub/sub unavailable.
 
-Schema provisioning is external by default. Embedded deployments may opt into applying the bundled idempotent SQL during `startReactive()` by setting `SchemaBootstrapMode.APPLY` in `PeeGeeCacheBootstrapOptions`.
+Schema provisioning is external by default. Embedded deployments may opt into applying bundled, transactionally versioned migrations during `startReactive()` by setting `SchemaBootstrapMode.APPLY` in `PeeGeeCacheBootstrapOptions`. See the [native PostgreSQL API and upgrade contract](docs/PEEGEEQ_CACHE_NATIVE_SQL_API.md).
 
 ## Observability
 
@@ -116,9 +116,19 @@ PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
 
 Instrumentation covers every service operation and failure, active operations, lock contention, expiry sweep latency/rows/oldest-row lag, pub/sub reconnect outcomes, notification dispatch latency, active subscriptions, schema bootstrap, and runtime lifecycle. Tags use bounded enums and never contain cache keys, namespaces, channels, or payloads.
 
-`PgCacheHealthIndicator` verifies managed-runtime state, PostgreSQL connectivity, and presence of the configured `cache_entries` table. See [operations guidance](docs/OPERATIONS.md), [benchmarking](docs/BENCHMARKS.md), and [release packaging](docs/RELEASE_PACKAGING.md).
+`PgCacheHealthIndicator` verifies managed-runtime state, PostgreSQL connectivity, and the complete required schema-object set. See [operations guidance](docs/PEEGEEQ_CACHE_OPERATIONS.md), [benchmarking](docs/PEEGEEQ_CACHE_BENCHMARKS.md), and [release packaging](docs/PEEGEEQ_CACHE_RELEASE_PACKAGING.md).
 
 All public APIs return `io.vertx.core.Future<T>` — compose with `.compose()`, `.map()`, `.onSuccess()`, `.onFailure()`.
+
+## Benchmarks
+
+Run three captured 30-second repetitions and produce one self-contained HTML report containing results, hardware, Docker, JVM, Git, and raw-log evidence:
+
+```shell
+mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-capture -DskipTests
+```
+
+See the [benchmark guide](docs/PEEGEEQ_CACHE_BENCHMARKS.md) for report contents, release-evidence options, and comparison discipline.
 
 ## License
 

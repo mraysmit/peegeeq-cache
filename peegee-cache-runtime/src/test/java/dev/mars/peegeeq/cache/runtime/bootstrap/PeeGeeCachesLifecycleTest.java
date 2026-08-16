@@ -1,6 +1,9 @@
 package dev.mars.peegeeq.cache.runtime.bootstrap;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
+import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
+import dev.mars.peegeeq.cache.core.telemetry.CacheTelemetry;
+import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
@@ -14,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -151,15 +155,23 @@ class PeeGeeCachesLifecycleTest {
     }
 
     @Test
-    void pubSubStubFailsFastWithUnsupportedOperation(Vertx vertx, VertxTestContext ctx) {
-        PeeGeeCaches.create(vertx, pool)
+    void unavailablePubSubFailsSafelyAndEmitsTelemetry(Vertx vertx, VertxTestContext ctx) {
+        RecordingTelemetry telemetry = new RecordingTelemetry();
+        PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
+                PeeGeeCacheConfig.defaults(), PgCacheStoreConfig.defaults(), null, telemetry);
+        String sensitivePayload = "customer-secret-payload";
+
+        PeeGeeCaches.create(vertx, pool, options)
                 .onComplete(ctx.succeeding(manager ->
                         manager.startReactive().onComplete(ctx.succeeding(v1 ->
-                                manager.cache().pubSub().publish(new PublishRequest("ch", "payload", "text/plain"))
+                                manager.cache().pubSub().publish(new PublishRequest("ch", sensitivePayload, "text/plain"))
                                         .onComplete(ctx.failing(pubErr -> {
                                             ctx.verify(() -> {
                                                 assertInstanceOf(UnsupportedOperationException.class, pubErr);
-                                                assertTrue(pubErr.getMessage().contains("publish"));
+                                                assertTrue(pubErr.getMessage().contains("connectOptions"));
+                                                assertFalse(pubErr.getMessage().contains(sensitivePayload));
+                                                assertTrue(telemetry.started.contains(CacheOperation.PUBSUB_PUBLISH));
+                                                assertTrue(telemetry.failed.contains(CacheOperation.PUBSUB_PUBLISH));
                                             });
                                             manager.stopReactive().onComplete(ctx.succeeding(v2 -> ctx.completeNow()));
                                         }))
@@ -249,5 +261,20 @@ class PeeGeeCachesLifecycleTest {
                     assertTrue(ex.getMessage().contains("not started"));
                     ctx.completeNow();
                 })));
+    }
+
+    private static final class RecordingTelemetry implements CacheTelemetry {
+        private final CopyOnWriteArrayList<CacheOperation> started = new CopyOnWriteArrayList<>();
+        private final CopyOnWriteArrayList<CacheOperation> failed = new CopyOnWriteArrayList<>();
+
+        @Override
+        public OperationSpan startOperation(CacheOperation operation) {
+            started.add(operation);
+            return failure -> {
+                if (failure != null) {
+                    failed.add(operation);
+                }
+            };
+        }
     }
 }
