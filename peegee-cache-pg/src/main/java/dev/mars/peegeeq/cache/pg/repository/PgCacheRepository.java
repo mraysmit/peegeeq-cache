@@ -5,6 +5,7 @@ import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheSetResult;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
+import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.api.model.TouchResult;
 import dev.mars.peegeeq.cache.api.model.TtlResult;
 import dev.mars.peegeeq.cache.api.model.ValueType;

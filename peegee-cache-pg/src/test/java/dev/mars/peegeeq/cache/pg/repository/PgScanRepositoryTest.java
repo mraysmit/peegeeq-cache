@@ -5,7 +5,7 @@ import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
 import dev.mars.peegeeq.cache.api.model.ScanRequest;
 import dev.mars.peegeeq.cache.api.model.SetMode;
-import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;

@@ -1,7 +1,7 @@
 package dev.mars.peegeeq.cache.pg.bootstrap;
 
-import dev.mars.peegeeq.cache.pg.test.PostgreSQLTestConstants;
-import dev.mars.peegeeq.cache.pg.test.SharedPostgresContainerManager;
+import dev.mars.peegeeq.cache.test.PostgreSQLTestConstants;
+import dev.mars.peegeeq.cache.test.SharedPostgresContainerManager;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;

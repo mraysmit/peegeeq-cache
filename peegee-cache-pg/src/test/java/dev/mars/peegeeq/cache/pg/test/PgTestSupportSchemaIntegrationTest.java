@@ -1,5 +1,7 @@
 package dev.mars.peegeeq.cache.pg.test;
 
+import dev.mars.peegeeq.cache.test.PgTestSupport;
+
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;

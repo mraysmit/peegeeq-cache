@@ -4,6 +4,8 @@ import dev.mars.peegeeq.cache.api.PeeGeeCache;
 import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
 import dev.mars.peegeeq.cache.pg.PgPeeGeeCache;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
+import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
+import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
 import dev.mars.peegeeq.cache.pg.repository.PgAdminRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgCacheRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgCounterRepository;
@@ -19,6 +21,7 @@ import dev.mars.peegeeq.cache.pg.service.PgScanService;
 import dev.mars.peegeeq.cache.runtime.Banner;
 import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
+import dev.mars.peegeeq.cache.runtime.expiry.PgExpirySweeper;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
@@ -46,6 +49,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     private final PeeGeeCacheBootstrapOptions options;
     private final PeeGeeCache cache;
     private final PgPubSubService pubSubService;
+    private final PgExpirySweeper expirySweeper;
+    private final CacheMetrics metrics;
     private final AtomicBoolean started = new AtomicBoolean(false);
 
     private volatile long sweeperTimerId = -1L;
@@ -58,26 +63,28 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         // Wire the service graph
         PgCacheStoreConfig storeConfig = this.options.storeConfig();
         String schemaName = storeConfig.schemaName();
-        CacheMetrics metrics = new CacheMetrics();
+        this.metrics = new CacheMetrics(this.options.telemetry());
 
         PgCacheRepository cacheRepo = new PgCacheRepository(pool, schemaName);
         PgCounterRepository counterRepo = new PgCounterRepository(pool, schemaName);
         PgLockRepository lockRepo = new PgLockRepository(pool, schemaName);
 
-        PgCacheService cacheService = new PgCacheService(cacheRepo, metrics);
-        PgCounterService counterService = new PgCounterService(counterRepo, metrics);
-        PgLockService lockService = new PgLockService(lockRepo, metrics);
+        PgCacheService cacheService = new PgCacheService(
+                cacheRepo, this.metrics, this.options.runtimeConfig().defaultTtl());
+        PgCounterService counterService = new PgCounterService(counterRepo, this.metrics);
+        PgLockService lockService = new PgLockService(lockRepo, this.metrics);
 
         PgScanRepository scanRepo = new PgScanRepository(pool, schemaName);
-        PgScanService scanService = new PgScanService(scanRepo);
+        PgScanService scanService = new PgScanService(scanRepo, this.metrics);
 
         PgAdminRepository adminRepo = new PgAdminRepository(pool, schemaName);
-        PgAdminService adminService = new PgAdminService(adminRepo, metrics);
+        PgAdminService adminService = new PgAdminService(adminRepo, this.metrics);
+        this.expirySweeper = new PgExpirySweeper(pool, schemaName);
 
         PgPubSubRepository pubSubRepo = new PgPubSubRepository(pool, storeConfig);
         PgConnectOptions connectOpts = this.options.connectOptions();
         if (connectOpts != null) {
-            this.pubSubService = new PgPubSubService(vertx, pubSubRepo, connectOpts, storeConfig);
+            this.pubSubService = new PgPubSubService(vertx, pubSubRepo, connectOpts, storeConfig, this.metrics);
         } else {
             this.pubSubService = null;
             log.info("No connectOptions provided — pub/sub will use stub (provide connectOptions for real pub/sub)");
@@ -101,10 +108,12 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
 
         return startBackgroundComponents()
                 .onSuccess(v -> {
+                    metrics.recordLifecycle(true);
                     Banner.print();
                     log.info("PeeGeeCacheManager started (schema={})", options.storeConfig().schemaName());
                 })
                 .onFailure(err -> {
+                    metrics.recordLifecycle(false);
                     stopBackgroundComponents()
                             .onComplete(v -> started.set(false));
                 });
@@ -117,7 +126,10 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         }
         log.info("PeeGeeCacheManager stopping");
         return stopBackgroundComponents()
-                .onSuccess(v -> log.info("PeeGeeCacheManager stopped"));
+                .onSuccess(v -> {
+                    metrics.recordLifecycle(false);
+                    log.info("PeeGeeCacheManager stopped");
+                });
     }
 
     @Override
@@ -168,15 +180,44 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     }
 
     private Future<Void> startBackgroundComponents() {
+        return applySchemaPolicy().compose(ignored -> startConfiguredBackgroundComponents());
+    }
+
+    private Future<Void> applySchemaPolicy() {
+        if (options.schemaBootstrapMode() == SchemaBootstrapMode.EXTERNAL) {
+            return Future.succeededFuture();
+        }
+        return metrics.<Void>observe(CacheOperation.SCHEMA_BOOTSTRAP,
+                () -> pool.query(BootstrapSqlRenderer.loadForSchema(options.storeConfig().schemaName()))
+                        .execute().mapEmpty())
+                .onSuccess(ignored -> log.info("Applied bundled schema bootstrap (schema={})",
+                        options.storeConfig().schemaName()));
+    }
+
+    private Future<Void> startConfiguredBackgroundComponents() {
         PeeGeeCacheConfig runtime = options.runtimeConfig();
 
         if (runtime.enableExpirySweeper()) {
             long intervalMillis = runtime.expirySweepInterval().toMillis();
             sweeperTimerId = vertx.setPeriodic(intervalMillis, id -> {
-                // Phase 5 runtime ownership: timer lifecycle is now explicit and managed.
-                log.debug("Expiry sweeper tick (schema={}, batchSize={})",
-                        options.storeConfig().schemaName(),
-                        runtime.expirySweepBatchSize());
+                long sweepStartedAt = System.nanoTime();
+                expirySweeper.sweepDetailed(runtime.expirySweepBatchSize())
+                        .onSuccess(result -> {
+                            metrics.recordExpirySweep(result.deletedRows(),
+                                    java.time.Duration.ofNanos(System.nanoTime() - sweepStartedAt),
+                                    result.oldestExpiredRowLag(), null);
+                            if (result.deletedRows() > 0) {
+                                log.debug("Expiry sweep deleted {} rows (schema={})",
+                                        result.deletedRows(), options.storeConfig().schemaName());
+                            }
+                        })
+                        .onFailure(err -> {
+                            metrics.recordExpirySweep(0,
+                                    java.time.Duration.ofNanos(System.nanoTime() - sweepStartedAt),
+                                    java.time.Duration.ZERO, err);
+                            log.warn("Expiry sweep failed (schema={})",
+                                    options.storeConfig().schemaName(), err);
+                        });
             });
             log.info("Expiry sweeper started (interval={}ms, batchSize={})", intervalMillis, runtime.expirySweepBatchSize());
         }
@@ -199,12 +240,13 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             log.info("Expiry sweeper stopped");
         }
 
+        Future<Void> sweeperStopped = expirySweeper.awaitIdle();
         if (pubSubService != null) {
-            return pubSubService.stop()
+            return sweeperStopped.compose(ignored -> pubSubService.stop())
                     .onSuccess(v -> log.info("Pub/Sub listener stopped"))
                     .onFailure(err -> log.warn("Error stopping pub/sub listener", err));
         }
-        return Future.succeededFuture();
+        return sweeperStopped;
     }
 
     private static PeeGeeCacheBootstrapOptions normalizeOptions(PeeGeeCacheBootstrapOptions options) {
@@ -220,6 +262,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
                 ? resolved.storeConfig()
                 : PgCacheStoreConfig.defaults();
 
-        return new PeeGeeCacheBootstrapOptions(runtimeConfig, storeConfig, resolved.connectOptions());
+        return new PeeGeeCacheBootstrapOptions(runtimeConfig, storeConfig, resolved.connectOptions(),
+                resolved.telemetry() != null ? resolved.telemetry() : dev.mars.peegeeq.cache.core.telemetry.CacheTelemetry.noop(),
+                resolved.schemaBootstrapMode() != null ? resolved.schemaBootstrapMode() : SchemaBootstrapMode.EXTERNAL);
     }
 }

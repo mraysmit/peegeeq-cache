@@ -1,10 +1,14 @@
 package dev.mars.peegeeq.cache.core.metrics;
 
 import dev.mars.peegeeq.cache.api.model.MetricsSnapshot;
+import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
+import dev.mars.peegeeq.cache.core.telemetry.CacheTelemetry;
+import io.vertx.core.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class CacheMetricsTest {
 
@@ -108,5 +112,49 @@ class CacheMetricsTest {
         metrics.reset();
 
         assertEquals(MetricsSnapshot.empty(), metrics.snapshot());
+    }
+
+    @Test
+    void observeCompletesTelemetryForSuccessAndFailure() {
+        RecordingTelemetry telemetry = new RecordingTelemetry();
+        CacheMetrics observed = new CacheMetrics(telemetry);
+
+        assertEquals("ok", observed.observe(CacheOperation.CACHE_GET,
+                () -> Future.succeededFuture("ok")).result());
+        RuntimeException failure = new RuntimeException("failed");
+        assertSame(failure, observed.observe(CacheOperation.CACHE_SET,
+                () -> Future.failedFuture(failure)).cause());
+
+        assertEquals(2, telemetry.started);
+        assertEquals(2, telemetry.completed);
+        assertSame(failure, telemetry.lastFailure);
+    }
+
+    @Test
+    void telemetryFailureNeverChangesCacheBehavior() {
+        CacheMetrics observed = new CacheMetrics(new CacheTelemetry() {
+            @Override
+            public OperationSpan startOperation(CacheOperation operation) {
+                throw new IllegalStateException("exporter failed");
+            }
+        });
+
+        assertEquals("ok", observed.observe(CacheOperation.CACHE_GET,
+                () -> Future.succeededFuture("ok")).result());
+    }
+
+    private static final class RecordingTelemetry implements CacheTelemetry {
+        int started;
+        int completed;
+        Throwable lastFailure;
+
+        @Override
+        public OperationSpan startOperation(CacheOperation operation) {
+            started++;
+            return failure -> {
+                completed++;
+                lastFailure = failure;
+            };
+        }
     }
 }

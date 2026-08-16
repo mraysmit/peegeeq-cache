@@ -5,7 +5,8 @@ import dev.mars.peegeeq.cache.api.model.CounterOptions;
 import dev.mars.peegeeq.cache.api.model.CounterTtlMode;
 import dev.mars.peegeeq.cache.api.model.TtlState;
 import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
-import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -19,6 +20,8 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -139,6 +142,24 @@ class PgCounterRepositoryTest {
             assertEquals(5L, value, "Counter should restart from delta after expiry");
             ctx.completeNow();
         })));
+    }
+
+    @Test
+    @Order(15)
+    void concurrentClientsDoNotLoseIncrements(VertxTestContext ctx) {
+        CacheKey key = new CacheKey("ns", "concurrent-increments");
+        CounterOptions options = CounterOptions.defaults();
+        List<Future<?>> increments = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            increments.add(repo.increment(key, 1, options));
+        }
+
+        Future.all(increments)
+                .compose(v -> repo.get(key))
+                .onComplete(ctx.succeeding(value -> ctx.verify(() -> {
+                    assertEquals(100L, value.orElseThrow());
+                    ctx.completeNow();
+                })));
     }
 
     // --- TTL MODE ---

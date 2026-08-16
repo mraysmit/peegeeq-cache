@@ -154,7 +154,7 @@ Exit criteria:
 
 Status: **COMPLETE**
 
-- 7 modules created: `api`, `core`, `pg`, `runtime`, `observability`, `test-support`, `examples`
+- 8 modules created: `api`, `core`, `pg`, `runtime`, `observability`, `test-support`, `benchmarks`, `examples`
 - Java 21 + Vert.x 5.0.8 baseline aligned
 - root build validates
 
@@ -192,7 +192,7 @@ Status: **COMPLETE**
 - 33 source files: 5 service interfaces, 4 enums, 3 validated records, 12 data records, 4 exception classes, 1 facade
 - 34 unit tests (CacheKeyTest 8, CacheValueTest 13, LockKeyTest 7, ExceptionHierarchyTest 6)
 - `PeeGeeCacheManager` deferred to Phase 5 — its signature depends on config records that belong in the runtime bootstrap phase
-### Phase 2: PostgreSQL schema and migrations
+### Phase 2: PostgreSQL schema and bootstrap
 
 Objective:
 
@@ -200,7 +200,7 @@ Objective:
 
 Scope:
 
-- migration files for schema creation
+- bootstrap SQL for schema creation
 - `cache_entries`, `cache_counters`, `cache_locks`
 - indexes and lock fencing sequence
 - database checks and invariants from the design
@@ -213,13 +213,13 @@ Out of scope:
 
 Exit criteria:
 
-- migrations create the Phase 1 schema on a clean PostgreSQL instance
+- bootstrap SQL creates the Phase 1 schema on a clean PostgreSQL instance
 - invariants such as typed payload exclusivity and lock lease sanity are enforced in SQL
-- migration naming and ordering are stable
+- bootstrap resource naming and loading are stable
 
 Status: **COMPLETE**
 
-- single migration file: `V001__create_peegee_cache_schema.sql` (schema, 3 tables, 1 sequence, 5 indexes)
+- single bootstrap resource: `db/bootstrap/V001__create_peegee_cache_schema.sql` (schema, 3 tables, 1 sequence, 5 indexes, and 8 supported SQL functions)
 - 27 integration tests against real PostgreSQL via Testcontainers
 - all check constraints, primary keys, indexes, and sequence monotonicity verified
 
@@ -395,7 +395,7 @@ Prerequisite: the runtime lifecycle (Phase 5) is stable and `PgConnectOptions` a
 
 ##### Exit criteria for Phase 6.4 — MET
 
-- ✅ `PgPubSubService` passes all tests including Testcontainers integration (9 tests)
+- ✅ `PgPubSubService` passes all tests including Testcontainers integration (11 tests)
 - ✅ publish delivers notification to subscriber handler (`subscriberReceivesPublishedMessage`)
 - ✅ unsubscribe stops delivery (`unsubscribeStopsDelivery`)
 - ✅ oversized payloads are rejected before reaching PostgreSQL (`publishRejectsOversizedPayload`)
@@ -509,18 +509,18 @@ Status legend:
 - NOT STARTED: no meaningful implementation work landed yet
 - DEFERRED: intentionally postponed with rationale
 
-Last reviewed: 2026-03-18
+Last reviewed: 2026-08-16
 
 | Phase | Status | Evidence snapshot | Remaining to exit |
 |---|---|---|---|
 | Phase 0: Repository and build foundation | COMPLETE | Multi-module structure present and builds; Java 21 + Vert.x baseline already aligned in repository setup | None |
 | Phase 1: API skeleton | COMPLETE | API interfaces and models exist in `peegee-cache-api/src/main/java/dev/mars/peegeeq/cache/api/**`; unit tests for core value objects and exceptions are present and previously documented | None |
-| Phase 2: PostgreSQL schema and migrations | COMPLETE | `peegee-cache-pg/src/main/resources/db/migration/V001__create_peegee_cache_schema.sql` plus migration/invariant tests are already documented in this plan | None |
+| Phase 2: PostgreSQL schema and bootstrap | COMPLETE | `peegee-cache-pg/src/main/resources/db/bootstrap/V001__create_peegee_cache_schema.sql` contains the schema, indexes, sequence, and supported SQL functions; bootstrap/invariant tests execute it against PostgreSQL | None |
 | Phase 3: Repository and SQL statement catalogue | COMPLETE | Repositories and SQL catalogues are in place: `PgCacheRepository`, `PgCounterRepository`, `PgLockRepository` and `CacheSql`, `CounterSql`, `LockSql` in `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/` | None |
 | Phase 4: Service implementations for V1 Core | COMPLETE | Services are implemented and now share centralized argument validation via `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, wired in `PgCacheService`, `PgCounterService`, and `PgLockService`; service/repository/migration tests are green | None |
-| Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | Runtime bootstrap is implemented with explicit ownership of `Vertx`, `Pool`, expiry sweeper timer, and pub/sub listener lifecycle placeholder in `PgPeeGeeCacheManager`; lifecycle tests in `PeeGeeCachesLifecycleTest` verify start/stop ownership and invalid sweeper config guards | None |
-| Phase 6: V1 completion features | COMPLETE | Scan: `PgScanRepository`, `PgScanService`, `CacheEntryMapper`, 17 tests green. Bulk ops: `getMany`/`setMany`/`deleteMany` in `PgCacheRepository`/`PgCacheService` with tests. Pub/sub: **Phase 6.4 COMPLETE** — `PubSubSql`, `PgPubSubRepository` (7 tests), `PgPubSubService` (9 tests), `PgCacheStoreConfig.maxPayloadBytes`, `PeeGeeCacheBootstrapOptions.connectOptions`, `PgPeeGeeCacheManager` wired with real pub/sub service, lifecycle tests updated. **Admin hooks: COMPLETE** — `MetricsSnapshot` (15-counter record), `EntryStats` record, `AdminService` interface in api; `CacheMetrics` (LongAdder-based, 8 unit tests) in core; `AdminSql`, `PgAdminRepository` (6 integration tests), `PgAdminService` (4 integration tests) in pg; `CacheMetrics` wired into `PgCacheService`, `PgCounterService`, `PgLockService`; `PeeGeeCache.admin()` added; `PgPeeGeeCacheManager` creates shared `CacheMetrics` and `PgAdminService`. 197 tests green across all modules. | None |
-| Phase 7: Native SQL contract hardening | COMPLETE | `V002__create_sql_functions.sql` provides 8 PL/pgSQL functions: lock (`acquire_lock`, `renew_lock`, `release_lock`), counter (`increment_counter`, `set_counter`, `delete_counter`), cache entry (`set_entry` with UPSERT/NX/XX/CAS modes, `delete_entry`). `BootstrapSqlRenderer` loads V001+V002 in order. Integration tests: `NativeSqlLockFunctionTest` (12 tests), `NativeSqlCounterFunctionTest` (13 tests), `NativeSqlCacheFunctionTest` (13 tests) — all green. Direct-read vs function-write boundary is documented and implemented consistently. 235 tests green across all modules. | None |
+| Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
+| Phase 6: V1 completion features | COMPLETE | Scan and bulk operations are implemented. Configured pub/sub has repository/service coverage plus real listener termination, subscription replay, unsubscribe, and stop-during-backoff tests. Production observability is wired through the runtime with Micrometer, OpenTelemetry, readiness, operation timing/failures, contention, expiry lag, reconnect, subscription, notification-dispatch, and lifecycle signals. | None |
+| Phase 7: Native SQL contract hardening | COMPLETE | The consolidated bootstrap `V001__create_peegee_cache_schema.sql` provides 8 PL/pgSQL functions: lock (`acquire_lock`, `renew_lock`, `release_lock`), counter (`increment_counter`, `set_counter`, `delete_counter`), and cache entry (`set_entry`, `delete_entry`). Native SQL integration suites contribute 38 passing tests. The expanded reactor has 258 automated tests validated by `mvn clean verify`. | None |
 | Phase 8: V2 and later | DEFERRED | By strategy: V2 starts only after V1 is stable | Revisit after V1 completion and operational hardening |
 
 Tracking update rules:
@@ -692,13 +692,14 @@ Implement later:
 
 ### `peegee-cache-observability`
 
-Implement first:
+Production scope:
 
-- no-op or minimal interfaces only if needed to avoid contaminating core delivery
-
-Implement later:
-
-- Micrometer and OpenTelemetry integration
+- vendor-neutral telemetry contract in core
+- Micrometer metrics adapter
+- OpenTelemetry metrics and tracing adapter
+- PostgreSQL/schema readiness indicator
+- bounded-cardinality operation and outcome dimensions
+- expiry lag, lock contention, saturation-demand, reconnect, notification dispatch, and lifecycle signals
 
 ### `peegee-cache-test-support`
 
@@ -790,15 +791,17 @@ Control:
 - keep manager ownership explicit
 - test shutdown order and background component cleanup early
 
-## 8. Immediate recommended next steps
+## 8. Release-hardening status
 
-The next implementation moves should be:
+Completed:
 
-1. create the `peegee-cache-api` skeleton for `V1 Core`
-2. add initial PostgreSQL migrations in `peegee-cache-pg`
-3. implement repository interfaces and SQL statement catalogue
-4. add Testcontainers-based migration and repository tests
-5. wire the first managed runtime path in `peegee-cache-runtime`
+1. production Micrometer, OpenTelemetry, and readiness adapters are implemented and runtime-wired
+2. reusable PostgreSQL fixtures live in `peegee-cache-test-support` and are consumed by PostgreSQL/runtime tests
+3. the opt-in benchmark module reports sustained throughput, p50/p95/p99, expiry lag, and forced-connection-loss recovery
+4. schema bootstrap is external by default with tested opt-in `SchemaBootstrapMode.APPLY`
+5. operator, compatibility, benchmark, and release-artifact guidance is documented; build gates enforce Java/Maven versions and dependency convergence
+
+Maven Central publication defaults are now configured: Apache-2.0 licensing, canonical GitHub project/SCM/developer metadata, source and Javadoc artifacts, GPG best-practices signing, and Sonatype Central Portal upload with manual promotion. Actual publication remains gated only on namespace verification, a non-SNAPSHOT version, and credentials/signing keys supplied outside the repository.
 
 ## 9. Summary
 

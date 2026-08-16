@@ -6,7 +6,7 @@ import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
 import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
-import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

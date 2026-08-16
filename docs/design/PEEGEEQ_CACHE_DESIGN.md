@@ -95,7 +95,7 @@ PostgreSQL is not usually the first technology people associate with caching. Bu
 
 **Advisory locks.** While `peegee-cache` uses table-based lease locks for richer semantics (fencing tokens, owner tracking, TTL), PostgreSQL's advisory lock system provides an additional coordination primitive at zero schema cost. This is available as a fallback or complement for simple mutual exclusion needs.
 
-**Sequences.** Monotonically increasing fencing tokens use PostgreSQL sequences (`lock_fencing_seq`), which are non-transactional and gap-free under concurrent access — exactly the semantics needed for lock fencing without contention bottlenecks.
+**Sequences.** Monotonically increasing fencing tokens use PostgreSQL sequences (`lock_fencing_seq`). Sequences are non-transactional and may contain gaps, which is acceptable because fencing requires monotonic ordering, not gap-free numbering.
 
 ### Operational advantages over a separate cache tier
 
@@ -547,7 +547,7 @@ LISTEN requires a persistent connection — pooled connections return to the poo
 PgConnection.connect(vertx, connectOptions)
 ```
 
-This connection is created during `PgPeeGeeCacheManager.startReactive()` and closed during `stopReactive()`. The `PgConnectOptions` used for this connection are derived from the pool's connect options, supplied via `PeeGeeCacheBootstrapOptions`.
+This connection is created during `PgPeeGeeCacheManager.startReactive()` and closed during `stopReactive()`. Its `PgConnectOptions` are supplied explicitly via `PeeGeeCacheBootstrapOptions`; the generic `Pool` interface does not expose enough information to derive them.
 
 The dedicated connection sets a single `notificationHandler` that dispatches incoming notifications to registered subscriber handlers via `vertx.runOnContext()` to ensure handlers execute on the Vert.x event loop.
 
@@ -559,7 +559,7 @@ The dedicated listener connection may drop due to network failures, PostgreSQL r
 - on unexpected close (i.e., the manager is still started), schedule a reconnect attempt
 - use exponential backoff: base delay 1 second, doubling on each attempt, capped at 32 seconds
 - after successful reconnect, replay `LISTEN` for all channels that have active handlers
-- if the maximum number of reconnect attempts (5) is exceeded, log an error but do not crash the manager — the next `subscribe()` call will trigger a fresh connection attempt
+- if the maximum number of reconnect attempts (5) is exceeded, log an error but do not crash the manager; restart the managed runtime to establish a fresh listener lifecycle
 
 This is **not** durable subscription persistence. If the connection is down when a `NOTIFY` fires, the notification is lost. Reconnection only ensures that the LISTEN registrations are restored so that future notifications are received.
 
@@ -1134,11 +1134,12 @@ Runtime/bootstrap support:
 - embedded runtime helpers
 
 #### `peegee-cache-observability`
-Optional metrics/tracing:
-- Micrometer integration
-- OpenTelemetry instrumentation hooks
-- command timing wrappers
-- gauges / counters / histograms
+Required production observability adapters:
+- Micrometer integration with bounded operation/outcome tags
+- OpenTelemetry metrics and tracing
+- asynchronous command timing
+- runtime, active-operation, subscription, contention, expiry-lag, reconnect, and notification-dispatch signals
+- PostgreSQL and schema readiness health indicator
 
 #### `peegee-cache-test-support`
 - Testcontainers PostgreSQL helpers
@@ -1687,7 +1688,6 @@ public record PubSubMessage(
 ```
 
 **Timestamp semantics:** `receivedAtEpochMillis` is stamped by the subscriber when the `NOTIFY` payload arrives, using `System.currentTimeMillis()` on the receiving JVM. PostgreSQL `NOTIFY` does not include a server-side timestamp in the payload. The field was renamed from `publishedAtEpochMillis` to `receivedAtEpochMillis` to avoid implying publisher-clock accuracy.
-```
 
 ### Aggregated façade: `PeeGeeCache`
 
@@ -2202,8 +2202,8 @@ public final class PeeGeeCaches {
     private PeeGeeCaches() {
     }
 
-    public static Future<PeeGeeCacheManager> createManager(Vertx vertx, Pool pool, PeeGeeCacheBootstrapOptions options) {
-        return Future.failedFuture("Not yet implemented");
+    public static Future<PeeGeeCacheManager> create(Vertx vertx, Pool pool, PeeGeeCacheBootstrapOptions options) {
+        return FACTORY.createManager(vertx, pool, options);
     }
 }
 ```
@@ -2211,14 +2211,14 @@ public final class PeeGeeCaches {
 ```java
 package dev.mars.peegeeq.cache.runtime.bootstrap;
 
-import dev.mars.peegeeq.cache.pg.runtime.PgCacheStoreConfig;
+import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
+import io.vertx.pgclient.PgConnectOptions;
 
 public record PeeGeeCacheBootstrapOptions(
         PeeGeeCacheConfig runtimeConfig,
         PgCacheStoreConfig storeConfig,
-        boolean startExpirySweeper,
-        boolean startPubSubListener
+        PgConnectOptions connectOptions
 ) {}
 ```
 
@@ -2235,14 +2235,13 @@ public record PeeGeeCacheConfig(
         Duration defaultTtl,
         Duration expirySweepInterval,
         int expirySweepBatchSize,
-        int maxScanLimit,
-        boolean enablePubSub,
-        boolean enableExpirySweeper,
-        boolean sampleReadMetrics,
-        int readMetricSampleRate,
-        WriteBehindConfig writeBehind     // null or WriteBehindConfig.disabled() = write-through (default)
+        boolean enableExpirySweeper
 ) {}
 ```
+
+The default TTL is optional. The expiry interval and batch size must be positive when the sweeper is enabled. Pub/sub is enabled by supplying `PgConnectOptions` in the bootstrap options.
+
+### Planned Phase 8 write-behind config
 
 ```java
 package dev.mars.peegeeq.cache.runtime.config;
@@ -2263,27 +2262,21 @@ public record WriteBehindConfig(
 }
 ```
 
-**Write-behind is disabled by default.** Callers that want write-behind must explicitly construct a `WriteBehindConfig` with `enabled = true`. See section 12a for the full design, tradeoffs, and constraints before enabling this mode.
-```
+**Write-behind is not implemented in the current runtime.** When Phase 8.1 is implemented, it will be disabled by default and callers will opt in explicitly. See section 12a for the proposed design, tradeoffs, and constraints.
 
 ### PostgreSQL-specific config
 
 ```java
-package dev.mars.peegeeq.cache.pg.runtime;
+package dev.mars.peegeeq.cache.pg.config;
 
 public record PgCacheStoreConfig(
         String schemaName,
-        String cacheTable,
-        String lockTable,
-        String counterTable,
         String pubSubChannelPrefix,
-        boolean useUnloggedCacheTable,
-        boolean useDedicatedListenerConnection
+        int maxPayloadBytes
 ) {}
 ```
 
-**Deployment-time constraint:** `useUnloggedCacheTable` is a schema-creation-time decision, not a runtime toggle. PostgreSQL does not support `ALTER TABLE` to change a table between logged and unlogged. This flag affects migration behavior only. Once the schema is created, changing this value requires dropping and recreating the `cache_entries` table. The migration logic should check this flag when creating the table and produce `CREATE UNLOGGED TABLE` or `CREATE TABLE` accordingly.
-```
+The Phase 1 bootstrap creates logged tables. Any future logged/unlogged choice is a deployment-time schema decision and must not be presented as a runtime toggle.
 
 ---
 
@@ -3048,7 +3041,7 @@ That threshold was already reached.
 ## 31. Example usage
 
 ```java
-PeeGeeCacheManager manager = await(PeeGeeCaches.createManager(vertx, pool, options));
+PeeGeeCacheManager manager = await(PeeGeeCaches.create(vertx, pool, options));
 await(manager.startReactive());
 
 PeeGeeCache cache = manager.cache();

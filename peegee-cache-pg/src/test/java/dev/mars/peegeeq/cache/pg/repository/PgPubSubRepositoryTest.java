@@ -2,7 +2,7 @@ package dev.mars.peegeeq.cache.pg.repository;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
-import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;

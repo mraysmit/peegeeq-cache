@@ -4,6 +4,8 @@ import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.api.model.PubSubMessage;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import dev.mars.peegeeq.cache.api.pubsub.Subscription;
+import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
+import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.pg.repository.PgPubSubRepository;
 import dev.mars.peegeeq.cache.pg.sql.PubSubSql;
@@ -16,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.Set;
+import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -41,19 +44,28 @@ public final class PgPubSubService implements PubSubService {
     private final PgPubSubRepository repository;
     private final PgConnectOptions connectOptions;
     private final PubSubSql sql;
+    private final CacheMetrics metrics;
 
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<Consumer<PubSubMessage>>> handlers = new ConcurrentHashMap<>();
     private final AtomicBoolean started = new AtomicBoolean(false);
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
 
     private volatile PgConnection listenerConnection;
+    private volatile long reconnectTimerId = -1L;
 
     public PgPubSubService(Vertx vertx, PgPubSubRepository repository,
                            PgConnectOptions connectOptions, PgCacheStoreConfig config) {
+        this(vertx, repository, connectOptions, config, new CacheMetrics());
+    }
+
+    public PgPubSubService(Vertx vertx, PgPubSubRepository repository,
+                           PgConnectOptions connectOptions, PgCacheStoreConfig config,
+                           CacheMetrics metrics) {
         this.vertx = Objects.requireNonNull(vertx, "vertx");
         this.repository = Objects.requireNonNull(repository, "repository");
         this.connectOptions = Objects.requireNonNull(connectOptions, "connectOptions");
         this.sql = PubSubSql.forPrefix(Objects.requireNonNull(config, "config").pubSubChannelPrefix());
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     /**
@@ -63,7 +75,10 @@ public final class PgPubSubService implements PubSubService {
         if (!started.compareAndSet(false, true)) {
             return Future.failedFuture(new IllegalStateException("PubSubService is already started"));
         }
-        return openListenerConnection();
+        reconnectAttempts.set(0);
+        return openListenerConnection()
+                .onSuccess(v -> reconnectAttempts.set(0))
+                .onFailure(err -> started.set(false));
     }
 
     /**
@@ -73,7 +88,10 @@ public final class PgPubSubService implements PubSubService {
         if (!started.compareAndSet(true, false)) {
             return Future.succeededFuture();
         }
+        cancelPendingReconnect();
+        reconnectAttempts.set(0);
         handlers.clear();
+        metrics.recordActiveSubscriptions(0);
         PgConnection conn = listenerConnection;
         listenerConnection = null;
         if (conn != null) {
@@ -93,61 +111,72 @@ public final class PgPubSubService implements PubSubService {
 
     @Override
     public Future<Integer> publish(PublishRequest request) {
-        if (!started.get()) {
-            return Future.failedFuture(new IllegalStateException("PubSubService is not started"));
-        }
-        return repository.publish(request);
+        return metrics.observe(CacheOperation.PUBSUB_PUBLISH, () -> {
+            if (!started.get()) {
+                return Future.failedFuture(new IllegalStateException("PubSubService is not started"));
+            }
+            return repository.publish(request).onSuccess(ignored -> metrics.recordPublish());
+        });
     }
 
     @Override
     public Future<Subscription> subscribe(String channel, Consumer<PubSubMessage> handler) {
-        if (!started.get()) {
-            return Future.failedFuture(new IllegalStateException("PubSubService is not started"));
-        }
-        try {
+        return metrics.observe(CacheOperation.PUBSUB_SUBSCRIBE, () -> {
+            if (!started.get()) {
+                return Future.failedFuture(new IllegalStateException("PubSubService is not started"));
+            }
             validateSubscribeArgs(channel, handler);
-        } catch (IllegalArgumentException e) {
-            return Future.failedFuture(e);
-        }
-
-        handlers.computeIfAbsent(channel, k -> new CopyOnWriteArrayList<>()).add(handler);
-
-        String qualifiedChannel = sql.qualifiedChannel(channel);
-        PgConnection conn = listenerConnection;
-        if (conn == null) {
-            return Future.failedFuture(new IllegalStateException("Listener connection is not available"));
-        }
-
-        return conn.query(sql.listen(channel)).execute()
-                .map(v -> new PgSubscription(channel, handler));
+            PgConnection conn = listenerConnection;
+            if (conn == null) {
+                return Future.failedFuture(new IllegalStateException("Listener connection is not available"));
+            }
+            handlers.computeIfAbsent(channel, k -> new CopyOnWriteArrayList<>()).add(handler);
+            return conn.query(sql.listen(channel)).execute()
+                    .map(v -> (Subscription) new PgSubscription(channel, handler))
+                    .onSuccess(ignored -> {
+                        metrics.recordSubscribe();
+                        metrics.recordActiveSubscriptions(handlerCount());
+                    })
+                    .onFailure(err -> removeHandler(channel, handler));
+        });
     }
 
     // --- Internal ---
 
     private Future<Void> openListenerConnection() {
         return PgConnection.connect(vertx, connectOptions)
-                .map(conn -> {
+                .compose(conn -> {
+                    if (!started.get()) {
+                        return conn.close()
+                                .compose(v -> Future.failedFuture(
+                                        new IllegalStateException("PubSubService stopped while connecting")));
+                    }
                     listenerConnection = conn;
-                    reconnectAttempts.set(0);
 
                     conn.notificationHandler(notification ->
                             vertx.runOnContext(v -> handleNotification(notification.getChannel(), notification.getPayload()))
                     );
 
                     conn.closeHandler(v -> {
-                        listenerConnection = null;
-                        if (started.get()) {
+                        boolean wasCurrent = listenerConnection == conn;
+                        if (wasCurrent) {
+                            listenerConnection = null;
+                        }
+                        if (wasCurrent && started.get()) {
                             log.warn("Listener connection closed unexpectedly, scheduling reconnect");
                             scheduleReconnect();
                         }
                     });
 
                     log.info("Pub/sub listener connection established");
-                    return (Void) null;
+                    return Future.succeededFuture();
                 });
     }
 
-    private void scheduleReconnect() {
+    private synchronized void scheduleReconnect() {
+        if (!started.get() || reconnectTimerId >= 0) {
+            return;
+        }
         int attempt = reconnectAttempts.incrementAndGet();
         if (attempt > MAX_RECONNECT_ATTEMPTS) {
             log.error("Max reconnect attempts ({}) exceeded for pub/sub listener", MAX_RECONNECT_ATTEMPTS);
@@ -157,17 +186,29 @@ public final class PgPubSubService implements PubSubService {
         long delay = Math.min(BASE_RECONNECT_DELAY_MS * (1L << (attempt - 1)), MAX_RECONNECT_DELAY_MS);
         log.info("Scheduling pub/sub listener reconnect attempt {}/{} in {}ms", attempt, MAX_RECONNECT_ATTEMPTS, delay);
 
-        vertx.setTimer(delay, id ->
-                openListenerConnection()
+        reconnectTimerId = vertx.setTimer(delay, id -> {
+            synchronized (PgPubSubService.this) {
+                reconnectTimerId = -1L;
+            }
+            if (!started.get()) {
+                return;
+            }
+            long reconnectStartedAt = System.nanoTime();
+            openListenerConnection()
                         .compose(v -> replayListenChannels())
-                        .onSuccess(v -> log.info("Pub/sub listener reconnected and channels replayed (attempt {})", attempt))
-                        .onFailure(err -> {
-                            log.warn("Reconnect attempt {} failed", attempt, err);
-                            if (started.get()) {
-                                scheduleReconnect();
-                            }
+                        .onSuccess(v -> {
+                            reconnectAttempts.set(0);
+                            metrics.recordPubSubReconnect(attempt,
+                                    Duration.ofNanos(System.nanoTime() - reconnectStartedAt), null);
+                            log.info("Pub/sub listener reconnected and channels replayed (attempt {})", attempt);
                         })
-        );
+                        .onFailure(err -> {
+                            metrics.recordPubSubReconnect(attempt,
+                                    Duration.ofNanos(System.nanoTime() - reconnectStartedAt), err);
+                            log.warn("Reconnect attempt {} failed", attempt, err);
+                            closeFailedReconnect().onComplete(v -> scheduleReconnect());
+                        });
+        });
     }
 
     private Future<Void> replayListenChannels() {
@@ -189,6 +230,7 @@ public final class PgPubSubService implements PubSubService {
     }
 
     private void handleNotification(String qualifiedChannel, String payload) {
+        long dispatchStartedAt = System.nanoTime();
         // Reverse-map the qualified channel to the raw channel name
         for (var entry : handlers.entrySet()) {
             String rawChannel = entry.getKey();
@@ -206,6 +248,8 @@ public final class PgPubSubService implements PubSubService {
                         log.warn("Exception in pub/sub handler for channel '{}'", rawChannel, e);
                     }
                 }
+                metrics.recordNotificationDispatch(entry.getValue().size(),
+                        Duration.ofNanos(System.nanoTime() - dispatchStartedAt));
                 return;
             }
         }
@@ -219,6 +263,36 @@ public final class PgPubSubService implements PubSubService {
         if (handler == null) {
             throw new IllegalArgumentException("handler must not be null");
         }
+    }
+
+    private synchronized void cancelPendingReconnect() {
+        long timerId = reconnectTimerId;
+        reconnectTimerId = -1L;
+        if (timerId >= 0) {
+            vertx.cancelTimer(timerId);
+        }
+    }
+
+    private Future<Void> closeFailedReconnect() {
+        PgConnection conn = listenerConnection;
+        listenerConnection = null;
+        return conn == null ? Future.succeededFuture() : conn.close().recover(err -> Future.succeededFuture());
+    }
+
+    private void removeHandler(String channel, Consumer<PubSubMessage> handler) {
+        CopyOnWriteArrayList<Consumer<PubSubMessage>> channelHandlers = handlers.get(channel);
+        if (channelHandlers == null) {
+            return;
+        }
+        channelHandlers.remove(handler);
+        if (channelHandlers.isEmpty()) {
+            handlers.remove(channel, channelHandlers);
+        }
+        metrics.recordActiveSubscriptions(handlerCount());
+    }
+
+    private int handlerCount() {
+        return handlers.values().stream().mapToInt(CopyOnWriteArrayList::size).sum();
     }
 
     /**
@@ -241,18 +315,22 @@ public final class PgPubSubService implements PubSubService {
 
         @Override
         public Future<Void> unsubscribe() {
-            CopyOnWriteArrayList<Consumer<PubSubMessage>> channelHandlers = handlers.get(channel);
-            if (channelHandlers != null) {
-                channelHandlers.remove(handler);
-                if (channelHandlers.isEmpty()) {
-                    handlers.remove(channel, channelHandlers);
-                    PgConnection conn = listenerConnection;
-                    if (conn != null) {
-                        return conn.query(sql.unlisten(channel)).execute().mapEmpty();
+            return metrics.observe(CacheOperation.PUBSUB_UNSUBSCRIBE, () -> {
+                Future<Void> result = Future.succeededFuture();
+                CopyOnWriteArrayList<Consumer<PubSubMessage>> channelHandlers = handlers.get(channel);
+                if (channelHandlers != null) {
+                    channelHandlers.remove(handler);
+                    if (channelHandlers.isEmpty()) {
+                        handlers.remove(channel, channelHandlers);
+                        PgConnection conn = listenerConnection;
+                        if (conn != null) {
+                            result = conn.query(sql.unlisten(channel)).execute().mapEmpty();
+                        }
                     }
                 }
-            }
-            return Future.succeededFuture();
+                metrics.recordActiveSubscriptions(handlerCount());
+                return result;
+            });
         }
     }
 }

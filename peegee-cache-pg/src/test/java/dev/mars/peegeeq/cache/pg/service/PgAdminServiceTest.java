@@ -9,7 +9,7 @@ import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
 import dev.mars.peegeeq.cache.pg.repository.PgAdminRepository;
 import dev.mars.peegeeq.cache.pg.repository.PgCacheRepository;
-import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

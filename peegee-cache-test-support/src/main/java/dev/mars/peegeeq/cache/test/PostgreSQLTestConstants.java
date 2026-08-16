@@ -1,8 +1,6 @@
-package dev.mars.peegeeq.cache.pg.test;
+package dev.mars.peegeeq.cache.test;
 
-/**
- * Centralized PostgreSQL test container constants for peegee-cache integration tests.
- */
+/** Stable PostgreSQL defaults shared by peegee-cache integration suites. */
 public final class PostgreSQLTestConstants {
 
     public static final String POSTGRES_IMAGE = "postgres:18.3-alpine";

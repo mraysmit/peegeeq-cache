@@ -7,7 +7,7 @@ import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.api.model.TouchResult;
 import dev.mars.peegeeq.cache.api.model.TtlState;
 import dev.mars.peegeeq.cache.pg.repository.PgCacheRepository;
-import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;

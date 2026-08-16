@@ -5,12 +5,14 @@ import dev.mars.peegeeq.cache.api.model.PubSubMessage;
 import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.pg.repository.PgPubSubRepository;
-import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Promise;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import io.vertx.sqlclient.Pool;
+import io.vertx.sqlclient.Tuple;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -21,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,6 +32,7 @@ class PgPubSubServiceTest {
 
     private static final String SCHEMA = "peegee_cache";
     private static final String PREFIX = "peegee_cache";
+    private static final String LISTENER_APPLICATION_NAME = "pgcache_pubsub_listener_test";
     private static final PgTestSupport pg = new PgTestSupport("pgcache-pubsub-svc-test", SCHEMA);
     private static Pool pool;
     private static PgCacheStoreConfig config;
@@ -51,7 +55,11 @@ class PgPubSubServiceTest {
     @BeforeEach
     void setUp(Vertx vertx, VertxTestContext ctx) {
         PgPubSubRepository repo = new PgPubSubRepository(pool, config);
-        service = new PgPubSubService(vertx, repo, pg.connectOptions(), config);
+        service = new PgPubSubService(
+                vertx,
+                repo,
+                pg.connectOptions().addProperty("application_name", LISTENER_APPLICATION_NAME),
+                config);
         service.start().onComplete(ctx.succeeding(v -> ctx.completeNow()));
     }
 
@@ -242,6 +250,43 @@ class PgPubSubServiceTest {
     }
 
     @Test
+    void reconnectsAndReplaysSubscriptionsAfterConnectionLoss(Vertx vertx, VertxTestContext ctx) throws Exception {
+        Promise<PubSubMessage> received = Promise.promise();
+
+        service.subscribe("reconnect-test", received::complete)
+                .compose(subscription -> terminateListener())
+                .compose(v -> awaitCondition(vertx, () -> !service.isListenerConnected(), 100))
+                .compose(v -> awaitCondition(vertx, service::isListenerConnected, 150))
+                .compose(v -> service.publish(new PublishRequest(
+                        "reconnect-test", "after-reconnect", "text/plain")))
+                .onFailure(ctx::failNow);
+
+        received.future().onComplete(ctx.succeeding(message -> ctx.verify(() -> {
+            assertEquals("after-reconnect", message.payload());
+            ctx.completeNow();
+        })));
+
+        assertTrue(ctx.awaitCompletion(10, TimeUnit.SECONDS), "Test timed out");
+    }
+
+    @Test
+    void stopCancelsPendingReconnect(Vertx vertx, VertxTestContext ctx) throws Exception {
+        service.subscribe("stop-during-backoff", ignored -> {})
+                .compose(subscription -> terminateListener())
+                .compose(v -> awaitCondition(vertx, () -> !service.isListenerConnected(), 100))
+                .compose(v -> service.stop())
+                .compose(v -> delay(vertx, 1_300))
+                .compose(v -> listenerConnectionCount())
+                .onComplete(ctx.succeeding(count -> ctx.verify(() -> {
+                    assertEquals(0L, count, "Stopping must prevent a scheduled reconnect from opening a new connection");
+                    service = null;
+                    ctx.completeNow();
+                })));
+
+        assertTrue(ctx.awaitCompletion(10, TimeUnit.SECONDS), "Test timed out");
+    }
+
+    @Test
     void subscribeRejectsNullChannel(VertxTestContext ctx) {
         service.subscribe(null, msg -> {})
                 .onComplete(ctx.failing(err -> ctx.verify(() -> {
@@ -257,5 +302,48 @@ class PgPubSubServiceTest {
                     assertInstanceOf(IllegalArgumentException.class, err);
                     ctx.completeNow();
                 })));
+    }
+
+    private Future<Void> terminateListener() {
+        return pool.preparedQuery("""
+                        SELECT pg_terminate_backend(pid) AS terminated
+                        FROM pg_stat_activity
+                        WHERE application_name = $1
+                          AND pid <> pg_backend_pid()
+                        """)
+                .execute(Tuple.of(LISTENER_APPLICATION_NAME))
+                .compose(rows -> {
+                    var iterator = rows.iterator();
+                    if (!iterator.hasNext() || !Boolean.TRUE.equals(iterator.next().getBoolean("terminated"))) {
+                        return Future.failedFuture("Listener PostgreSQL backend was not found or terminated");
+                    }
+                    return Future.succeededFuture();
+                });
+    }
+
+    private Future<Long> listenerConnectionCount() {
+        return pool.preparedQuery("""
+                        SELECT COUNT(*) AS connection_count
+                        FROM pg_stat_activity
+                        WHERE application_name = $1
+                        """)
+                .execute(Tuple.of(LISTENER_APPLICATION_NAME))
+                .map(rows -> rows.iterator().next().getLong("connection_count"));
+    }
+
+    private static Future<Void> awaitCondition(
+            Vertx vertx, BooleanSupplier condition, int attemptsRemaining) {
+        if (condition.getAsBoolean()) {
+            return Future.succeededFuture();
+        }
+        if (attemptsRemaining == 0) {
+            return Future.failedFuture("Timed out waiting for pub/sub listener state");
+        }
+        return delay(vertx, 25)
+                .compose(v -> awaitCondition(vertx, condition, attemptsRemaining - 1));
+    }
+
+    private static Future<Void> delay(Vertx vertx, long millis) {
+        return Future.future(promise -> vertx.setTimer(millis, ignored -> promise.complete()));
     }
 }

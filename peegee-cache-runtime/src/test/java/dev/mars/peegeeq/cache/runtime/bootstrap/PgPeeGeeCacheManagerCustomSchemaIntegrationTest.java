@@ -7,7 +7,6 @@ import dev.mars.peegeeq.cache.api.model.LockAcquireRequest;
 import dev.mars.peegeeq.cache.api.model.LockKey;
 import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
 import dev.mars.peegeeq.cache.api.model.SetMode;
-import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
@@ -15,19 +14,15 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
-import io.vertx.pgclient.PgConnectOptions;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.sqlclient.Pool;
-import io.vertx.sqlclient.PoolOptions;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.time.Duration;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
+import dev.mars.peegeeq.cache.test.VertxAwait;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -37,43 +32,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PgPeeGeeCacheManagerCustomSchemaIntegrationTest {
 
     private static final String CUSTOM_SCHEMA_NAME = "runtime_custom_schema";
-    private static final String POSTGRES_IMAGE = "postgres:18.3-alpine";
-    private static final String DATABASE_NAME = "testdb";
-    private static final String USERNAME = "test";
-    private static final String PASSWORD = "test";
-
-    private static final PostgreSQLContainer postgres = new PostgreSQLContainer(POSTGRES_IMAGE)
-            .withDatabaseName(DATABASE_NAME)
-            .withUsername(USERNAME)
-            .withPassword(PASSWORD);
+    private static final PgTestSupport pg = new PgTestSupport("runtime-custom-schema-test", CUSTOM_SCHEMA_NAME);
 
     private static Pool pool;
     private static PeeGeeCacheManager manager;
 
     @BeforeAll
     static void setUp(Vertx vertx) throws Exception {
-        postgres.start();
-        applyBootstrapSql(vertx, CUSTOM_SCHEMA_NAME);
-
-        pool = createPool(vertx);
+        pg.start(vertx);
+        pool = pg.createPool(vertx);
         PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
                 PeeGeeCacheConfig.defaults(),
                 new PgCacheStoreConfig(CUSTOM_SCHEMA_NAME, CUSTOM_SCHEMA_NAME)
         );
 
-        manager = await(PeeGeeCaches.create(vertx, pool, options), 10_000);
-        await(manager.startReactive(), 10_000);
+        manager = VertxAwait.await(PeeGeeCaches.create(vertx, pool, options), Duration.ofSeconds(10));
+        VertxAwait.await(manager.startReactive(), Duration.ofSeconds(10));
     }
 
     @AfterAll
     static void tearDown() throws Exception {
         if (manager != null && manager.isStarted()) {
-            await(manager.stopReactive(), 10_000);
+            VertxAwait.await(manager.stopReactive(), Duration.ofSeconds(10));
         }
         if (pool != null) {
-            await(pool.close(), 10_000);
+            VertxAwait.await(pool.close(), Duration.ofSeconds(10));
         }
-        postgres.stop();
+        pg.stop();
     }
 
     @Test
@@ -114,58 +99,4 @@ class PgPeeGeeCacheManagerCustomSchemaIntegrationTest {
                 })));
     }
 
-    private static Pool createPool(Vertx vertx) {
-        PgConnectOptions connectOptions = new PgConnectOptions()
-                .setHost(postgres.getHost())
-                .setPort(postgres.getFirstMappedPort())
-                .setDatabase(postgres.getDatabaseName())
-                .setUser(postgres.getUsername())
-                .setPassword(postgres.getPassword());
-        return Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(8));
-    }
-
-    private static void applyBootstrapSql(Vertx vertx, String schemaName) throws Exception {
-        String renderedSql = BootstrapSqlRenderer.loadForSchema(schemaName);
-
-        Pool bootstrapPool = Pool.pool(vertx, connectOptions(), new PoolOptions().setMaxSize(1));
-        try {
-            await(bootstrapPool.query(renderedSql).execute().mapEmpty(), 10_000);
-        } finally {
-            await(bootstrapPool.close(), 10_000);
-        }
-    }
-
-    private static PgConnectOptions connectOptions() {
-        return new PgConnectOptions()
-                .setHost(postgres.getHost())
-                .setPort(postgres.getFirstMappedPort())
-                .setDatabase(postgres.getDatabaseName())
-                .setUser(postgres.getUsername())
-                .setPassword(postgres.getPassword());
-    }
-
-    private static <T> T await(Future<T> future, long timeoutMillis) throws Exception {
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<T> resultRef = new AtomicReference<>();
-        AtomicReference<Throwable> errorRef = new AtomicReference<>();
-
-        future.onComplete(ar -> {
-            if (ar.succeeded()) {
-                resultRef.set(ar.result());
-            } else {
-                errorRef.set(ar.cause());
-            }
-            latch.countDown();
-        });
-
-        if (!latch.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new RuntimeException("Timed out waiting for Vert.x SQL operation");
-        }
-
-        Throwable error = errorRef.get();
-        if (error != null) {
-            throw new RuntimeException(error);
-        }
-        return resultRef.get();
-    }
 }

@@ -218,6 +218,10 @@ class PeeGeeCachesLifecycleTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> new PeeGeeCacheConfig(null, Duration.ZERO, 0, true));
         assertTrue(ex.getMessage().contains("expirySweepInterval must be > 0"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new PeeGeeCacheConfig(Duration.ZERO, Duration.ofSeconds(1), 1, false));
+        assertThrows(IllegalArgumentException.class,
+                () -> new PeeGeeCacheConfig(Duration.ofSeconds(-1), Duration.ofSeconds(1), 1, false));
         ctx.completeNow();
     }
 

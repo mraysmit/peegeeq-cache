@@ -18,6 +18,9 @@ public record PeeGeeCacheConfig(
 ) {
 
     public PeeGeeCacheConfig {
+        if (defaultTtl != null && (defaultTtl.isZero() || defaultTtl.isNegative())) {
+            throw new IllegalArgumentException("defaultTtl must be > 0 when configured");
+        }
         if (enableExpirySweeper) {
             if (expirySweepInterval == null || expirySweepInterval.isZero() || expirySweepInterval.isNegative()) {
                 throw new IllegalArgumentException("expirySweepInterval must be > 0 when enableExpirySweeper=true");

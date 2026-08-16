@@ -6,7 +6,8 @@ import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
 import dev.mars.peegeeq.cache.api.model.LockRenewRequest;
 import dev.mars.peegeeq.cache.api.model.LockState;
 import dev.mars.peegeeq.cache.pg.bootstrap.BootstrapSqlRenderer;
-import dev.mars.peegeeq.cache.pg.test.PgTestSupport;
+import dev.mars.peegeeq.cache.test.PgTestSupport;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -20,6 +21,8 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -135,6 +138,29 @@ class PgLockRepositoryTest {
         ).onComplete(ctx.succeeding(r -> ctx.verify(ctx::completeNow)));
     }
 
+    @Test
+    @Order(6)
+    void concurrentOwnersProduceExactlyOneWinner(VertxTestContext ctx) {
+        LockKey key = new LockKey("ns", "contended-lock");
+        List<Future<?>> attempts = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            attempts.add(repo.acquire(new LockAcquireRequest(
+                    key, "owner-" + i, Duration.ofMinutes(1), false, true)));
+        }
+
+        Future.all(attempts)
+                .onComplete(ctx.succeeding(results -> ctx.verify(() -> {
+                    long winners = 0;
+                    for (int i = 0; i < attempts.size(); i++) {
+                        if (results.<dev.mars.peegeeq.cache.api.model.LockAcquireResult>resultAt(i).acquired()) {
+                            winners++;
+                        }
+                    }
+                    assertEquals(1L, winners, "A contended lock must have exactly one owner");
+                    ctx.completeNow();
+                })));
+    }
+
     // --- REENTRANT ACQUIRE ---
 
     @Test
@@ -240,6 +266,28 @@ class PgLockRepositoryTest {
                 .compose(r -> repo.release(rel))
                 .onComplete(ctx.succeeding(released -> ctx.verify(() -> {
                     assertFalse(released, "Wrong owner should not release");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    @Order(32)
+    void concurrentRenewAndReleaseLeaveNoStaleLock(VertxTestContext ctx) {
+        LockKey key = new LockKey("ns", "renew-release-race");
+        String owner = "race-owner";
+        LockAcquireRequest acquire = new LockAcquireRequest(
+                key, owner, Duration.ofMinutes(1), false, true);
+
+        repo.acquire(acquire)
+                .compose(acquired -> Future.all(
+                        repo.renew(new LockRenewRequest(key, owner, Duration.ofMinutes(2))),
+                        repo.release(new LockReleaseRequest(key, owner))))
+                .compose(results -> {
+                    assertTrue(results.<Boolean>resultAt(1), "The owner release must succeed");
+                    return repo.currentLock(key);
+                })
+                .onComplete(ctx.succeeding(state -> ctx.verify(() -> {
+                    assertTrue(state.isEmpty(), "Release must win the final state against a concurrent renew");
                     ctx.completeNow();
                 })));
     }

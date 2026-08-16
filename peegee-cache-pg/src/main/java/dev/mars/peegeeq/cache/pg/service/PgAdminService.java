@@ -4,6 +4,7 @@ import dev.mars.peegeeq.cache.api.admin.AdminService;
 import dev.mars.peegeeq.cache.api.model.EntryStats;
 import dev.mars.peegeeq.cache.api.model.MetricsSnapshot;
 import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
+import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
 import dev.mars.peegeeq.cache.core.validation.CoreValidation;
 import dev.mars.peegeeq.cache.pg.repository.PgAdminRepository;
 import io.vertx.core.Future;
@@ -20,8 +21,10 @@ public class PgAdminService implements AdminService {
 
     @Override
     public Future<EntryStats> entryStats(String namespace) {
-        CoreValidation.requireNonNull(namespace, "namespace");
-        return repository.entryStats(namespace);
+        return metrics.observe(CacheOperation.ADMIN_ENTRY_STATS, () -> {
+            CoreValidation.requireNonNull(namespace, "namespace");
+            return repository.entryStats(namespace);
+        });
     }
 
     @Override

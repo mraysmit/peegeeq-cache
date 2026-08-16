@@ -56,7 +56,7 @@ For anything that touches **real PostgreSQL semantics**:
 - Counter increment/decrement atomicity
 - Transaction semantics (expired-row pre-delete for NX)
 
-**Framework:** JUnit Jupiter 5.x + Testcontainers (PostgreSQL 16-alpine via Docker CLI).
+**Framework:** JUnit Jupiter 5.x + Testcontainers 2.0.2 (`PostgreSQLContainer` with PostgreSQL 18.3-alpine).
 
 **Mocking is prohibited.** No mocked connections, pools, repositories, or SQL execution. No H2/HSQLDB substitutes.
 
@@ -74,6 +74,19 @@ For behavior that depends on **Vert.x runtime semantics**:
 
 ## 3. Current test inventory
 
+Last verified: 2026-08-16 with `mvn clean verify`.
+
+| Module | Tests | Scope |
+|---|---:|---|
+| `peegee-cache-api` | 34 | Keys, values, and exception contracts |
+| `peegee-cache-core` | 14 | Validation, in-memory metrics, telemetry isolation, and async observation |
+| `peegee-cache-pg` | 184 | Bootstrap, repositories, services, native SQL, pub/sub recovery, and contention |
+| `peegee-cache-runtime` | 20 | Lifecycle, external/managed schema policy, custom schemas, telemetry injection, default TTL, and physical expiry sweeping |
+| `peegee-cache-observability` | 3 | Micrometer export, OpenTelemetry spans, and real PostgreSQL readiness |
+| `peegee-cache-test-support` | 1 | Latency percentile/throughput calculation |
+| `peegee-cache-benchmarks` | 2 | Benchmark configuration and threshold validation |
+| **Total** | **258** | Validated by the clean reactor verification |
+
 ### peegee-cache-api (34 tests)
 
 | Test class | Tests | What it verifies |
@@ -83,7 +96,7 @@ For behavior that depends on **Vert.x runtime semantics**:
 | `LockKeyTest` | 7 | Null rejection (`NullPointerException`), blank rejection (`IllegalArgumentException`), equality, `asQualifiedKey()` format |
 | `ExceptionHierarchyTest` | 6 | Catchability contract (`catch CacheException` catches all subtypes), unchecked status, `CacheStoreException` rejects null cause, `LockNotHeldException` independent catchability |
 
-### peegee-cache-pg (27 tests)
+### Initial peegee-cache-pg bootstrap slice (27 tests)
 
 | Test class | Tests | What it verifies |
 |---|---|---|
@@ -149,9 +162,9 @@ Each repository method gets a Testcontainers integration test against real Postg
 
 ### Testcontainers setup
 
-PostgreSQL 16-alpine via Docker CLI (ProcessBuilder), not docker-java — workaround for Docker Engine 29 incompatibility with docker-java 3.4.2.
+PostgreSQL 18.3-alpine via Testcontainers 2.0.2 and the standard `PostgreSQLContainer` integration.
 
-Container lifecycle is managed per-test-class using `@BeforeAll` / `@AfterAll`. Migrations run via Flyway against the container before tests execute.
+Container lifecycle is managed per-test-class using `@BeforeAll` / `@AfterAll`. Tests apply the bundled bootstrap SQL through `BootstrapSqlRenderer` before exercising the database contract.
 
 ### Module install order
 
