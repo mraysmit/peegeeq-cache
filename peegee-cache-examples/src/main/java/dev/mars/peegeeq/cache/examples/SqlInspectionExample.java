@@ -30,11 +30,11 @@ public final class SqlInspectionExample {
                     WHERE namespace = 'example'
                     ORDER BY cache_key
                     """).execute());
-            rows.forEach(row -> log.info(
-                    "live entry namespace={} key={} type={} version={} expiresAt={}",
-                    row.getString("namespace"), row.getString("cache_key"),
-                    row.getString("value_type"), row.getLong("version"),
-                    row.getOffsetDateTime("expires_at")));
+            rows.forEach(row -> log.atInfo()
+                    .addKeyValue("valueType", row.getString("value_type"))
+                    .addKeyValue("version", row.getLong("version"))
+                    .addKeyValue("expiresAt", row.getOffsetDateTime("expires_at"))
+                    .log("example.sql_inspection.live_entry"));
         });
     }
 }

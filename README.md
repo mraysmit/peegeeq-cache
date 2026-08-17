@@ -45,7 +45,7 @@ PostgreSQL's shared buffer caching, prepared statement plan reuse, HOT updates, 
 
 - **Java** 21–25 (enforced by the build)
 - **Vert.x** 5.0.8
-- **PostgreSQL** 15+; the full reactor was manually validated against PostgreSQL 15.17, 16.13, 17.11, and 18.3
+- **PostgreSQL** 15+; the full reactor was manually validated against PostgreSQL 15.17, 16.13, 17.11, and 18.3, and CI repeats that four-version matrix for every pull request and `master` push
 
 ## Quick start
 
@@ -114,9 +114,9 @@ PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
     telemetry);
 ```
 
-Instrumentation covers every service operation and failure, active operations, lock contention, expiry sweep latency/rows/oldest-row lag, pub/sub reconnect outcomes, notification dispatch latency, active subscriptions, schema bootstrap, and runtime lifecycle. Tags use bounded enums and never contain cache keys, namespaces, channels, or payloads.
+Instrumentation covers every service operation and failure, active operations, lock contention, expiry sweep latency/rows/oldest-row lag, pub/sub reconnect outcomes, notification dispatch latency, active subscriptions, schema bootstrap, and runtime lifecycle. Tags use bounded enums and never contain cache keys, namespaces, channels, or payloads. Library logs follow the same safe-data boundary: per-operation detail is sanitized and restricted to TRACE, while lifecycle and degraded/recovery transitions remain visible at INFO/WARN.
 
-`PgCacheHealthIndicator` verifies managed-runtime state, PostgreSQL connectivity, and the complete required schema-object set. See [operations guidance](docs/PEEGEEQ_CACHE_OPERATIONS.md), [benchmarking](docs/PEEGEEQ_CACHE_BENCHMARKS.md), and [release packaging](docs/PEEGEEQ_CACHE_RELEASE_PACKAGING.md).
+`PgCacheHealthIndicator` verifies managed-runtime state, PostgreSQL connectivity, and the complete required schema-object set. See [operations guidance](docs/PEEGEEQ_CACHE_OPERATIONS.md), the [logging standard](docs/PEEGEEQ_CACHE_LOGGING.md), [benchmarking](docs/PEEGEEQ_CACHE_BENCHMARKS.md), and [release packaging](docs/PEEGEEQ_CACHE_RELEASE_PACKAGING.md).
 
 All public APIs return `io.vertx.core.Future<T>` — compose with `.compose()`, `.map()`, `.onSuccess()`, `.onFailure()`.
 

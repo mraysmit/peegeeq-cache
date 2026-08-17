@@ -42,12 +42,12 @@ public final class BasicIntegrationExample {
                     false
             );
 
-                CacheSetResult setResult = ExampleLogSupport.timed(log, "cache.set", () -> ExampleRuntimeSupport.await(cache.cache().set(setRequest)));
-                Optional<CacheEntry> loaded = ExampleLogSupport.timed(log, "cache.get", () -> ExampleRuntimeSupport.await(cache.cache().get(cacheKey)));
+            CacheSetResult setResult = ExampleLogSupport.timed(log, "cache.set", () -> ExampleRuntimeSupport.await(cache.cache().set(setRequest)));
+            Optional<CacheEntry> loaded = ExampleLogSupport.timed(log, "cache.get", () -> ExampleRuntimeSupport.await(cache.cache().get(cacheKey)));
 
             CacheKey counterKey = new CacheKey("examples", "requests");
-            long counterValue = ExampleLogSupport.timed(log, "counter.incrementBy", () -> ExampleRuntimeSupport.await(cache.counters().incrementBy(counterKey, 1)));
-            long resetCounter = ExampleLogSupport.timed(log, "counter.setValue", () -> ExampleRuntimeSupport.await(cache.counters().setValue(counterKey, 10, CounterOptions.defaults())));
+            ExampleLogSupport.timed(log, "counter.incrementBy", () -> ExampleRuntimeSupport.await(cache.counters().incrementBy(counterKey, 1)));
+            ExampleLogSupport.timed(log, "counter.setValue", () -> ExampleRuntimeSupport.await(cache.counters().setValue(counterKey, 10, CounterOptions.defaults())));
 
             LockKey lockKey = new LockKey("examples", "startup-lock");
             String ownerToken = "example-app";
@@ -62,27 +62,23 @@ public final class BasicIntegrationExample {
                 ))));
 
             ExampleLogSupport.logData(log, "cache-set result",
-                "key", cacheKey.asQualifiedKey(),
                 "applied", setResult.applied(),
                 "version", setResult.newVersion());
 
             ExampleLogSupport.logData(log, "cache-get result",
-                "key", cacheKey.asQualifiedKey(),
-                "value", loaded.map(entry -> entry.value().asString()).orElse("<missing>"));
+                "present", loaded.isPresent(),
+                "valueType", loaded.map(CacheEntry::value).map(CacheValue::type).map(Enum::name).orElse("NONE"));
 
             ExampleLogSupport.logData(log, "counter results",
-                "key", counterKey.asQualifiedKey(),
-                "incremented", counterValue,
-                "resetTo", resetCounter);
+                "operations", 2);
 
             ExampleLogSupport.logData(log, "lock acquire result",
-                "key", lockKey.asQualifiedKey(),
                 "acquired", lock.acquired(),
                 "fencingToken", lock.fencingToken());
 
             if (lock.acquired()) {
                 boolean released = ExampleLogSupport.timed(log, "lock.release", () -> ExampleRuntimeSupport.await(cache.locks().release(new LockReleaseRequest(lockKey, ownerToken))));
-                ExampleLogSupport.logData(log, "lock release result", "key", lockKey.asQualifiedKey(), "released", released);
+                ExampleLogSupport.logData(log, "lock release result", "released", released);
             }
         });
     }

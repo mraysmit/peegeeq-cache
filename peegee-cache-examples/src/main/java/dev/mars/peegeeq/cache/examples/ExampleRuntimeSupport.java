@@ -41,7 +41,7 @@ final class ExampleRuntimeSupport {
     
 
     static PostgreSQLContainer startContainer() {
-        log.info("Starting PostgreSQL Testcontainer (image: {})", POSTGRES_IMAGE);
+        log.atInfo().addKeyValue("image", POSTGRES_IMAGE).log("example.postgres_container.starting");
         PostgreSQLContainer container = new PostgreSQLContainer(POSTGRES_IMAGE)
                 .withDatabaseName(DATABASE_NAME)
                 .withUsername(USERNAME)
@@ -53,22 +53,24 @@ final class ExampleRuntimeSupport {
             closeQuietly(container);
             throw ex;
         }
-        log.info("Container started - mapped to {}:{}", container.getHost(), container.getFirstMappedPort());
+        log.atInfo().addKeyValue("host", container.getHost())
+                .addKeyValue("port", container.getFirstMappedPort())
+                .log("example.postgres_container.started");
         return container;
     }
 
     static void stopContainer(PostgreSQLContainer container) {
         if (container != null) {
-            log.info("Stopping PostgreSQL Testcontainer");
+            log.info("example.postgres_container.stopping");
             container.stop();
         }
     }
 
     static Pool createPool(Vertx vertx, PostgreSQLContainer container) {
         PgConnectOptions connectOptions = connectOptions(container);
-        log.info("Creating Vert.x SQL pool - host={} port={} database={} user={}",
-                connectOptions.getHost(), connectOptions.getPort(),
-                connectOptions.getDatabase(), connectOptions.getUser());
+        log.atInfo().addKeyValue("host", connectOptions.getHost())
+                .addKeyValue("port", connectOptions.getPort())
+                .log("example.sql_pool.creating");
         return Pool.pool(vertx, connectOptions, new PoolOptions().setMaxSize(8));
     }
 
@@ -86,7 +88,7 @@ final class ExampleRuntimeSupport {
     }
 
     static void applyBootstrapSql(Vertx vertx, PostgreSQLContainer container, String schemaName) throws Exception {
-        log.info("Applying bootstrap SQL");
+        log.info("example.schema.bootstrap_starting");
         String sql = BootstrapSqlRenderer.loadForSchema(schemaName);
         PgConnectOptions opts = new PgConnectOptions()
                 .setHost(container.getHost())
@@ -97,18 +99,18 @@ final class ExampleRuntimeSupport {
         Pool bootstrapPool = Pool.pool(vertx, opts, new PoolOptions().setMaxSize(1));
         try {
             await(bootstrapPool.query(sql).execute().mapEmpty());
-            log.info("Bootstrap SQL applied successfully");
+            log.info("example.schema.bootstrap_completed");
         } finally {
             await(bootstrapPool.close());
         }
     }
 
     static PeeGeeCacheManager startDefaultManager(Vertx vertx, Pool pool) throws Exception {
-        log.info("Creating default peegee-cache manager");
+        log.info("example.cache_manager.creating");
         PeeGeeCacheManager manager = await(PeeGeeCaches.create(vertx, pool, PeeGeeCacheBootstrapOptions.defaults()));
-        log.info("Starting peegee-cache manager");
+        log.info("example.cache_manager.starting");
         await(manager.startReactive());
-        log.info("peegee-cache manager started");
+        log.info("example.cache_manager.started");
         return manager;
     }
 
@@ -136,45 +138,44 @@ final class ExampleRuntimeSupport {
         Pool pool = null;
         PeeGeeCacheManager manager = null;
 
-        exampleLog.info("Starting {}", exampleName);
+        exampleLog.atInfo().addKeyValue("example", exampleName).log("example.run.starting");
         try {
             container = startContainer();
             applyBootstrapSql(vertx, container);
             pool = createPool(vertx, container);
-            exampleLog.info("Created PostgreSQL pool for example runtime");
+            exampleLog.info("example.sql_pool.created");
             manager = configurePubSub
                     ? startConfiguredManager(vertx, pool, container)
                     : startDefaultManager(vertx, pool);
-            exampleLog.info("Started peegee-cache manager");
+            exampleLog.info("example.cache_manager.ready");
             work.run(manager);
         } catch (Exception ex) {
-            exampleLog.error("{} failed: {}", exampleName, ex.getMessage());
-            exampleLog.debug("{} exception stack trace", exampleName, ex);
+            exampleLog.atError().addKeyValue("example", exampleName).setCause(ex).log("example.run.failed");
             throw ex;
         } finally {
-            exampleLog.info("Shutting down {}", exampleName);
+            exampleLog.atInfo().addKeyValue("example", exampleName).log("example.run.stopping");
             shutdown(manager, pool, vertx, container);
-            exampleLog.info("Shutdown complete");
+            exampleLog.info("example.run.stopped");
         }
     }
 
     static void shutdown(PeeGeeCacheManager manager, Pool pool, Vertx vertx,
                           PostgreSQLContainer container) throws Exception {
-        log.info("Shutting down runtime resources");
+        log.info("example.runtime.stopping");
         if (manager != null && manager.isStarted()) {
-            log.debug("Stopping started manager");
+            log.debug("example.cache_manager.stopping");
             await(manager.stopReactive());
         }
         if (pool != null) {
-            log.debug("Closing SQL pool");
+            log.debug("example.sql_pool.closing");
             await(pool.close());
         }
         if (vertx != null) {
-            log.debug("Closing Vert.x instance");
+            log.debug("example.vertx.closing");
             await(vertx.close());
         }
         stopContainer(container);
-        log.info("Runtime resource shutdown complete");
+        log.info("example.runtime.stopped");
     }
 
     static <T> T await(Future<T> future) throws Exception {
@@ -192,14 +193,14 @@ final class ExampleRuntimeSupport {
         });
 
         if (!latch.await(AWAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
-            log.error("Timed out waiting for async operation after {} ms", AWAIT_TIMEOUT.toMillis());
+            log.atError().addKeyValue("timeout.ms", AWAIT_TIMEOUT.toMillis())
+                    .log("example.async_operation.timed_out");
             throw new RuntimeException("Timed out waiting for async operation");
         }
 
         Throwable error = errorRef.get();
         if (error != null) {
-            log.error("Async operation failed: {}", error.getMessage());
-            log.debug("Async operation exception stack trace", error);
+            log.atError().setCause(error).log("example.async_operation.failed");
             throw new RuntimeException(error);
         }
 
@@ -210,7 +211,7 @@ final class ExampleRuntimeSupport {
         try {
             closeable.close();
         } catch (Exception closeError) {
-            log.debug("Ignored close failure after startup error", closeError);
+            log.atDebug().setCause(closeError).log("example.startup_cleanup.failed");
         }
     }
 }

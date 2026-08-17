@@ -30,19 +30,19 @@ public final class CacheVersionedUpdateExample {
         PostgreSQLContainer container = null;
         Pool pool = null;
         PeeGeeCacheManager manager = null;
-        log.info("Starting CacheVersionedUpdateExample");
+        log.info("example.cache_versioned_update.starting");
 
         try {
             container = ExampleRuntimeSupport.startContainer();
             ExampleRuntimeSupport.applyBootstrapSql(vertx, container);
             pool = ExampleRuntimeSupport.createPool(vertx, container);
-            log.info("Created PostgreSQL pool for example runtime");
+            log.info("example.sql_pool.created");
             manager = ExampleRuntimeSupport.startDefaultManager(vertx, pool);
-            log.info("Started peegee-cache manager");
+            log.info("example.cache_manager.ready");
             var cache = manager.cache();
 
             CacheKey key = new CacheKey("orders", "A-1001");
-            log.debug("Using cache key {}", key.asQualifiedKey());
+            log.debug("cache.versioned_update.key_created");
 
             ExampleLogSupport.timed(log, "cache.set(seed)", () ->
                     ExampleRuntimeSupport.await(cache.cache().set(new CacheSetRequest(
@@ -54,15 +54,13 @@ public final class CacheVersionedUpdateExample {
                             false
                     ))));
             ExampleLogSupport.logData(log, "seeded dataset",
-                    "key", key.asQualifiedKey(),
-                    "value", "{\"status\":\"NEW\"}");
+                    "valueType", "JSON");
 
             CacheEntry initial = ExampleLogSupport.timed(log, "cache.get(initial)", () ->
                     ExampleRuntimeSupport.await(cache.cache().get(key))).orElseThrow();
             long expectedVersion = initial.version();
             ExampleLogSupport.logData(log, "loaded current entry",
-                    "key", key.asQualifiedKey(),
-                    "value", initial.value().asString(),
+                    "valueType", initial.value().type(),
                     "version", expectedVersion);
 
             CacheSetResult firstUpdate = ExampleLogSupport.timed(log, "cache.set(version-match)", () ->
@@ -75,7 +73,6 @@ public final class CacheVersionedUpdateExample {
                             true
                     ))));
             ExampleLogSupport.logData(log, "first versioned update",
-                    "key", key.asQualifiedKey(),
                     "applied", firstUpdate.applied(),
                     "newVersion", firstUpdate.newVersion());
 
@@ -89,24 +86,21 @@ public final class CacheVersionedUpdateExample {
                             true
                     ))));
             ExampleLogSupport.logData(log, "stale versioned update",
-                    "key", key.asQualifiedKey(),
                     "applied", staleUpdate.applied(),
                     "expected", false);
 
             CacheEntry finalState = ExampleLogSupport.timed(log, "cache.get(final)", () ->
                     ExampleRuntimeSupport.await(cache.cache().get(key))).orElseThrow();
             ExampleLogSupport.logData(log, "final dataset",
-                    "key", key.asQualifiedKey(),
-                    "value", finalState.value().asString(),
+                    "valueType", finalState.value().type(),
                     "version", finalState.version());
         } catch (Exception ex) {
-            log.error("CacheVersionedUpdateExample failed: {}", ex.getMessage());
-            log.debug("CacheVersionedUpdateExample exception stack trace", ex);
+            log.atError().setCause(ex).log("example.cache_versioned_update.failed");
             throw ex;
         } finally {
-            log.info("Shutting down CacheVersionedUpdateExample");
+            log.info("example.cache_versioned_update.stopping");
             ExampleRuntimeSupport.shutdown(manager, pool, vertx, container);
-            log.info("Shutdown complete");
+            log.info("example.cache_versioned_update.stopped");
         }
     }
 }

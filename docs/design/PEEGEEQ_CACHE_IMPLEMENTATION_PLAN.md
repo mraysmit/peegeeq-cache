@@ -622,6 +622,7 @@ Execution evidence:
 - full-reactor PostgreSQL compatibility matrix — 269 tests passed with zero failures/errors/skips on PostgreSQL 15.17, 16.13, 17.11, and 18.3; the subsequently added real-PostgreSQL benchmark-pool regression also passed on all four majors
 - post-fix default-duration local benchmark — three identical executions passed every unchanged gate with zero scenario timeouts and zero Vert.x `Promise already completed` signatures
 - Java-first repeatable benchmark capture — typed benchmark results feed one self-contained structured HTML report with aggregate/per-run results, environment details, and embedded raw logs, without console-output parsing or platform-specific orchestration scripts
+- logging maturity hardening — SLF4J 2.0.18 provider isolation, unified Vert.x routing, structured lifecycle/failure/recovery events, TRACE-only sanitized operation detail, failure-episode suppression, and a one-second captured benchmark smoke all passed
 - no publication or external upload occurred during verification
 
 The interleaved local telemetry smoke measured 0.22% Micrometer throughput overhead and 20.67% p99 overhead. Before the pool-layout fix, two of three identical full-duration executions timed out in different scenarios. Diagnosis isolated client-side pool saturation: eight workers shared an eight-connection pool with two independent sweepers, while PostgreSQL sampling found no one-second SQL or lock wait. The strict-TDD fix reserves connection headroom, removes sweepers from sustained-workload managers, and uses one dedicated expiry-measurement manager. Three identical post-fix runs passed; the worst p99 was 30.628 ms, expiry lag was 16–28 ms, and failover recovery was 13–16 ms. These local-container figures remain regression evidence, not production SLOs.
@@ -632,12 +633,12 @@ Observed automated test inventory:
 |---|---:|---:|---:|---:|
 | `peegee-cache-api` | 34 | 0 | 0 | 0 |
 | `peegee-cache-core` | 14 | 0 | 0 | 0 |
-| `peegee-cache-pg` | 191 | 0 | 0 | 0 |
-| `peegee-cache-runtime` | 21 | 0 | 0 | 0 |
+| `peegee-cache-pg` | 194 | 0 | 0 | 0 |
+| `peegee-cache-runtime` | 23 | 0 | 0 | 0 |
 | `peegee-cache-observability` | 4 | 0 | 0 | 0 |
-| `peegee-cache-test-support` | 3 | 0 | 0 | 0 |
+| `peegee-cache-test-support` | 4 | 0 | 0 | 0 |
 | `peegee-cache-benchmarks` | 13 | 0 | 0 | 0 |
-| **Total** | **280** | **0** | **0** | **0** |
+| **Total** | **286** | **0** | **0** | **0** |
 
 Criteria verdicts:
 
@@ -933,7 +934,16 @@ Completed:
 
 Maven Central publication defaults are now configured: Apache-2.0 licensing, canonical GitHub project/SCM/developer metadata, source and Javadoc artifacts, GPG best-practices signing, and Sonatype Central Portal upload with manual promotion. Actual publication remains gated only on namespace verification, a non-SNAPSHOT version, and credentials/signing keys supplied outside the repository.
 
-Remaining release automation: encode the PostgreSQL 15–18 matrix in CI. Representative production-topology benchmarking remains an operational capacity-validation action, not an open repository defect or a reason to weaken the local gates.
+The PostgreSQL 15–18 compatibility matrix is now encoded in `.github/workflows/postgresql-compatibility.yml`, using fixed 15.17, 16.13, 17.11, and 18.3 images and the complete Maven reactor for pull requests, `master` pushes, and manual dispatches. Representative production-topology benchmarking remains an operational capacity-validation action, not an open repository defect or a reason to weaken the local gates.
+
+### Deferred release-readiness actions
+
+The following external actions are intentionally deferred until the project is ready for its first release candidate. They are not complete and must be reviewed before making production capacity/SLO claims or publishing public artifacts:
+
+- [ ] **Production-topology benchmark:** identify the intended database, network, storage, compute, JVM, pool, and workload topology; run at least three full-duration captures from a clean release-candidate checkout; retain the self-contained HTML evidence; and review throughput, tail latency, telemetry overhead, expiry lag, and failover recovery against the proposed production objectives. Local Testcontainers results remain regression evidence only.
+- [ ] **Maven Central publication:** verify ownership of the `dev.mars` namespace, select a non-SNAPSHOT release version, prepare release notes, provide the Central Portal token and GPG signing key through external secret storage, run the documented signed deployment, review Central's validation result, and manually promote the deployment. No credentials or private signing material belong in this repository.
+
+Review trigger: revisit both items before declaring the first release candidate production-ready. Use `docs/PEEGEEQ_CACHE_BENCHMARKS.md` and `docs/PEEGEEQ_CACHE_RELEASE_PACKAGING.md` as the execution runbooks.
 
 ## 9. Summary
 

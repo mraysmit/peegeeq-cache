@@ -33,7 +33,7 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
             <version>${slf4j.version}</version>
-            <scope>compile</scope>
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
@@ -69,9 +69,10 @@
                     <arguments>
                         <argument>-classpath</argument>
                         <classpath/>
+                        <argument>-Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory</argument>
                         <argument>-Dorg.slf4j.simpleLogger.defaultLogLevel=info</argument>
                         <argument>-Dorg.slf4j.simpleLogger.showDateTime=true</argument>
-                        <argument>-Dorg.slf4j.simpleLogger.dateTimeFormat=HH:mm:ss.SSS</argument>
+                        <argument>-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd'T'HH:mm:ss.SSSXXX</argument>
                         <argument>-Dorg.slf4j.simpleLogger.log.dev.mars.peegeeq.cache.examples=debug</argument>
                         <argument>${exec.mainClass}</argument>
                     </arguments>

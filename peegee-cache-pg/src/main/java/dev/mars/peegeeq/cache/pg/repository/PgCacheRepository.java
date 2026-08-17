@@ -9,6 +9,7 @@ import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.api.model.TouchResult;
 import dev.mars.peegeeq.cache.api.model.TtlResult;
 import dev.mars.peegeeq.cache.api.model.ValueType;
+import dev.mars.peegeeq.cache.pg.logging.SafeLogValue;
 import dev.mars.peegeeq.cache.pg.sql.CacheSql;
 import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
@@ -39,35 +40,40 @@ public final class PgCacheRepository {
 
     /** Section 16.1 — returns a live entry, or empty if missing/expired. */
     public Future<Optional<CacheEntry>> get(CacheKey key) {
-        log.debug("get key={}", key);
+        String logKey = traceKey(key);
+        trace("cache.get.request", logKey);
         return pool.preparedQuery(sql.GET)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
                     var it = rows.iterator();
                     if (!it.hasNext()) {
-                        log.debug("get key={} -> miss", key);
+                        traceResult("cache.get.result", logKey, "miss");
                         return Optional.<CacheEntry>empty();
                     }
-                    log.debug("get key={} -> hit", key);
+                    traceResult("cache.get.result", logKey, "hit");
                     return Optional.of(mapRow(it.next()));
                 });
     }
 
     /** Section 16.3 — unconditional delete. Returns true if a row was removed. */
     public Future<Boolean> delete(CacheKey key) {
-        log.debug("delete key={}", key);
+        String logKey = traceKey(key);
+        trace("cache.delete.request", logKey);
         return pool.preparedQuery(sql.DELETE)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
                     boolean deleted = rows.rowCount() > 0;
-                    log.debug("delete key={} -> removed={}", key, deleted);
+                    if (logKey != null) {
+                        log.atTrace().addKeyValue("cache.key", logKey)
+                                .addKeyValue("removed", deleted).log("cache.delete.result");
+                    }
                     return deleted;
                 });
     }
 
     /** Section 16.2 — true when a live entry exists. */
     public Future<Boolean> exists(CacheKey key) {
-        log.debug("exists key={}", key);
+        trace("cache.exists.request", traceKey(key));
         return pool.preparedQuery(sql.EXISTS)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> rows.iterator().next().getBoolean(0));
@@ -75,7 +81,7 @@ public final class PgCacheRepository {
 
     /** Section 16.8 — ttl lookup for live entries. */
     public Future<TtlResult> ttl(CacheKey key) {
-        log.debug("ttl key={}", key);
+        trace("cache.ttl.request", traceKey(key));
         return pool.preparedQuery(sql.TTL)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> {
@@ -93,7 +99,11 @@ public final class PgCacheRepository {
 
     /** Section 16.9 — set ttl on live entry. */
     public Future<Boolean> expire(CacheKey key, long ttlMillis) {
-        log.debug("expire key={} ttlMillis={}", key, ttlMillis);
+        String logKey = traceKey(key);
+        if (logKey != null) {
+            log.atTrace().addKeyValue("cache.key", logKey)
+                    .addKeyValue("ttl.ms", ttlMillis).log("cache.expire.request");
+        }
         return pool.preparedQuery(sql.EXPIRE)
                 .execute(Tuple.of(key.namespace(), key.key(), ttlMillis))
                 .map(rows -> rows.rowCount() > 0);
@@ -101,7 +111,7 @@ public final class PgCacheRepository {
 
     /** Section 16.10 — remove ttl from live entry. */
     public Future<Boolean> persist(CacheKey key) {
-        log.debug("persist key={}", key);
+        trace("cache.persist.request", traceKey(key));
         return pool.preparedQuery(sql.PERSIST)
                 .execute(Tuple.of(key.namespace(), key.key()))
                 .map(rows -> rows.rowCount() > 0);
@@ -109,7 +119,11 @@ public final class PgCacheRepository {
 
     /** Section 16.11 — touch entry and optionally refresh ttl. */
     public Future<TouchResult> touch(CacheKey key, Long ttlMillis) {
-        log.debug("touch key={} ttlMillis={}", key, ttlMillis);
+        String logKey = traceKey(key);
+        if (logKey != null) {
+            log.atTrace().addKeyValue("cache.key", logKey)
+                    .addKeyValue("ttl.ms", ttlMillis).log("cache.touch.request");
+        }
         return pool.preparedQuery(sql.TOUCH)
                 .execute(Tuple.of(key.namespace(), key.key(), ttlMillis))
                 .map(rows -> {
@@ -131,7 +145,13 @@ public final class PgCacheRepository {
      * ONLY_IF_VERSION_MATCHES, including returnPreviousValue semantics.
      */
     public Future<CacheSetResult> set(CacheSetRequest req) {
-        log.debug("set key={} mode={} returnPrev={}", req.key(), req.mode(), req.returnPreviousValue());
+        String logKey = traceKey(req.key());
+        if (logKey != null) {
+            log.atTrace().addKeyValue("cache.key", logKey)
+                    .addKeyValue("set.mode", req.mode())
+                    .addKeyValue("return.previous", req.returnPreviousValue())
+                    .log("cache.set.request");
+        }
         return switch (req.mode()) {
             case UPSERT -> setUpsert(req);
             case ONLY_IF_ABSENT -> setIfAbsent(req);
@@ -279,5 +299,22 @@ public final class PgCacheRepository {
             return null;
         }
         return ttl.toMillis();
+    }
+
+    private static String traceKey(CacheKey key) {
+        return log.isTraceEnabled() ? SafeLogValue.identifier(key.asQualifiedKey()) : null;
+    }
+
+    private static void trace(String event, String logKey) {
+        if (logKey != null) {
+            log.atTrace().addKeyValue("cache.key", logKey).log(event);
+        }
+    }
+
+    private static void traceResult(String event, String logKey, String outcome) {
+        if (logKey != null) {
+            log.atTrace().addKeyValue("cache.key", logKey)
+                    .addKeyValue("outcome", outcome).log(event);
+        }
     }
 }

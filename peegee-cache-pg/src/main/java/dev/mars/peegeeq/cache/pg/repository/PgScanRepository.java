@@ -3,6 +3,7 @@ package dev.mars.peegeeq.cache.pg.repository;
 import dev.mars.peegeeq.cache.api.model.CacheEntry;
 import dev.mars.peegeeq.cache.api.model.ScanRequest;
 import dev.mars.peegeeq.cache.api.model.ScanResult;
+import dev.mars.peegeeq.cache.pg.logging.SafeLogValue;
 import dev.mars.peegeeq.cache.pg.sql.CacheSql;
 import io.vertx.core.Future;
 import io.vertx.sqlclient.Pool;
@@ -31,9 +32,17 @@ public final class PgScanRepository {
     }
 
     public Future<ScanResult> scan(ScanRequest request) {
-        log.debug("scan namespace={} prefix={} cursor={} limit={} includeValues={} includeExpired={}",
-                request.namespace(), request.prefix(), request.cursor(),
-                request.limit(), request.includeValues(), request.includeExpired());
+        String logNamespace = log.isTraceEnabled()
+                ? SafeLogValue.identifier(request.namespace()) : null;
+        if (logNamespace != null) {
+            log.atTrace().addKeyValue("scan.namespace", logNamespace)
+                    .addKeyValue("prefix.present", request.prefix() != null)
+                    .addKeyValue("cursor.present", request.cursor() != null)
+                    .addKeyValue("limit", request.limit())
+                    .addKeyValue("include.values", request.includeValues())
+                    .addKeyValue("include.expired", request.includeExpired())
+                    .log("cache.scan.request");
+        }
 
         String query = request.includeExpired() ? sql.SCAN_INCLUDING_EXPIRED : sql.SCAN;
         // Fetch limit+1 to detect hasMore without an extra query
@@ -51,7 +60,7 @@ public final class PgScanRepository {
                 .map(rows -> {
                     List<CacheEntry> entries = new ArrayList<>();
                     for (Row row : rows) {
-                    entries.add(CacheEntryMapper.mapRow(row, request.includeValues()));
+                        entries.add(CacheEntryMapper.mapRow(row, request.includeValues()));
                     }
 
                     boolean hasMore = entries.size() > request.limit();
@@ -61,8 +70,11 @@ public final class PgScanRepository {
 
                     String nextCursor = hasMore ? entries.get(entries.size() - 1).key().key() : null;
 
-                    log.debug("scan namespace={} -> found={} hasMore={}",
-                            request.namespace(), entries.size(), hasMore);
+                    if (logNamespace != null) {
+                        log.atTrace().addKeyValue("scan.namespace", logNamespace)
+                                .addKeyValue("found", entries.size())
+                                .addKeyValue("has.more", hasMore).log("cache.scan.result");
+                    }
 
                     return new ScanResult(List.copyOf(entries), nextCursor, hasMore);
                 });

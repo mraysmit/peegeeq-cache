@@ -60,7 +60,7 @@
         <testcontainers.version>2.0.2</testcontainers.version>
         <micrometer.version>1.17.0</micrometer.version>
         <opentelemetry.version>1.64.0</opentelemetry.version>
-        <slf4j.version>2.0.17</slf4j.version>
+        <slf4j.version>2.0.18</slf4j.version>
         <postgresql.version>42.7.5</postgresql.version>
         <maven.source.plugin.version>3.4.0</maven.source.plugin.version>
         <maven.javadoc.plugin.version>3.12.0</maven.javadoc.plugin.version>
@@ -142,6 +142,14 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.2</version>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <vertx.logger-delegate-factory-class-name>io.vertx.core.logging.SLF4JLogDelegateFactory</vertx.logger-delegate-factory-class-name>
+                            <org.slf4j.simpleLogger.defaultLogLevel>info</org.slf4j.simpleLogger.defaultLogLevel>
+                            <org.slf4j.simpleLogger.showDateTime>true</org.slf4j.simpleLogger.showDateTime>
+                            <org.slf4j.simpleLogger.dateTimeFormat>yyyy-MM-dd'T'HH:mm:ss.SSSXXX</org.slf4j.simpleLogger.dateTimeFormat>
+                        </systemPropertyVariables>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

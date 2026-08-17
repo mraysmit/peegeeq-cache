@@ -7,6 +7,7 @@ import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
 import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
+import dev.mars.peegeeq.cache.pg.logging.SafeLogValue;
 import dev.mars.peegeeq.cache.pg.repository.PgPubSubRepository;
 import dev.mars.peegeeq.cache.pg.sql.PubSubSql;
 import io.vertx.core.Future;
@@ -98,7 +99,7 @@ public final class PgPubSubService implements PubSubService {
             return conn.query(PubSubSql.unlistenAll()).execute()
                     .compose(v -> conn.close())
                     .recover(err -> {
-                        log.warn("Error during listener connection cleanup", err);
+                        log.atWarn().setCause(err).log("pubsub.listener.cleanup_failed");
                         return conn.close().recover(closeErr -> Future.succeededFuture());
                     });
         }
@@ -163,12 +164,12 @@ public final class PgPubSubService implements PubSubService {
                             listenerConnection = null;
                         }
                         if (wasCurrent && started.get()) {
-                            log.warn("Listener connection closed unexpectedly, scheduling reconnect");
+                            log.atWarn().log("pubsub.listener.connection_lost");
                             scheduleReconnect();
                         }
                     });
 
-                    log.info("Pub/sub listener connection established");
+                    log.atInfo().log("pubsub.listener.connected");
                     return Future.succeededFuture();
                 });
     }
@@ -179,12 +180,16 @@ public final class PgPubSubService implements PubSubService {
         }
         int attempt = reconnectAttempts.incrementAndGet();
         if (attempt > MAX_RECONNECT_ATTEMPTS) {
-            log.error("Max reconnect attempts ({}) exceeded for pub/sub listener", MAX_RECONNECT_ATTEMPTS);
+            log.atError().addKeyValue("attempts", MAX_RECONNECT_ATTEMPTS)
+                    .log("pubsub.listener.reconnect_exhausted");
             return;
         }
 
         long delay = Math.min(BASE_RECONNECT_DELAY_MS * (1L << (attempt - 1)), MAX_RECONNECT_DELAY_MS);
-        log.info("Scheduling pub/sub listener reconnect attempt {}/{} in {}ms", attempt, MAX_RECONNECT_ATTEMPTS, delay);
+        log.atDebug().addKeyValue("attempt", attempt)
+                .addKeyValue("max.attempts", MAX_RECONNECT_ATTEMPTS)
+                .addKeyValue("delay.ms", delay)
+                .log("pubsub.listener.reconnect_scheduled");
 
         reconnectTimerId = vertx.setTimer(delay, id -> {
             synchronized (PgPubSubService.this) {
@@ -200,12 +205,15 @@ public final class PgPubSubService implements PubSubService {
                             reconnectAttempts.set(0);
                             metrics.recordPubSubReconnect(attempt,
                                     Duration.ofNanos(System.nanoTime() - reconnectStartedAt), null);
-                            log.info("Pub/sub listener reconnected and channels replayed (attempt {})", attempt);
+                            log.atInfo().addKeyValue("attempt", attempt)
+                                    .addKeyValue("channels", handlers.size())
+                                    .log("pubsub.listener.reconnected");
                         })
                         .onFailure(err -> {
                             metrics.recordPubSubReconnect(attempt,
                                     Duration.ofNanos(System.nanoTime() - reconnectStartedAt), err);
-                            log.warn("Reconnect attempt {} failed", attempt, err);
+                            log.atWarn().addKeyValue("attempt", attempt)
+                                    .setCause(err).log("pubsub.listener.reconnect_failed");
                             closeFailedReconnect().onComplete(v -> scheduleReconnect());
                         });
         });
@@ -245,7 +253,9 @@ public final class PgPubSubService implements PubSubService {
                     try {
                         handler.accept(message);
                     } catch (Exception e) {
-                        log.warn("Exception in pub/sub handler for channel '{}'", rawChannel, e);
+                        log.atWarn()
+                                .addKeyValue("pubsub.channel", SafeLogValue.identifier(rawChannel))
+                                .setCause(e).log("pubsub.handler.failed");
                     }
                 }
                 metrics.recordNotificationDispatch(entry.getValue().size(),
@@ -253,7 +263,11 @@ public final class PgPubSubService implements PubSubService {
                 return;
             }
         }
-        log.debug("Received notification for unregistered channel: {}", qualifiedChannel);
+        if (log.isTraceEnabled()) {
+            log.atTrace()
+                    .addKeyValue("pubsub.channel", SafeLogValue.identifier(qualifiedChannel))
+                    .log("pubsub.notification.unregistered");
+        }
     }
 
     private void validateSubscribeArgs(String channel, Consumer<PubSubMessage> handler) {

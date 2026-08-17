@@ -34,6 +34,7 @@ target/test-logs/
 
 ### Eclipse ###
 .apt_generated
+**/bin/
 .classpath
 .factorypath
 .project

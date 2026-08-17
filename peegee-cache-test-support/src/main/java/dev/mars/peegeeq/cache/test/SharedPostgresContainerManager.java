@@ -18,8 +18,10 @@ public final class SharedPostgresContainerManager {
     public static synchronized PostgreSQLContainer acquire(String ownerLabel) {
         if (sharedContainer == null) {
             String postgresImage = PostgreSQLTestConstants.postgresImage();
-            log.info("Starting shared PostgreSQL Testcontainer for '{}' (image: {})",
-                    ownerLabel, postgresImage);
+            log.atInfo()
+                    .addKeyValue("test.suite", ownerLabel)
+                    .addKeyValue("image", postgresImage)
+                    .log("test.postgres_container.starting");
             sharedContainer = new PostgreSQLContainer(postgresImage)
                     .withDatabaseName(PostgreSQLTestConstants.DEFAULT_DATABASE_NAME)
                     .withUsername(PostgreSQLTestConstants.DEFAULT_USERNAME)
@@ -36,7 +38,7 @@ public final class SharedPostgresContainerManager {
             refCount--;
         }
         if (refCount == 0 && sharedContainer != null) {
-            log.info("Stopping shared PostgreSQL Testcontainer after release by '{}'", ownerLabel);
+            log.atInfo().addKeyValue("test.suite", ownerLabel).log("test.postgres_container.stopping");
             sharedContainer.stop();
             sharedContainer = null;
         }

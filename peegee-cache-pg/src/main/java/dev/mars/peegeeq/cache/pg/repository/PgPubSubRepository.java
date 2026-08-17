@@ -2,6 +2,7 @@ package dev.mars.peegeeq.cache.pg.repository;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
+import dev.mars.peegeeq.cache.pg.logging.SafeLogValue;
 import dev.mars.peegeeq.cache.pg.sql.PubSubSql;
 import io.vertx.core.Future;
 import io.vertx.sqlclient.Pool;
@@ -44,9 +45,12 @@ public final class PgPubSubRepository {
         }
 
         String qualifiedChannel = sql.qualifiedChannel(request.channel());
-        log.debug("publish channel={} qualifiedChannel={} payloadLength={}",
-                request.channel(), qualifiedChannel,
-                request.payload() != null ? request.payload().length() : 0);
+        if (log.isTraceEnabled()) {
+            log.atTrace()
+                    .addKeyValue("pubsub.channel", SafeLogValue.identifier(request.channel()))
+                    .addKeyValue("payload.bytes", request.payload().getBytes(StandardCharsets.UTF_8).length)
+                    .log("pubsub.publish.request");
+        }
 
         return pool.preparedQuery(PubSubSql.NOTIFY)
                 .execute(Tuple.of(qualifiedChannel, request.payload()))

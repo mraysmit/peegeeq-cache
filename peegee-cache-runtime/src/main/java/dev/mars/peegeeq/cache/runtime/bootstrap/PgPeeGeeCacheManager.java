@@ -18,10 +18,10 @@ import dev.mars.peegeeq.cache.pg.service.PgCounterService;
 import dev.mars.peegeeq.cache.pg.service.PgLockService;
 import dev.mars.peegeeq.cache.pg.service.PgPubSubService;
 import dev.mars.peegeeq.cache.pg.service.PgScanService;
-import dev.mars.peegeeq.cache.runtime.Banner;
 import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
 import dev.mars.peegeeq.cache.runtime.expiry.PgExpirySweeper;
+import dev.mars.peegeeq.cache.runtime.logging.RecurringFailureTracker;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
@@ -33,12 +33,12 @@ import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * PostgreSQL-backed implementation of {@link PeeGeeCacheManager}.
  * <p>
- * Wires repositories and services, prints the startup banner,
- * and manages explicit start/stop lifecycle.
+ * Wires repositories and services and manages explicit start/stop lifecycle.
  */
 final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
 
@@ -52,6 +52,7 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     private final PgExpirySweeper expirySweeper;
     private final CacheMetrics metrics;
     private final AtomicBoolean started = new AtomicBoolean(false);
+    private final RecurringFailureTracker expirySweepFailures = new RecurringFailureTracker();
 
     private volatile long sweeperTimerId = -1L;
 
@@ -87,7 +88,6 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             this.pubSubService = new PgPubSubService(vertx, pubSubRepo, connectOpts, storeConfig, this.metrics);
         } else {
             this.pubSubService = null;
-            log.info("No connectOptions provided — pub/sub will use stub (provide connectOptions for real pub/sub)");
         }
 
         this.cache = new PgPeeGeeCache(
@@ -109,11 +109,16 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         return startBackgroundComponents()
                 .onSuccess(v -> {
                     metrics.recordLifecycle(true);
-                    Banner.print();
-                    log.info("PeeGeeCacheManager started (schema={})", options.storeConfig().schemaName());
+                    log.atInfo()
+                            .addKeyValue("schema", options.storeConfig().schemaName())
+                            .addKeyValue("expiry.sweeper", options.runtimeConfig().enableExpirySweeper())
+                            .addKeyValue("pubsub", pubSubService != null)
+                            .log("cache.manager.started");
                 })
                 .onFailure(err -> {
                     metrics.recordLifecycle(false);
+                    log.atError().addKeyValue("schema", options.storeConfig().schemaName())
+                            .setCause(err).log("cache.manager.start_failed");
                     stopBackgroundComponents()
                             .onComplete(v -> started.set(false));
                 });
@@ -124,11 +129,13 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         if (!started.compareAndSet(true, false)) {
             return Future.failedFuture(new IllegalStateException("Manager is not started"));
         }
-        log.info("PeeGeeCacheManager stopping");
+        log.atInfo().addKeyValue("schema", options.storeConfig().schemaName())
+                .log("cache.manager.stopping");
         return stopBackgroundComponents()
                 .onSuccess(v -> {
                     metrics.recordLifecycle(false);
-                    log.info("PeeGeeCacheManager stopped");
+                    log.atInfo().addKeyValue("schema", options.storeConfig().schemaName())
+                            .log("cache.manager.stopped");
                 });
     }
 
@@ -159,14 +166,23 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     public void close() {
         if (started.get()) {
             CountDownLatch latch = new CountDownLatch(1);
-            stopReactive().onComplete(ar -> latch.countDown());
+            AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+            stopReactive().onComplete(ar -> {
+                if (ar.failed()) {
+                    stopFailure.set(ar.cause());
+                }
+                latch.countDown();
+            });
             try {
                 if (!latch.await(10, TimeUnit.SECONDS)) {
-                    log.warn("Timed out waiting for PeeGeeCacheManager to stop");
+                    log.atWarn().addKeyValue("timeout.seconds", 10)
+                            .log("cache.manager.stop_timed_out");
+                } else if (stopFailure.get() != null) {
+                    log.atWarn().setCause(stopFailure.get()).log("cache.manager.stop_failed");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                log.warn("Interrupted while closing PeeGeeCacheManager");
+                log.atWarn().setCause(e).log("cache.manager.stop_interrupted");
             }
         }
     }
@@ -189,8 +205,9 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         }
         return metrics.<Void>observe(CacheOperation.SCHEMA_BOOTSTRAP,
                 () -> new PgSchemaMigrator(pool, options.storeConfig().schemaName()).migrate())
-                .onSuccess(ignored -> log.info("Applied bundled schema migrations (schema={})",
-                        options.storeConfig().schemaName()));
+                .onSuccess(ignored -> log.atInfo()
+                        .addKeyValue("schema", options.storeConfig().schemaName())
+                        .log("cache.schema.migration_checked"));
     }
 
     private Future<Void> startConfiguredBackgroundComponents() {
@@ -205,29 +222,39 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
                             metrics.recordExpirySweep(result.deletedRows(),
                                     java.time.Duration.ofNanos(System.nanoTime() - sweepStartedAt),
                                     result.oldestExpiredRowLag(), null);
+                            expirySweepFailures.recordRecovery().ifPresent(suppressed ->
+                                    log.atInfo().addKeyValue("schema", options.storeConfig().schemaName())
+                                            .addKeyValue("suppressed.failures", suppressed)
+                                            .log("cache.expiry_sweep.recovered"));
                             if (result.deletedRows() > 0) {
-                                log.debug("Expiry sweep deleted {} rows (schema={})",
-                                        result.deletedRows(), options.storeConfig().schemaName());
+                                log.atDebug().addKeyValue("schema", options.storeConfig().schemaName())
+                                        .addKeyValue("deleted.rows", result.deletedRows())
+                                        .addKeyValue("oldest.lag.ms", result.oldestExpiredRowLag().toMillis())
+                                        .log("cache.expiry_sweep.completed");
                             }
                         })
                         .onFailure(err -> {
                             metrics.recordExpirySweep(0,
                                     java.time.Duration.ofNanos(System.nanoTime() - sweepStartedAt),
                                     java.time.Duration.ZERO, err);
-                            log.warn("Expiry sweep failed (schema={})",
-                                    options.storeConfig().schemaName(), err);
+                            RecurringFailureTracker.Failure observation = expirySweepFailures.recordFailure();
+                            if (observation.firstFailure()) {
+                                log.atWarn().addKeyValue("schema", options.storeConfig().schemaName())
+                                        .setCause(err).log("cache.expiry_sweep.failed");
+                            }
                         });
             });
-            log.info("Expiry sweeper started (interval={}ms, batchSize={})", intervalMillis, runtime.expirySweepBatchSize());
+            log.atInfo().addKeyValue("interval.ms", intervalMillis)
+                    .addKeyValue("batch.size", runtime.expirySweepBatchSize())
+                    .log("cache.expiry_sweeper.started");
         }
 
         if (pubSubService != null) {
-            return pubSubService.start()
-                    .onSuccess(v -> log.info("Pub/Sub listener started"))
-                    .onFailure(err -> log.error("Failed to start pub/sub listener", err));
+            return pubSubService.start();
         }
 
-        log.info("Pub/Sub listener not configured (no connectOptions)");
+        log.atDebug().addKeyValue("reason", "connect_options_absent")
+                .log("pubsub.listener.disabled");
         return Future.succeededFuture();
     }
 
@@ -236,14 +263,14 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         if (timerId >= 0) {
             vertx.cancelTimer(timerId);
             sweeperTimerId = -1L;
-            log.info("Expiry sweeper stopped");
+            log.atInfo().log("cache.expiry_sweeper.stopped");
         }
 
         Future<Void> sweeperStopped = expirySweeper.awaitIdle();
         if (pubSubService != null) {
             return sweeperStopped.compose(ignored -> pubSubService.stop())
-                    .onSuccess(v -> log.info("Pub/Sub listener stopped"))
-                    .onFailure(err -> log.warn("Error stopping pub/sub listener", err));
+                    .onSuccess(v -> log.atInfo().log("pubsub.listener.stopped"))
+                    .onFailure(err -> log.atWarn().setCause(err).log("pubsub.listener.stop_failed"));
         }
         return sweeperStopped;
     }

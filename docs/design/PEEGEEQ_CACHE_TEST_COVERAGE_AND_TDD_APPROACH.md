@@ -74,18 +74,18 @@ For behavior that depends on **Vert.x runtime semantics**:
 
 ## 3. Current test inventory
 
-Last verified: 2026-08-16 with `mvn clean verify`.
+Last verified: 2026-08-17 with `mvn verify` after a clean full-reactor baseline.
 
 | Module | Tests | Scope |
 |---|---:|---|
 | `peegee-cache-api` | 34 | Keys, values, and exception contracts |
 | `peegee-cache-core` | 14 | Validation, in-memory metrics, telemetry isolation, and async observation |
-| `peegee-cache-pg` | 191 | Consolidated baseline bootstrap, migration-runner safety, repositories, services, native SQL, adversarial pub/sub, recovery, and contention |
-| `peegee-cache-runtime` | 21 | Lifecycle, external/managed schema policy, custom schemas, complete operation telemetry, default TTL, and physical expiry sweeping |
+| `peegee-cache-pg` | 194 | Consolidated baseline bootstrap, migration-runner safety, repositories, services, native SQL, adversarial pub/sub, recovery, contention, and safe log identifier formatting |
+| `peegee-cache-runtime` | 23 | Lifecycle, external/managed schema policy, custom schemas, complete operation telemetry, default TTL, physical expiry sweeping, and sequential/concurrent recurring failure-episode suppression |
 | `peegee-cache-observability` | 4 | Micrometer export, OpenTelemetry spans, and complete/partial-schema PostgreSQL readiness |
-| `peegee-cache-test-support` | 3 | Latency percentile/throughput calculation and configurable PostgreSQL matrix image selection |
+| `peegee-cache-test-support` | 4 | Latency percentile/throughput calculation, configurable PostgreSQL matrix image selection, and published-module logging dependency policy |
 | `peegee-cache-benchmarks` | 13 | Benchmark configuration, typed results, self-contained HTML evidence generation, exact pool headroom, runtime layout, timeout diagnostics, and real-PostgreSQL pool-headroom/sweeper regression |
-| **Total** | **280** | Full reactor green on PostgreSQL 18.3; the 269-test pre-fix reactor and the added pool regression are both validated on PostgreSQL 15–18 |
+| **Total** | **286** | Full reactor green on PostgreSQL 18.3; the 269-test pre-fix reactor and the added pool regression are both validated on PostgreSQL 15–18 |
 
 ### peegee-cache-api (34 tests)
 

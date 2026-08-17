@@ -2,6 +2,8 @@
 
 Observability is a required production component of peegee-cache. The managed runtime accepts the vendor-neutral `CacheTelemetry` contract; `peegee-cache-observability` supplies Micrometer and OpenTelemetry implementations and a PostgreSQL readiness indicator.
 
+Logs are governed by the [peegee-cache logging standard](PEEGEEQ_CACHE_LOGGING.md): consuming applications own the SLF4J provider, lifecycle and degraded/recovery transitions are structured, recurring failures are suppressed and summarized, per-operation detail is TRACE-only, and user-controlled data is omitted or fingerprinted.
+
 ## Required signals
 
 | Signal | Meaning |
@@ -62,10 +64,10 @@ Applied versions are recorded in `<schema>.schema_migrations`. Rollback is opera
 The Testcontainers image is selected with `peegeeq.test.postgres.image`. The 2026-08-16 manual release matrix ran the complete 269-test reactor successfully on every supported major version:
 
 ```shell
-mvn verify '-Dpeegeeq.test.postgres.image=postgres:15-alpine'
-mvn verify '-Dpeegeeq.test.postgres.image=postgres:16-alpine'
-mvn verify '-Dpeegeeq.test.postgres.image=postgres:17-alpine'
+mvn verify '-Dpeegeeq.test.postgres.image=postgres:15.17-alpine'
+mvn verify '-Dpeegeeq.test.postgres.image=postgres:16.13-alpine'
+mvn verify '-Dpeegeeq.test.postgres.image=postgres:17.11-alpine'
 mvn verify '-Dpeegeeq.test.postgres.image=postgres:18.3-alpine'
 ```
 
-The resolved server patch releases were 15.17, 16.13, 17.11, and 18.3. Each full-reactor matrix run completed with 269 tests, zero failures, zero errors, and zero skips. The subsequently added real-PostgreSQL pool-headroom/sweeper regression passed separately on all four majors; the current PostgreSQL 18.3 reactor contains 275 tests. This matrix is repeatable locally but should still be encoded in CI so future commits cannot bypass it.
+Each full-reactor matrix run completed with 269 tests, zero failures, zero errors, and zero skips. The subsequently added real-PostgreSQL pool-headroom/sweeper regression passed separately on all four majors; the current PostgreSQL 18.3 reactor contains 286 tests, including the logging safety, concurrent failure-suppression, and provider-isolation contracts. `.github/workflows/postgresql-compatibility.yml` now repeats the complete reactor against the four fixed image tags for every pull request, every push to `master`, and manual dispatches.

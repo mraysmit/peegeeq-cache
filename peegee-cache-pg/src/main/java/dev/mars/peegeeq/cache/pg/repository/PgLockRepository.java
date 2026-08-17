@@ -6,6 +6,7 @@ import dev.mars.peegeeq.cache.api.model.LockKey;
 import dev.mars.peegeeq.cache.api.model.LockReleaseRequest;
 import dev.mars.peegeeq.cache.api.model.LockRenewRequest;
 import dev.mars.peegeeq.cache.api.model.LockState;
+import dev.mars.peegeeq.cache.pg.logging.SafeLogValue;
 import dev.mars.peegeeq.cache.pg.sql.LockSql;
 import io.vertx.core.Future;
 import io.vertx.sqlclient.Pool;
@@ -46,8 +47,14 @@ public final class PgLockRepository {
         LockKey key = req.key();
         String owner = req.ownerToken();
         long ttlMs = req.leaseTtl().toMillis();
-        log.debug("acquire lock={} owner={} ttlMs={} reentrant={} fencing={}",
-                key, owner, ttlMs, req.reentrantForSameOwner(), req.issueFencingToken());
+        String logKey = traceKey(key);
+        if (logKey != null) {
+            log.atTrace().addKeyValue("lock.key", logKey)
+                    .addKeyValue("ttl.ms", ttlMs)
+                    .addKeyValue("reentrant", req.reentrantForSameOwner())
+                    .addKeyValue("fencing", req.issueFencingToken())
+                    .log("lock.acquire.request");
+        }
 
         Tuple keyTuple = Tuple.of(key.namespace(), key.key());
         Tuple insertParams = Tuple.of(key.namespace(), key.key(), owner, ttlMs);
@@ -66,7 +73,7 @@ public final class PgLockRepository {
                                         .execute(insertParams)
                                         .compose(rows -> {
                                             if (rows.rowCount() > 0) {
-                                                log.debug("acquire lock={} -> acquired by {}", key, owner);
+                                                traceResult("lock.acquire.result", logKey, "acquired");
                                                 return Future.succeededFuture(mapAcquireResult(rows.iterator().next(), true));
                                             }
                                             // Conflict — lock already held
@@ -78,14 +85,14 @@ public final class PgLockRepository {
                                                         .execute(renewParams)
                                                         .map(renewRows -> {
                                                             if (renewRows.rowCount() > 0) {
-                                                                log.debug("acquire lock={} -> reentrant renewal by {}", key, owner);
+                                                                traceResult("lock.acquire.result", logKey, "reentrant_renewal");
                                                                 return mapAcquireResult(renewRows.iterator().next(), true);
                                                             }
-                                                            log.debug("acquire lock={} -> denied (held by different owner)", key);
+                                                            traceResult("lock.acquire.result", logKey, "denied_other_owner");
                                                             return notAcquired(key);
                                                         });
                                             }
-                                            log.debug("acquire lock={} -> denied (already held)", key);
+                                            traceResult("lock.acquire.result", logKey, "denied_already_held");
                                             return Future.succeededFuture(notAcquired(key));
                                         })
                         )
@@ -96,13 +103,20 @@ public final class PgLockRepository {
     public Future<Boolean> renew(LockRenewRequest req) {
         LockKey key = req.key();
         long ttlMs = req.leaseTtl().toMillis();
-        log.debug("renew lock={} owner={} ttlMs={}", key, req.ownerToken(), ttlMs);
+        String logKey = traceKey(key);
+        if (logKey != null) {
+            log.atTrace().addKeyValue("lock.key", logKey)
+                    .addKeyValue("ttl.ms", ttlMs).log("lock.renew.request");
+        }
         Tuple params = Tuple.of(key.namespace(), key.key(), req.ownerToken(), ttlMs);
         return pool.preparedQuery(sql.RENEW)
                 .execute(params)
                 .map(rows -> {
                     boolean renewed = rows.rowCount() > 0;
-                    log.debug("renew lock={} -> renewed={}", key, renewed);
+                    if (logKey != null) {
+                        log.atTrace().addKeyValue("lock.key", logKey)
+                                .addKeyValue("renewed", renewed).log("lock.renew.result");
+                    }
                     return renewed;
                 });
     }
@@ -110,13 +124,17 @@ public final class PgLockRepository {
     /** Section 18.4 — release lock by owner. Returns true if released. */
     public Future<Boolean> release(LockReleaseRequest req) {
         LockKey key = req.key();
-        log.debug("release lock={} owner={}", key, req.ownerToken());
+        String logKey = traceKey(key);
+        trace("lock.release.request", logKey);
         Tuple params = Tuple.of(key.namespace(), key.key(), req.ownerToken());
         return pool.preparedQuery(sql.RELEASE)
                 .execute(params)
                 .map(rows -> {
                     boolean released = rows.rowCount() > 0;
-                    log.debug("release lock={} -> released={}", key, released);
+                    if (logKey != null) {
+                        log.atTrace().addKeyValue("lock.key", logKey)
+                                .addKeyValue("released", released).log("lock.release.result");
+                    }
                     return released;
                 });
     }
@@ -164,5 +182,22 @@ public final class PgLockRepository {
                 updated != null ? updated.toInstant() : null,
                 leaseExpires != null ? leaseExpires.toInstant() : null
         );
+    }
+
+    private static String traceKey(LockKey key) {
+        return log.isTraceEnabled() ? SafeLogValue.identifier(key.asQualifiedKey()) : null;
+    }
+
+    private static void trace(String event, String logKey) {
+        if (logKey != null) {
+            log.atTrace().addKeyValue("lock.key", logKey).log(event);
+        }
+    }
+
+    private static void traceResult(String event, String logKey, String outcome) {
+        if (logKey != null) {
+            log.atTrace().addKeyValue("lock.key", logKey)
+                    .addKeyValue("outcome", outcome).log(event);
+        }
     }
 }

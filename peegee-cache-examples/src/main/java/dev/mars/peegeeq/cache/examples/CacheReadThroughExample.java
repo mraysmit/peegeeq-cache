@@ -27,20 +27,18 @@ public final class CacheReadThroughExample {
             var cache = manager.cache();
 
             CacheKey key = new CacheKey("products", "42");
-            log.debug("Read-through lookup for {}", key.asQualifiedKey());
+            log.debug("cache.read_through.lookup");
             Optional<CacheEntry> cached = ExampleLogSupport.timed(log, "cache.get(read-through)", () ->
                     ExampleRuntimeSupport.await(cache.cache().get(key)));
             if (cached.isPresent()) {
                 ExampleLogSupport.logData(log, "cache-hit",
-                        "key", key.asQualifiedKey(),
-                        "value", cached.get().value().asString());
+                        "valueType", cached.get().value().type());
                 return;
             }
 
             String loadedFromSource = loadProductJson("42");
-                ExampleLogSupport.logData(log, "cache-miss source payload",
-                    "key", key.asQualifiedKey(),
-                    "value", loadedFromSource);
+            ExampleLogSupport.logData(log, "cache-miss source payload",
+                    "payload.bytes", loadedFromSource.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
             CacheSetRequest writeIfAbsent = new CacheSetRequest(
                     key,
                     CacheValue.ofJsonUtf8(loadedFromSource),
@@ -49,20 +47,17 @@ public final class CacheReadThroughExample {
                     null,
                     true
             );
-                CacheSetResult setResult = ExampleLogSupport.timed(log, "cache.set(only-if-absent)", () ->
+            CacheSetResult setResult = ExampleLogSupport.timed(log, "cache.set(only-if-absent)", () ->
                     ExampleRuntimeSupport.await(cache.cache().set(writeIfAbsent)));
 
             if (setResult.applied()) {
                 ExampleLogSupport.logData(log, "cache-fill winner",
-                    "key", key.asQualifiedKey(),
-                    "value", loadedFromSource,
                     "version", setResult.newVersion());
             } else {
                 Optional<CacheEntry> existing = ExampleLogSupport.timed(log, "cache.get(lost-race)", () ->
                     ExampleRuntimeSupport.await(cache.cache().get(key)));
                 ExampleLogSupport.logData(log, "cache-fill lost race",
-                    "key", key.asQualifiedKey(),
-                    "existing", existing.map(entry -> entry.value().asString()).orElse("<missing>"));
+                    "existing", existing.isPresent());
             }
         });
     }

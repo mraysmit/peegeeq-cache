@@ -25,14 +25,15 @@ public final class CoordinationAndPubSubExample {
             String owner = "worker-1";
             var acquired = ExampleRuntimeSupport.await(manager.cache().locks().acquire(
                     new LockAcquireRequest(key, owner, Duration.ofSeconds(30), false, true)));
-            log.info("lock acquired={} fencingToken={}", acquired.acquired(), acquired.fencingToken());
+            log.atInfo().addKeyValue("acquired", acquired.acquired())
+                    .addKeyValue("fencingToken", acquired.fencingToken()).log("example.lock.acquire");
             if (acquired.acquired()) {
                 boolean renewed = ExampleRuntimeSupport.await(manager.cache().locks().renew(
                         new LockRenewRequest(key, owner, Duration.ofSeconds(30))));
-                log.info("lock renewed={}", renewed);
+                log.atInfo().addKeyValue("renewed", renewed).log("example.lock.renew");
                 boolean released = ExampleRuntimeSupport.await(manager.cache().locks().release(
                         new LockReleaseRequest(key, owner)));
-                log.info("lock released={}", released);
+                log.atInfo().addKeyValue("released", released).log("example.lock.release");
             }
 
             Promise<String> received = Promise.promise();
@@ -40,7 +41,9 @@ public final class CoordinationAndPubSubExample {
                     "inventory-events", message -> received.tryComplete(message.payload())));
             ExampleRuntimeSupport.await(manager.cache().pubSub().publish(
                     new PublishRequest("inventory-events", "inventory-refreshed", "text/plain")));
-            log.info("notification received payload={}", ExampleRuntimeSupport.await(received.future()));
+            String payload = ExampleRuntimeSupport.await(received.future());
+            log.atInfo().addKeyValue("payload.bytes", payload.getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                    .log("example.pubsub.notification_received");
             ExampleRuntimeSupport.await(subscription.unsubscribe());
         });
     }

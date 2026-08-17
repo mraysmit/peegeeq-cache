@@ -2,9 +2,6 @@ package dev.mars.peegeeq.cache.examples;
 
 import org.slf4j.Logger;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 final class ExampleLogSupport {
 
     @FunctionalInterface
@@ -22,7 +19,15 @@ final class ExampleLogSupport {
     }
 
     static void logData(Logger log, String label, Object... keyValues) {
-        log.info("{}: {}", label, orderedMap(keyValues));
+        if (keyValues.length % 2 != 0) {
+            throw new IllegalArgumentException("Expected even number of key/value arguments");
+        }
+
+        var event = log.atInfo().addKeyValue("name", label);
+        for (int index = 0; index < keyValues.length; index += 2) {
+            event.addKeyValue(String.valueOf(keyValues[index]), keyValues[index + 1]);
+        }
+        event.log("example.data");
     }
 
     static <T> T timed(Logger log, String label, ThrowingSupplier<T> supplier) throws Exception {
@@ -45,20 +50,9 @@ final class ExampleLogSupport {
 
     private static void logDuration(Logger log, String label, long startNanos) {
         long elapsedNanos = System.nanoTime() - startNanos;
-        double elapsedMillis = elapsedNanos / 1_000_000.0;
-        long elapsedMicros = elapsedNanos / 1_000;
-        log.info("timer {}: {} ms ({} us)", label, String.format("%.3f", elapsedMillis), elapsedMicros);
-    }
-
-    private static Map<String, Object> orderedMap(Object... keyValues) {
-        if (keyValues.length % 2 != 0) {
-            throw new IllegalArgumentException("Expected even number of key/value arguments");
-        }
-
-        LinkedHashMap<String, Object> map = new LinkedHashMap<>();
-        for (int i = 0; i < keyValues.length; i += 2) {
-            map.put(String.valueOf(keyValues[i]), keyValues[i + 1]);
-        }
-        return map;
+        log.atInfo()
+                .addKeyValue("operation", label)
+                .addKeyValue("duration.us", elapsedNanos / 1_000)
+                .log("example.operation.completed");
     }
 }
