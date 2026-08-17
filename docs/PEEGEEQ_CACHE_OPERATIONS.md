@@ -54,7 +54,7 @@ Applied versions are recorded in `<schema>.schema_migrations`. Rollback is opera
 
 | Component | Supported/validated posture |
 |---|---|
-| Java | 21 through 25; enforced by Maven Enforcer |
+| Java | Build JDK 21 through 26; enforced by Maven Enforcer. Published artifacts target Java 21. |
 | Maven | 3.9.x; enforced by Maven Enforcer |
 | Vert.x | 5.0.8 dependency baseline |
 | PostgreSQL | 15+; full-reactor validation completed on 15.17, 16.13, 17.11, and 18.3 |

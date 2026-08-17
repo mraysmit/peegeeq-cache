@@ -17,7 +17,7 @@ The `release-artifacts` Maven profile attaches source and Javadoc JARs:
 mvn -Prelease-artifacts clean package
 ```
 
-Every build enforces Maven 3.9.x, Java 21–25, dependency convergence, and duplicate dependency declarations. A release candidate must also pass `mvn clean verify`, the benchmark thresholds appropriate to its target environment, and the PostgreSQL compatibility matrix.
+Every build enforces Maven 3.9.x, build JDK 21–26, Java 21 bytecode compatibility, dependency convergence, and duplicate dependency declarations. A release candidate must also pass `mvn clean verify`, the benchmark thresholds appropriate to its target environment, and the PostgreSQL compatibility matrix.
 
 ## Default publication configuration
 

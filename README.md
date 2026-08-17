@@ -43,7 +43,7 @@ PostgreSQL's shared buffer caching, prepared statement plan reuse, HOT updates, 
 
 ## Requirements
 
-- **Java** 21–25 (enforced by the build)
+- **Java** 21–26 (enforced by the build; artifacts target Java 21)
 - **Vert.x** 5.0.8
 - **PostgreSQL** 15+; the full reactor was manually validated against PostgreSQL 15.17, 16.13, 17.11, and 18.3, and CI repeats that four-version matrix for every pull request and `master` push
 

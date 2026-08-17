@@ -44,6 +44,16 @@ class BenchmarkEvidenceWriterTest {
         }
         String html = Files.readString(reportFile);
         assertTrue(html.contains("<!doctype html>"));
+        assertTrue(html.contains("<h1>peegee-cache benchmark report</h1>"));
+        assertTrue(html.contains("<span class=\"header-label\">Generated</span>"));
+        assertTrue(html.contains("<time datetime=\"2026-08-16T10:01:00Z\">16 Aug 2026, 10:01:00 UTC</time>"));
+        assertTrue(html.contains("<span class=\"header-label\">Report ID</span>"));
+        assertTrue(html.contains("<code>capture-id</code>"));
+        assertFalse(html.contains("<h1>capture-id</h1>"));
+        assertTrue(html.contains("<span class=\"label\">Started UTC</span><time class=\"value\" datetime=\"2026-08-16T10:00:00Z\">16 Aug 2026, 10:00:00 UTC</time>"));
+        assertTrue(html.contains("<time datetime=\"2026-08-16T10:00:00Z\">16 Aug 2026, 10:00:00 UTC</time> · 60.000 seconds"));
+        assertFalse(html.contains("<span class=\"value\">2026-08-16T10:00:00Z</span>"));
+        assertFalse(html.contains("<span class=\"label\">2026-08-16T10:00:00Z"));
         assertTrue(html.contains("Benchmark overview"));
         assertTrue(html.contains("Aggregate results"));
         assertTrue(html.contains("Run 1"));

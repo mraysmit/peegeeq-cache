@@ -1,8 +1,8 @@
 # PeeGeeQ Cache Management API
 
-**Status:** Approved API design
+**Status:** Reviewed API design — implementation pending scheduling and OpenAPI completion
 
-**Date:** August 2026
+**Date:** 17 August 2026
 
 **Version:** 1.0 draft
 
@@ -19,7 +19,9 @@ It is the implementation contract for:
 - the PostgreSQL implementation of management inspection and guarded administration;
 - integration and browser tests.
 
-The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The interactive screen designs are in [mockups/peegeeq-cache-management-ui-mockups.html](mockups/peegeeq-cache-management-ui-mockups.html).
+Implementation has not started. Section 19 defines the required scheduling and module-ownership gate; this contract becomes executable only after the authoritative implementation plan includes that work and the OpenAPI companion is validated.
+
+The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The interactive screen designs are in [UI mockups/peegeeq-cache-management-ui-mockups.html](UI%20mockups/peegeeq-cache-management-ui-mockups.html).
 
 ## 2. Contract principles
 
@@ -96,7 +98,7 @@ Namespaces, cache keys, counter keys, and lock keys are arbitrary UTF-8 identifi
 encodedIdentifier = base64url(utf8(identifier)), without '=' padding
 ```
 
-The decoded namespace must contain 1–128 UTF-8 bytes. A decoded key must contain 1–1024 UTF-8 bytes. Invalid Base64 URL input, invalid UTF-8, empty identifiers, or identifiers over the management limit return `400 INVALID_IDENTIFIER`.
+The decoded namespace must contain 1–128 UTF-8 bytes. A decoded key must contain 1–1024 UTF-8 bytes. NUL is prohibited because PostgreSQL `text` cannot represent it. Invalid Base64 URL input, invalid UTF-8, empty identifiers, NUL, or identifiers over the management limit return `400 INVALID_IDENTIFIER`.
 
 Responses contain both the original identifier and its encoded form where the client needs to construct a link:
 
@@ -142,7 +144,9 @@ Response envelope:
 }
 ```
 
-Cursors are scoped to the endpoint, setup, namespace, sort, and filter set. Reusing a cursor with different parameters returns `400 CURSOR_SCOPE_MISMATCH`. Cursors are not bookmarks and do not promise a historical snapshot.
+Cursors are scoped to the endpoint, setup, namespace, sort, and complete normalized filter set. Reusing a cursor with different parameters returns `400 CURSOR_SCOPE_MISMATCH`. Cursors are not bookmarks and do not promise a historical snapshot.
+
+A cursor is either a cryptographically random reference to server-held state or a tamper-evident value authenticated with a server-held key. Client-provided cursor contents are never trusted as SQL fragments or unchecked query parameters. Cursors expire after 15 minutes; an expired cursor returns `400 INVALID_CURSOR`.
 
 ### 3.7 Sorting
 
@@ -154,7 +158,9 @@ Sort query syntax:
 sort=key:asc
 ```
 
-The default keyset order is identifier ascending. Database-wide counts may use `entryCount:desc` where documented.
+The default keyset order is identifier ascending using a deterministic PostgreSQL `C` collation. Every sort has a unique secondary key. In particular, `entryCount:desc` is ordered by entry count descending and namespace ascending. Cursor fields contain the complete composite sort position.
+
+`prefix` always means a case-sensitive literal prefix. `%`, `_`, and `\` in caller input are escaped before a PostgreSQL `LIKE` predicate is built; the management API does not expose wildcard-pattern syntax.
 
 ### 3.8 Entity tags and preconditions
 
@@ -189,7 +195,7 @@ After an uncertain mutation result, the UI reloads the resource and presents the
 
 ### 4.1 Trusted proxy mode
 
-The server defaults to loopback binding. In proxy mode it accepts identity only from configured proxy addresses.
+Production deployments use trusted proxy mode. The server accepts identity headers only when the immediate peer address matches a configured trusted proxy CIDR.
 
 Default trusted headers:
 
@@ -200,7 +206,41 @@ X-PeeGeeQ-Roles: operator,viewer
 
 The proxy must remove client-supplied copies before adding authoritative values. A direct or untrusted request containing these headers returns `401 UNTRUSTED_IDENTITY_SOURCE`.
 
-### 4.2 Roles
+The server rejects duplicate identity headers. The user value must be 1–128 printable UTF-8 characters after trimming. Roles are comma-separated, trimmed, case-normalized, limited to 16 values and 256 total bytes, and matched only against the configured role allowlist. Invalid identity syntax returns `401 INVALID_IDENTITY` rather than being partially accepted.
+
+### 4.2 Local token mode
+
+Loopback binding is a network restriction, not authentication. A server without trusted proxy mode enabled therefore uses `LOCAL_TOKEN`; there is no anonymous mode.
+
+At startup the server creates a cryptographically random 256-bit bootstrap token, writes it once directly to the controlling terminal or to an owner-readable configured file without passing through the logging system, and retains only its digest. The token is accepted only over a loopback connection by:
+
+`POST /api/v1/session/local`
+
+Request:
+
+```json
+{ "token": "one-time-bootstrap-token" }
+```
+
+Successful exchange creates an in-memory local session for the fixed `local-operator` identity with `operator` and `viewer` roles and returns the current-session representation. The session cookie is `HttpOnly`, `SameSite=Strict`, and `Secure` whenever HTTPS is used. The bootstrap token and session identifiers are never logged or persisted by the UI. `DELETE /api/v1/session/local` invalidates the session.
+
+`LOCAL_TOKEN` refuses non-loopback binding. Startup fails unless exactly one supported authentication mode is configured.
+
+### 4.3 Browser-origin and CSRF policy
+
+The management UI is same-origin by default and CORS is disabled. `LOCAL_TOKEN` always requires a same-origin UI. Trusted proxy mode may explicitly allow cross-origin access through an exact HTTPS origin allowlist; wildcard origins and reflected origins are prohibited when credentials are enabled.
+
+Session bootstrap establishes a random CSRF token for both authentication modes. Every state-changing REST request must carry the matching `X-PeeGeeQ-CSRF` header and an allowed `Origin`. Missing or invalid proof returns `403 CSRF_VALIDATION_FAILED`. SSE and WebSocket handshakes validate authentication and `Origin`; WebSocket authentication is never accepted solely from query parameters.
+
+The content-security policy, frame-ancestors policy, referrer policy, and MIME-sniffing protections are emitted by the management server or its trusted proxy. Sensitive identifiers, tokens, and credentials never appear in URLs.
+
+### 4.4 Setup target and TLS policy
+
+UI-session setup registration is disabled unless the server has an explicit outbound database target policy. The policy contains allowed DNS suffixes and/or CIDRs, allowed ports, and whether loopback, private, link-local, and public addresses are permitted. Every resolved address must satisfy the policy on initial test, registration, and reconnect. Redirects are not followed, and a validated DNS name cannot be rebound to an address outside the policy.
+
+TLS trust is selected by a server-configured `trustProfileId`; requests cannot submit filesystem paths, arbitrary trust stores, or client private keys. `VERIFY_FULL` performs certificate-chain and hostname verification against that profile. Passwords and UI-session credentials remain only in bounded-lifetime in-memory secret holders, are cleared on forget/shutdown, and are never copied into setup summaries or events.
+
+### 4.5 Roles
 
 | Role | Permissions |
 |---|---|
@@ -209,7 +249,7 @@ The proxy must remove client-supplied copies before adding authoritative values.
 
 At least one recognized role is required. Missing identity returns `401`. An authenticated user without the required role returns `403`.
 
-### 4.3 Current session
+### 4.6 Current session
 
 `GET /api/v1/session`
 
@@ -224,6 +264,7 @@ Response `200`:
   "serverVersion": "0.1.0",
   "apiVersion": "v1",
   "authenticationMode": "TRUSTED_PROXY",
+  "csrfToken": "session-scoped-random-token",
   "features": {
     "setupRegistration": true,
     "sensitiveReveal": true
@@ -231,7 +272,7 @@ Response `200`:
 }
 ```
 
-The response contains no raw proxy headers or group claims.
+The response contains no raw proxy headers or group claims and uses `Cache-Control: no-store`. The UI keeps `csrfToken` only in memory and sends it through `X-PeeGeeQ-CSRF` on state-changing requests.
 
 ## 5. Error contract
 
@@ -257,8 +298,8 @@ Errors use `application/problem+json`:
 | Status | Typical codes |
 |---|---|
 | `400` | `VALIDATION_FAILED`, `INVALID_IDENTIFIER`, `INVALID_CURSOR`, `CURSOR_SCOPE_MISMATCH`, `INVALID_SORT`, `CONFIRMATION_MISMATCH` |
-| `401` | `AUTHENTICATION_REQUIRED`, `UNTRUSTED_IDENTITY_SOURCE` |
-| `403` | `ROLE_REQUIRED`, `SETUP_ACTION_FORBIDDEN`, `REVEAL_FORBIDDEN` |
+| `401` | `AUTHENTICATION_REQUIRED`, `UNTRUSTED_IDENTITY_SOURCE`, `INVALID_IDENTITY` |
+| `403` | `ROLE_REQUIRED`, `SETUP_ACTION_FORBIDDEN`, `REVEAL_FORBIDDEN`, `CSRF_VALIDATION_FAILED`, `TARGET_FORBIDDEN` |
 | `404` | `SETUP_NOT_FOUND`, `ENTRY_NOT_FOUND`, `COUNTER_NOT_FOUND`, `LOCK_NOT_FOUND`, `SUBSCRIPTION_NOT_FOUND`, `MESSAGE_NOT_FOUND` |
 | `409` | `SETUP_ALREADY_EXISTS`, `SETUP_STATE_CONFLICT`, `CAPABILITY_UNAVAILABLE`, `SET_MODE_NOT_APPLIED`, `BULK_SCOPE_CONFLICT` |
 | `410` | `BULK_PREVIEW_EXPIRED`, `BULK_PREVIEW_USED`, `SUBSCRIPTION_EXPIRED`, `MESSAGE_EXPIRED` |
@@ -267,11 +308,22 @@ Errors use `application/problem+json`:
 | `415` | `UNSUPPORTED_MEDIA_TYPE` |
 | `422` | `JSON_VALUE_INVALID`, `VALUE_TYPE_MISMATCH` |
 | `428` | `PRECONDITION_REQUIRED` |
-| `429` | `RATE_LIMITED` |
+| `429` | `RATE_LIMITED`, `SUBSCRIPTION_LIMIT_REACHED` |
 | `500` | `INTERNAL_ERROR` |
-| `503` | `SETUP_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `RUNTIME_STOPPED`, `PUBSUB_UNAVAILABLE` |
+| `503` | `SETUP_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `RUNTIME_STOPPED`, `PUBSUB_UNAVAILABLE`, `AUDIT_UNAVAILABLE` |
 
 Vert.x failures are handled once by the route error layer. No asynchronous failure is ignored or converted to a successful response.
+
+### 5.2 Atomic mutation outcome mapping
+
+The management service returns a typed outcome from the same PostgreSQL statement or transaction that applies a versioned mutation:
+
+- `APPLIED`, with the resulting representation and version where the resource remains present;
+- `NOT_FOUND`;
+- `VERSION_MISMATCH`;
+- `CONDITION_NOT_MET` for valid create/set conditions that were not satisfied.
+
+The REST layer maps those outcomes to the statuses above. It never performs a follow-up read merely to distinguish missing state from a stale version or to discover the resulting ETag. Revealed values and owner tokens are likewise returned with the version observed by the same database query.
 
 ## 6. Common models
 
@@ -388,6 +440,7 @@ Request:
   "username": "cache_admin",
   "password": "secret",
   "sslMode": "DISABLE",
+  "trustProfileId": null,
   "poolMaxSize": 10
 }
 ```
@@ -398,7 +451,7 @@ Response `200`:
 {
   "databaseReachable": true,
   "schemaState": "READY",
-  "migrationVersion": "2",
+  "migrationVersion": "1",
   "latencyMillis": 21,
   "capabilities": {
     "namespaceInspection": true,
@@ -411,6 +464,11 @@ Response `200`:
     "pubSub": true,
     "databaseStatistics": true,
     "sensitiveValueReveal": true
+  },
+  "limits": {
+    "pubSubChannelMaxBytes": 49,
+    "pubSubPayloadMaxBytes": 7500,
+    "maximumValueBytes": 10485760
   }
 }
 ```
@@ -436,13 +494,14 @@ Request includes the connection fields above plus:
   "username": "cache_admin",
   "password": "secret",
   "sslMode": "DISABLE",
+  "trustProfileId": null,
   "poolMaxSize": 10
 }
 ```
 
 Response `201`: `SetupSummary` with `source: UI_SESSION` and `state: CONNECTED`.
 
-Registration validates reachability and schema readiness before publishing the setup. A failed registration closes all temporary resources and leaves no registry entry.
+Registration validates the target policy, TLS trust profile, reachability, and schema readiness before publishing the setup. A failed registration closes all temporary resources, clears submitted secret material, and leaves no registry entry.
 
 ### 7.4 Setup details
 
@@ -510,7 +569,7 @@ Health response:
 }
 ```
 
-Capabilities are explicit booleans matching the test response. The UI hides unsupported destinations and disables unsupported actions, while the server still rejects direct calls with `409 CAPABILITY_UNAVAILABLE`.
+Capabilities are explicit booleans matching the test response and are accompanied by effective setup-specific limits. The UI hides unsupported destinations and disables unsupported actions, while the server still rejects direct calls with `409 CAPABILITY_UNAVAILABLE`.
 
 ## 8. Overview and namespace API
 
@@ -936,6 +995,8 @@ Role: operator
 
 A negative delta decrements. Zero is rejected. `createIfMissing` defaults to false for management safety. TTL mode follows `CounterTtlMode`; `REPLACE` requires positive `ttlMillis`. Response returns the resulting counter item. The UI never automatically retries this operation.
 
+An adjustment of an existing counter requires exact `If-Match`; a stale version returns `412`. When `createIfMissing=true`, creation requires `If-None-Match: *`. The delta, creation condition, expected version, TTL mode, resulting value, and resulting version are evaluated atomically.
+
 ### 10.5 Counter TTL and deletion
 
 `POST .../counters/{encodedKey}/ttl` with `{ "ttlMillis": 60000 }`.
@@ -1038,7 +1099,7 @@ Request:
 }
 ```
 
-The channel is 1–128 UTF-8 bytes. `bufferLimit` defaults to 200 and is capped at 500.
+The fully qualified PostgreSQL channel is `{configuredPrefix}__{channel}` and must not exceed PostgreSQL's 63-byte identifier limit. The caller-supplied channel must therefore contain 1 through `63 - utf8Bytes(configuredPrefix) - 2` UTF-8 bytes and must not contain NUL. A configured prefix that leaves no byte for a channel is rejected during setup validation. The effective maximum is returned by the setup capabilities endpoint. `bufferLimit` defaults to 200 and is capped at 500.
 
 Response `201`:
 
@@ -1066,11 +1127,13 @@ The SSE stream sends message metadata only:
 ```text
 id: 71
 event: pubsub.message
-data: {"messageId":"01K2VD...","channel":"cache-invalidation","contentType":"application/json","payloadBytes":142,"receivedAt":"2026-08-16T10:42:17.000Z","payloadState":"MASKED"}
+data: {"messageId":"01K2VD...","channel":"cache-invalidation","contentType":null,"payloadBytes":142,"receivedAt":"2026-08-16T10:42:17.000Z","payloadState":"MASKED"}
 
 ```
 
 The server sends a `ready` event first and a comment heartbeat every 15 seconds. `Last-Event-ID` resumes from the bounded session buffer. If the requested event is no longer available, the stream sends `reset` with the oldest available identifier.
+
+Native PostgreSQL `NOTIFY` carries only channel and payload. It does not carry `contentType`; therefore V1 reports `contentType: null` for received messages and does not infer a type from payload contents. A future typed envelope requires an explicit capability and wire-version decision so native subscribers are not silently broken.
 
 ### 12.3 Reveal retained payload
 
@@ -1078,7 +1141,7 @@ The server sends a `ready` event first and a comment heartbeat every 15 seconds.
 
 Role: owning operator
 
-An optional request may provide a 3–240 character reveal reason. Response contains the payload string, content type, received time, encoding (`UTF8`), and `no-store` headers. A message removed from the bounded buffer returns `410 MESSAGE_EXPIRED`.
+An optional request may provide a 3–240 character reveal reason. Response contains the payload string, nullable content type, received time, encoding (`UTF8`), and `no-store` headers. A message removed from the bounded buffer returns `410 MESSAGE_EXPIRED`.
 
 ### 12.4 Stop subscription
 
@@ -1090,6 +1153,8 @@ Response `204`. It closes LISTEN resources, stream clients, and the message buff
 
 Disconnected sessions remain resumable for five minutes. A session expires after one hour even while used and must then be recreated.
 
+Resource limits are configurable with conservative defaults: at most 5 active console subscriptions per actor, 100 per setup, and 500 per management process. Each subscription evicts oldest messages when either its entry limit or its 1 MiB retained-payload budget is reached; the process-wide retained-payload budget defaults to 64 MiB. A slow SSE client never blocks the PostgreSQL notification handler. Crossing a subscription quota returns `429 SUBSCRIPTION_LIMIT_REACHED`; buffer eviction is reported through the existing `reset` behavior.
+
 ### 12.5 Publish
 
 `POST /api/v1/setups/{setupId}/pubsub/publish`
@@ -1099,7 +1164,6 @@ Role: operator
 ```json
 {
   "channel": "cache-invalidation",
-  "contentType": "application/json",
   "payload": "{\"namespace\":\"customer-profile\",\"key\":\"customer:849203\"}"
 }
 ```
@@ -1108,12 +1172,12 @@ The UTF-8 encoded payload must not exceed the setup's configured pub/sub payload
 
 ```json
 {
-  "deliveredListenerCount": 3,
+  "accepted": true,
   "publishedAt": "2026-08-16T10:44:00.000Z"
 }
 ```
 
-The count is a point-in-time PostgreSQL result and is not a delivery guarantee. The client does not retry automatically.
+`accepted` means PostgreSQL accepted `pg_notify`; it is not a listener count or delivery guarantee. The existing cache pub/sub service resolves to `1` on successful publication, but the REST contract does not misrepresent that implementation sentinel as a recipient count. The client does not retry automatically.
 
 ## 13. Monitoring and activity API
 
@@ -1206,7 +1270,7 @@ Activity event:
 }
 ```
 
-The bounded activity API is a convenience view from the current management process. Structured server logs are the authoritative audit output.
+The bounded activity API is a convenience view from the current management process. It may return raw identifiers to an authorized viewer because it is setup-scoped, but those raw identifiers are not copied into structured server logs. The protected structured audit stream is the authoritative audit output.
 
 ## 14. Monitoring WebSocket
 
@@ -1242,6 +1306,8 @@ Types:
 
 `resource.changed` data contains resource type, namespace, identifier, action, resulting version when applicable, actor, outcome, and correlation identifier. It never contains values, payloads, owner tokens, or credentials.
 
+V1 emits `resource.changed` only for mutations executed through this management server. Writes made by application processes, native SQL callers, or another management-server instance are not represented as real-time resource events. Periodic database snapshots remain the database-wide truth until an explicit cross-process change-capture capability is designed.
+
 ### 14.2 Resume and liveness
 
 - Server sends WebSocket ping every 20 seconds and closes clients that do not answer within 10 seconds.
@@ -1260,7 +1326,8 @@ Every sensitive reveal and mutation writes:
 - UTC timestamp;
 - actor and effective role;
 - action and outcome;
-- setup, namespace, resource type, and resource identifier;
+- setup and resource type;
+- bounded SHA-256 fingerprints of namespaces, keys, channels, prefixes, cursors, and other user-controlled identifiers, produced with the shared safe-log utility;
 - expected and resulting version when applicable;
 - non-sensitive reason;
 - sanitized failure code;
@@ -1276,9 +1343,13 @@ Never audit:
 - SQL text containing request data;
 - stack trace in the structured event.
 
+Raw identifiers may appear in the authorized in-memory activity response and WebSocket event, but never in the authoritative structured audit stream. A separately secured audit sink may retain raw identifiers only through an explicit deployment policy, independent access controls, retention rules, and tests; it is not the default logging behavior.
+
+Security audit emission is distinct from optional metrics and traces. Before a reveal or mutation begins, the configured audit sink must accept the bounded intent event; otherwise the request fails closed with `503 AUDIT_UNAVAILABLE`. The resulting outcome is then emitted through the sink's guaranteed local queue. Metrics or tracing exporter failures remain isolated from product behavior and do not satisfy this audit requirement.
+
 ### 15.2 Reveal rate and expiry
 
-Reveal endpoints are subject to configurable per-user limits. A revealed response is never cached by the server or browser. The client clears it on timeout, navigation, setup/namespace change, and document visibility timeout.
+Reveal endpoints are subject to configurable per-user limits. Setup tests, connection attempts, bulk previews, pub/sub publishing, and subscription creation also have actor and source-address rate limits. A revealed response is never cached by the server or browser. The client clears it on timeout, navigation, setup/namespace change, and document visibility timeout.
 
 ### 15.3 Logging middleware
 
@@ -1297,64 +1368,101 @@ Future<AdminPage<NamespaceStats>> namespaces(NamespaceQuery query);
 
 Future<ManagementEntryMetadata> entry(CacheKey key, boolean includeExpired);
 
-Future<CacheValue> revealEntry(CacheKey key);
+Future<RevealedEntryValue> revealEntry(
+    RevealEntryRequest request, ManagementActionContext context);
 
-Future<CacheSetResult> setEntry(ManagementCacheSetRequest request);
+Future<ManagementSetResult> setEntry(
+    ManagementCacheSetRequest request, ManagementActionContext context);
 
-Future<Boolean> expireEntry(VersionedEntryTtlRequest request);
+Future<VersionedMutationResult<ManagementEntryMetadata>> expireEntry(
+    VersionedEntryTtlRequest request, ManagementActionContext context);
 
-Future<Boolean> persistEntry(VersionedCacheKeyRequest request);
+Future<VersionedMutationResult<ManagementEntryMetadata>> persistEntry(
+    VersionedCacheKeyRequest request, ManagementActionContext context);
 
-Future<TouchResult> touchEntry(VersionedEntryTouchRequest request);
+Future<VersionedMutationResult<ManagementEntryMetadata>> touchEntry(
+    VersionedEntryTouchRequest request, ManagementActionContext context);
 
-Future<Boolean> deleteEntry(VersionedEntryDeleteRequest request);
+Future<VersionedMutationResult<Void>> deleteEntry(
+    VersionedEntryDeleteRequest request, ManagementActionContext context);
 
 Future<AdminPage<CounterEntry>> counters(CounterQuery query);
 
 Future<CounterEntry> counter(CacheKey key);
 
-Future<CounterEntry> setCounter(ManagementCounterSetRequest request);
+Future<VersionedMutationResult<CounterEntry>> setCounter(
+    ManagementCounterSetRequest request, ManagementActionContext context);
 
-Future<CounterEntry> adjustCounter(ManagementCounterAdjustRequest request);
+Future<VersionedMutationResult<CounterEntry>> adjustCounter(
+    ManagementCounterAdjustRequest request, ManagementActionContext context);
 
-Future<Boolean> expireCounter(VersionedCounterTtlRequest request);
+Future<VersionedMutationResult<CounterEntry>> expireCounter(
+    VersionedCounterTtlRequest request, ManagementActionContext context);
 
-Future<Boolean> persistCounter(VersionedCacheKeyRequest request);
+Future<VersionedMutationResult<CounterEntry>> persistCounter(
+    VersionedCacheKeyRequest request, ManagementActionContext context);
 
-Future<Boolean> deleteCounter(VersionedCounterDeleteRequest request);
+Future<VersionedMutationResult<Void>> deleteCounter(
+    VersionedCounterDeleteRequest request, ManagementActionContext context);
 
 Future<AdminPage<LockState>> locks(LockQuery query);
 
-Future<String> revealLockOwner(LockKey key);
+Future<RevealedLockOwner> revealLockOwner(
+    RevealLockOwnerRequest request, ManagementActionContext context);
 
-Future<Boolean> forceReleaseLock(ForceReleaseLockRequest request);
+Future<VersionedMutationResult<Void>> forceReleaseLock(
+    ForceReleaseLockRequest request, ManagementActionContext context);
 
 Future<DatabaseStats> databaseStats();
 
 Future<ExpiryStats> expiryStats();
 
-Future<BulkDeletePreview> previewEntryDelete(EntryDeleteFilter filter);
+Future<BulkDeletePreview> previewEntryDelete(
+    EntryDeleteFilter filter, ManagementActionContext context);
 
-Future<BulkDeleteResult> executeEntryDelete(ConfirmedEntryDelete request);
+Future<BulkDeleteResult> executeEntryDelete(
+    ConfirmedEntryDelete request, ManagementActionContext context);
 
-Future<BulkDeletePreview> previewCounterDelete(CounterDeleteSelection selection);
+Future<BulkDeletePreview> previewCounterDelete(
+    CounterDeleteSelection selection, ManagementActionContext context);
 
-Future<BulkDeleteResult> executeCounterDelete(ConfirmedCounterDelete request);
+Future<BulkDeleteResult> executeCounterDelete(
+    ConfirmedCounterDelete request, ManagementActionContext context);
 ```
 
 `ManagementCacheSetRequest` carries `CacheKey`, `CacheValue`, `SetMode`, expected version, `EntryTtlMode`, and optional TTL. `EntryTtlMode` contains `PRESERVE_EXISTING`, `USE_DEFAULT`, `REPLACE`, and `REMOVE`. Management counter requests use the existing `CounterTtlMode` values and carry an expected version where the REST contract requires `If-Match`.
 
+`VersionedMutationResult<T>` carries a `ManagementMutationOutcome` (`APPLIED`, `NOT_FOUND`, `VERSION_MISMATCH`, or `CONDITION_NOT_MET`), the resulting version when one exists, and the resulting representation for operations that leave a resource present. `ManagementSetResult` additionally records whether the entry was created. PostgreSQL produces each outcome and resulting version atomically; the REST layer does not infer them through a second query.
+
+`RevealedEntryValue` contains key, value, version, and reveal time. `RevealedLockOwner` contains lock key, owner token, version, and reveal time. Their value and version come from one database snapshot.
+
+`ManagementActionContext` contains the authenticated actor, bounded effective roles, correlation identifier, and sanitized source address. Reveal request types also carry the optional bounded reason. REST authentication middleware constructs the context; callers cannot populate it from request JSON. Embedded non-REST callers must provide an authenticated system or user identity. Sensitive reveals, mutations, and actor-bound bulk operations cannot be invoked without this context.
+
 The `PeeGeeCache` interface gains a backward-compatible default `management()` accessor returning an unsupported service. PostgreSQL returns the complete implementation. `capabilities()` reports support before invocation, and unsupported methods return a failed `Future` with a typed unsupported-capability exception.
+
+The PostgreSQL management implementation receives a required `ManagementAuditSink` and enforces audit intent acceptance before every context-requiring operation, including calls made without REST:
+
+```java
+interface ManagementAuditSink {
+    Future<Void> acceptIntent(ManagementAuditIntent event);
+    Future<Void> acceptOutcome(ManagementAuditOutcome event);
+}
+```
 
 REST-specific services remain outside the cache library API:
 
 ```java
 interface CacheSetupRegistry {
-    Future<SetupConnectionTest> test(SetupConnectionRequest request);
-    Future<SetupHandle> register(SetupRegistrationRequest request);
-    Future<SetupHandle> connect(String setupId);
-    Future<Void> detach(String setupId);
-    Future<Void> forget(String setupId);
+    Future<SetupConnectionTest> test(
+        SetupConnectionRequest request, ManagementActionContext context);
+    Future<SetupHandle> register(
+        SetupRegistrationRequest request, ManagementActionContext context);
+    Future<SetupHandle> connect(
+        String setupId, ManagementActionContext context);
+    Future<Void> detach(
+        String setupId, ManagementActionContext context);
+    Future<Void> forget(
+        String setupId, ManagementActionContext context);
     Future<List<SetupSummary>> list();
     Future<SetupHandle> requireConnected(String setupId);
 }
@@ -1365,13 +1473,14 @@ interface ManagementEventService {
 }
 ```
 
-`SetupHandle` exposes typed cache services and safe setup metadata but not credentials. REST handlers never receive a raw password after registration.
+`ManagementEventService` drives bounded UI activity and is not the authoritative audit sink. `ManagementAuditSink` implements the fail-closed acceptance and guaranteed local-queue behavior from section 15. `SetupHandle` exposes typed cache services and safe setup metadata but not credentials. REST handlers never receive a raw password after registration.
 
 ## 17. Screen-to-API coverage
 
 | Screen or interaction | API coverage |
 |---|---|
 | Header identity and role | `GET /session` |
+| Local-token sign-in/sign-out | `POST /session/local`, `DELETE /session/local` |
 | Setup selector | `GET /setups` |
 | Register/test setup dialog | `POST /setups/actions/test`, `POST /setups` |
 | Connect detached setup | `POST /setups/{id}/connect` |
@@ -1404,19 +1513,22 @@ Use JUnit, Vert.x test support, and real PostgreSQL Testcontainers. Mockito and 
 
 Tests cover:
 
-- every route's authentication and role requirements;
+- every route's local-token/trusted-proxy authentication and role requirements, including duplicate or malformed identity headers;
+- same-origin, configured CORS, CSRF, SSE-origin, and WebSocket-origin enforcement;
+- setup target policy across initial resolution and reconnect, including disallowed CIDRs, DNS rebinding, ports, and TLS trust profiles;
 - request validation and problem response schema;
 - decimal-string encoding for every 64-bit value;
-- Base64 URL identifier round trips and invalid inputs;
-- cursor/filter scoping and page boundaries;
-- ETag generation, required preconditions, and stale-version behavior;
+- Base64 URL identifier round trips, NUL rejection, literal prefix handling, and invalid inputs;
+- cursor integrity, expiry, complete filter scoping, deterministic composite sorts, and page boundaries;
+- ETag generation, required preconditions, stale-version behavior, and atomic typed outcome mapping without diagnostic follow-up reads;
 - complete redaction of values, payloads, owner tokens, and credentials;
-- reveal no-store headers and audit emission;
+- reveal no-store headers, value-and-version snapshot consistency, fail-closed audit acceptance, and identifier fingerprinting;
 - setup cleanup on failure, detach, forget, and shutdown;
 - exact cache/counter/lock behavior against PostgreSQL;
 - bulk preview scope, actor binding, expiry, single use, conflicts, and partial failure;
-- SSE framing, identifiers, heartbeats, resume, reset, and cleanup;
-- WebSocket envelopes, resume, reset, liveness, and shutdown;
+- PostgreSQL-compatible pub/sub channel limits, nullable content type, publication acceptance semantics, and payload limits;
+- SSE framing, identifiers, heartbeats, resume, reset, slow-client isolation, quotas, byte-budget eviction, and cleanup;
+- WebSocket envelopes, resume, reset, liveness, management-process event scope, and shutdown;
 - serialization of every documented example DTO.
 
 ### 18.2 Frontend contract tests
@@ -1426,13 +1538,39 @@ Tests cover:
 - Reject unknown enum values at the boundary and show a typed compatibility error.
 - Assert that sensitive DTOs never enter RTK Query cache or Zustand.
 - Assert that mutation requests are not automatically retried.
+- Assert that CSRF proof and allowed-origin handling are applied to every mutation while secrets remain out of browser persistence.
+- Assert that nullable pub/sub content type and stream resets are rendered explicitly rather than guessed or hidden.
 - Assert complete screen-to-endpoint coverage.
 
 ### 18.3 End-to-end acceptance
 
-Playwright runs the real REST server and PostgreSQL container and proves setup lifecycle, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, and cleanup. Tests inspect browser storage, URLs, responses, and sanitized logs for forbidden sensitive data.
+Playwright runs the real REST server and PostgreSQL container and proves both authentication modes, CSRF/origin enforcement, setup lifecycle and target policy, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, quotas, and cleanup. Tests inspect browser storage, URLs, responses, structured audit output, and ordinary logs for forbidden sensitive data and raw user-controlled identifiers.
 
-## 19. OpenAPI implementation requirement
+## 19. Implementation state and module ownership
+
+Status: **NOT STARTED**. This document defines the reviewed contract; it does not mark the management system as implemented or override the authoritative implementation plan. Before code work begins, `PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md` must add and approve a management-system phase while Phase 8 remains intentionally deferred.
+
+Planned ownership is:
+
+- `peegee-cache-api`: management service, immutable request/result models, typed mutation outcomes, action context, capabilities, and audit-sink contract;
+- `peegee-cache-pg`: PostgreSQL management queries and atomic version-checked mutations, with no REST dependency;
+- `peegee-cache-rest`: Vert.x HTTP/SSE/WebSocket server, setup registry, authentication, authorization, CSRF/origin enforcement, target policy, rate limits, OpenAPI integration, and safe serialization;
+- `peegee-cache-management-ui`: React client, generated/validated DTOs, local-only display preferences, sensitive-state isolation, and accessible operator workflows;
+- `peegee-cache-observability`: reuse of the existing telemetry and logging standards; management lifecycle, HTTP, stream, audit-queue, and resource-saturation signals are mandatory production scope, not optional extras;
+- `peegee-cache-test-support`: reusable real-PostgreSQL, server, authentication, SSE, and WebSocket fixtures where they avoid duplication without replacing end-to-end coverage.
+
+Required implementation order:
+
+1. update the authoritative implementation plan and Maven module graph;
+2. commit and validate the OpenAPI 3.1 contract and transport extensions;
+3. implement typed management API models and failing unit tests;
+4. implement PostgreSQL inspection and mutation behavior through strict Testcontainers TDD;
+5. implement authentication, audit, setup policy, and REST handlers;
+6. implement bounded SSE/WebSocket infrastructure and observability;
+7. implement the UI against generated/validated DTOs;
+8. pass backend, frontend, and real-browser acceptance gates before changing this status.
+
+## 20. OpenAPI implementation requirement
 
 Before endpoint implementation begins, encode this contract as OpenAPI 3.1 under:
 
@@ -1444,7 +1582,7 @@ The OpenAPI document is generated or maintained as the machine-readable companio
 
 SSE and WebSocket message schemas belong in OpenAPI component schemas with descriptive transport extensions, even though OpenAPI does not fully model their connection lifecycle.
 
-## 20. Compatibility policy
+## 21. Compatibility policy
 
 - `/api/v1` is additive within V1.
 - New optional response fields may be added.

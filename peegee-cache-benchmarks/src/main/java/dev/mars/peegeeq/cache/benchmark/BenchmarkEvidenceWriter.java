@@ -9,6 +9,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -17,6 +20,10 @@ import java.util.function.ToDoubleFunction;
 
 /** Writes one self-contained, human-readable HTML benchmark evidence report. */
 public final class BenchmarkEvidenceWriter {
+
+    private static final DateTimeFormatter HEADER_TIMESTAMP = DateTimeFormatter
+            .ofPattern("dd MMM uuuu, HH:mm:ss 'UTC'", Locale.ROOT)
+            .withZone(ZoneOffset.UTC);
 
     private BenchmarkEvidenceWriter() {
     }
@@ -44,13 +51,14 @@ public final class BenchmarkEvidenceWriter {
                 <style>
                 :root{color-scheme:light dark;--bg:#f4f7fb;--panel:#fff;--text:#172033;--muted:#64748b;--line:#dbe3ef;--ok:#15803d;--bad:#b91c1c;--code:#111827;--codeText:#e5e7eb}
                 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:1440px;margin:auto;padding:32px}
-                header{padding:28px 32px;border-radius:18px;color:#fff;background:linear-gradient(135deg,#172554,#2563eb);box-shadow:0 14px 35px #17255433}h1{margin:4px 0 8px;font-size:clamp(28px,4vw,44px);line-height:1.1}h2{margin:0 0 18px;font-size:22px}h3{margin:0;font-size:18px}
-                .eyebrow{margin:0;text-transform:uppercase;letter-spacing:.12em;font-weight:700;opacity:.8}.subtitle{margin:0;opacity:.85}section,article.run{margin-top:24px;padding:24px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 16px #0f172a0b}
+                header{padding:28px 32px;border-radius:18px;color:#fff;background:linear-gradient(135deg,#172554,#2563eb);box-shadow:0 14px 35px #17255433;overflow:hidden}.header-top{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap}header h1{max-width:100%;margin:4px 0 8px;font-size:clamp(28px,4vw,44px);line-height:1.1;overflow-wrap:anywhere}h2{margin:0 0 18px;font-size:22px}h3{margin:0;font-size:18px}
+                .eyebrow{margin:0;text-transform:uppercase;letter-spacing:.12em;font-weight:700;opacity:.8}.header-meta{display:grid;grid-template-columns:minmax(220px,max-content) minmax(260px,1fr);gap:12px 36px;margin-top:18px}.header-item{min-width:0}.header-label{display:block;margin-bottom:2px;color:#bfdbfe;font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.08em}header time,header code{display:block;color:#fff;font:600 15px/1.45 ui-monospace,Consolas,monospace;overflow-wrap:anywhere}section,article.run{margin-top:24px;padding:24px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 16px #0f172a0b}
                 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{padding:16px;border:1px solid var(--line);border-radius:10px}.label{display:block;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}.value{display:block;margin-top:4px;font-size:20px;font-weight:750;overflow-wrap:anywhere}
                 .status{display:inline-block;padding:4px 10px;border-radius:999px;font-weight:750;text-transform:uppercase}.status.passed,.status.running{color:var(--ok);background:#dcfce7}.status.failed,.status.rejected-dirty-working-tree{color:var(--bad);background:#fee2e2}
                 .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}th:first-child,td:first-child{text-align:left}tr:last-child td{border-bottom:0}
                 .run-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}.run-metrics{margin:16px 0}details{margin-top:16px;border:1px solid var(--line);border-radius:10px}summary{cursor:pointer;padding:12px 14px;font-weight:700}pre{margin:0;padding:16px;overflow:auto;max-height:520px;color:var(--codeText);background:var(--code);border-radius:0 0 10px 10px;font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}.failure{margin:14px 0;padding:12px;color:var(--bad);background:#fee2e2;border-radius:8px}footer{padding:28px 4px 8px;color:var(--muted);text-align:center}
                 @media(prefers-color-scheme:dark){:root{--bg:#0b1220;--panel:#111827;--text:#e5e7eb;--muted:#94a3b8;--line:#334155}.status.passed,.status.running{background:#14532d;color:#bbf7d0}.status.failed,.status.rejected-dirty-working-tree,.failure{background:#7f1d1d;color:#fecaca}}
+                @media(max-width:640px){main{padding:16px}header{padding:22px 20px}.header-top{display:block}.header-top .status{margin-top:8px}.header-meta{grid-template-columns:1fr;gap:12px}header time,header code{font-size:13px}}
                 @media print{body{background:#fff}main{max-width:none;padding:0}section,article.run,header{box-shadow:none;break-inside:avoid}details pre{max-height:none}}
                 </style></head><body><main>
                 """);
@@ -64,11 +72,13 @@ public final class BenchmarkEvidenceWriter {
     }
 
     private static void header(StringBuilder out, BenchmarkCaptureReport report) {
-        out.append("<header><p class=\"eyebrow\">peegee-cache performance evidence</p><h1>")
-                .append(escape(report.benchmarkId())).append("</h1><p class=\"subtitle\">Generated ")
-                .append(escape(report.completedAtUtc())).append(" · <span class=\"status ")
+        out.append("<header><p class=\"eyebrow\">Performance evidence</p><div class=\"header-top\"><h1>peegee-cache benchmark report</h1><span class=\"status ")
                 .append(cssClass(report.status())).append("\">").append(escape(report.status()))
-                .append("</span></p></header>");
+                .append("</span></div><div class=\"header-meta\"><div class=\"header-item\"><span class=\"header-label\">Generated</span><time datetime=\"")
+                .append(escape(report.completedAtUtc())).append("\">")
+                .append(escape(humanTimestamp(report.completedAtUtc())))
+                .append("</time></div><div class=\"header-item\"><span class=\"header-label\">Report ID</span><code>")
+                .append(escape(report.benchmarkId())).append("</code></div></div></header>");
     }
 
     private static void overview(StringBuilder out, BenchmarkCaptureReport report) {
@@ -77,7 +87,7 @@ public final class BenchmarkEvidenceWriter {
         card(out, "Runs", report.runs().size() + " / " + report.runsRequested());
         card(out, "Successful", report.successfulRuns());
         card(out, "Failed", report.runs().size() - report.successfulRuns());
-        card(out, "Started UTC", report.startedAtUtc());
+        timeCard(out, "Started UTC", report.startedAtUtc());
         card(out, "Elapsed", duration(Duration.between(report.startedAtUtc(), report.completedAtUtc())));
         out.append("</div></section>");
     }
@@ -131,7 +141,9 @@ public final class BenchmarkEvidenceWriter {
         }
         for (CapturedBenchmarkRun run : report.runs()) {
             out.append("<article class=\"run\"><div class=\"run-head\"><div><h3>Run ").append(run.run())
-                    .append("</h3><span class=\"label\">").append(escape(run.startedAtUtc())).append(" · ")
+                    .append("</h3><span class=\"label\"><time datetime=\"")
+                    .append(escape(run.startedAtUtc())).append("\">")
+                    .append(escape(humanTimestamp(run.startedAtUtc()))).append("</time> · ")
                     .append(number(run.elapsedSeconds(), 3)).append(" seconds</span></div><span class=\"status ")
                     .append(cssClass(run.status())).append("\">").append(escape(run.status())).append("</span></div>");
             if (run.failure() != null) {
@@ -205,6 +217,12 @@ public final class BenchmarkEvidenceWriter {
                 .append("</span><span class=\"value\">").append(escape(value)).append("</span></div>");
     }
 
+    private static void timeCard(StringBuilder out, String label, Instant value) {
+        out.append("<div class=\"card\"><span class=\"label\">").append(escape(label))
+                .append("</span><time class=\"value\" datetime=\"").append(escape(value)).append("\">")
+                .append(escape(humanTimestamp(value))).append("</time></div>");
+    }
+
     private static void gate(StringBuilder out, String label, Object value, String suffix) {
         out.append("<tr><td>").append(escape(label)).append("</td><td>")
                 .append(escape(value)).append(escape(suffix)).append("</td></tr>");
@@ -213,6 +231,10 @@ public final class BenchmarkEvidenceWriter {
     private static String duration(Duration value) {
         long seconds = value.toSeconds();
         return "%dm %02ds".formatted(seconds / 60, seconds % 60);
+    }
+
+    private static String humanTimestamp(Instant value) {
+        return HEADER_TIMESTAMP.format(value);
     }
 
     private static String bytes(Object value) {
