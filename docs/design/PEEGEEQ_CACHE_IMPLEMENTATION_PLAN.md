@@ -518,6 +518,7 @@ Scope candidates:
 - rate limiting
 - keyspace notifications
 - write-behind write buffering for `CacheService` (see section 12a of the design document)
+- management API and browser console defined by `PEEGEEQ_CACHE_MANAGEMENT_API.md`
 
 Explicit non-goal unless strategy changes:
 
@@ -577,6 +578,48 @@ Explicit non-goal unless strategy changes:
 - `PeeGeeCacheConfig.writeBehind` is documented in the runtime config
 - `WriteBehindConfig.disabled()` is the default — existing behaviour is unchanged when write-behind is not configured
 
+### Phase 8.2: Management API backend
+
+**Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md)
+
+**Status:** **NOT STARTED** — the strict-TDD implementation sequence is defined, but no management module or production behavior has been implemented.
+
+Scope:
+
+- typed management contracts and atomic mutation outcomes in `peegee-cache-api`;
+- real PostgreSQL inspection and guarded administration in `peegee-cache-pg`;
+- Vert.x REST, SSE, WebSocket, authentication, audit, setup lifecycle, and mandatory observability in `peegee-cache-rest`;
+- OpenAPI 3.1 and backend acceptance contracts consumed by `peegee-cache-management-ui`.
+
+Prerequisites:
+
+1. synchronize the older management UI design with the reviewed management API contract;
+2. approve the REST/UI module and reproducible root-build shape;
+3. follow phases M0–M10 in order, one failing behavior test at a time;
+4. retain Mockito prohibition and real PostgreSQL Testcontainers coverage;
+5. keep Phase 8 implementation deferred until an explicit start decision.
+
+### Phase 8.3: Management browser console
+
+**Reference designs:** [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) and [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md)
+
+**Status:** **NOT STARTED** — production React implementation is separate from the backend plan and has no approved detailed TDD plan yet.
+
+Scope:
+
+- the production React management console in `peegee-cache-management-ui`;
+- generated or runtime-validated DTO consumption from the stable OpenAPI contract;
+- accessible setup, browsing, guarded mutation, pub/sub, monitoring, activity, and settings workflows;
+- sensitive-state isolation, compatibility gating, browser storage rules, and end-to-end journeys.
+
+Prerequisites:
+
+1. complete management backend Phase M0 and stabilize the OpenAPI milestone from M1;
+2. synchronize `PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md` with the reviewed management API contract;
+3. create and approve a dedicated strict-TDD frontend implementation plan before production UI code;
+4. retain the backend-owned non-production browser harness for backend cookie/CSRF/origin/no-store acceptance without treating it as the production console;
+5. make an explicit Phase 8.3 start decision independently from Phase 8.2.
+
 ## 3.1 Implementation tracking
 
 Status legend:
@@ -586,7 +629,7 @@ Status legend:
 - NOT STARTED: no meaningful implementation work landed yet
 - DEFERRED: intentionally postponed with rationale
 
-Last reviewed: 2026-08-16
+Last reviewed: 2026-08-17
 
 | Phase | Status | Evidence snapshot | Remaining to exit |
 |---|---|---|---|
@@ -598,7 +641,7 @@ Last reviewed: 2026-08-16
 | Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
 | Phase 6: V1 completion features | COMPLETE | Safe/recovering pub/sub, scan, bulk operations, all-operation telemetry contracts, comprehensive readiness, and interleaved telemetry/lock/pub-sub benchmark scenarios are implemented and green. | None |
 | Phase 7: Native SQL contract hardening | COMPLETE | Eight mutation functions have exact documented signatures; three stable read views, migration ledger/runner, compatibility policy, and real baseline idempotence and forward-version rejection tests are present. | None |
-| Phase 8: V2 and later | DEFERRED | By strategy: V2 starts only after V1 Phases 0–7 meet their exit criteria | Revisit after Phase 6 and Phase 7 completion and operational hardening. |
+| Phase 8: V2 and later | DEFERRED | V1 Phases 0–7 are complete. Detailed strict-TDD plans exist for write-behind (8.1) and the management API backend (8.2); the production browser console is separately registered as 8.3 and still requires its own detailed plan. No Phase 8 implementation has started. | Make an explicit start/scope decision for one V2 slice; do not advance backend or UI implicitly. |
 
 Tracking update rules:
 
