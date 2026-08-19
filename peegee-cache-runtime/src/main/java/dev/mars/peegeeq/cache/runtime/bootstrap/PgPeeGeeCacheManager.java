@@ -53,8 +53,10 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     private final CacheMetrics metrics;
     private final AtomicBoolean started = new AtomicBoolean(false);
     private final RecurringFailureTracker expirySweepFailures = new RecurringFailureTracker();
+    private final Object expirySweepObservationLock = new Object();
 
     private volatile long sweeperTimerId = -1L;
+    private Future<PgExpirySweeper.SweepResult> observedExpirySweep;
 
     PgPeeGeeCacheManager(Vertx vertx, Pool pool, PeeGeeCacheBootstrapOptions options) {
         this.vertx = Objects.requireNonNull(vertx, "vertx");
@@ -217,32 +219,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             long intervalMillis = runtime.expirySweepInterval().toMillis();
             sweeperTimerId = vertx.setPeriodic(intervalMillis, id -> {
                 long sweepStartedAt = System.nanoTime();
-                expirySweeper.sweepDetailed(runtime.expirySweepBatchSize())
-                        .onSuccess(result -> {
-                            metrics.recordExpirySweep(result.deletedRows(),
-                                    java.time.Duration.ofNanos(System.nanoTime() - sweepStartedAt),
-                                    result.oldestExpiredRowLag(), null);
-                            expirySweepFailures.recordRecovery().ifPresent(suppressed ->
-                                    log.atInfo().addKeyValue("schema", options.storeConfig().schemaName())
-                                            .addKeyValue("suppressed.failures", suppressed)
-                                            .log("cache.expiry_sweep.recovered"));
-                            if (result.deletedRows() > 0) {
-                                log.atDebug().addKeyValue("schema", options.storeConfig().schemaName())
-                                        .addKeyValue("deleted.rows", result.deletedRows())
-                                        .addKeyValue("oldest.lag.ms", result.oldestExpiredRowLag().toMillis())
-                                        .log("cache.expiry_sweep.completed");
-                            }
-                        })
-                        .onFailure(err -> {
-                            metrics.recordExpirySweep(0,
-                                    java.time.Duration.ofNanos(System.nanoTime() - sweepStartedAt),
-                                    java.time.Duration.ZERO, err);
-                            RecurringFailureTracker.Failure observation = expirySweepFailures.recordFailure();
-                            if (observation.firstFailure()) {
-                                log.atWarn().addKeyValue("schema", options.storeConfig().schemaName())
-                                        .setCause(err).log("cache.expiry_sweep.failed");
-                            }
-                        });
+                observeExpirySweep(
+                        expirySweeper.sweepDetailed(runtime.expirySweepBatchSize()), sweepStartedAt);
             });
             log.atInfo().addKeyValue("interval.ms", intervalMillis)
                     .addKeyValue("batch.size", runtime.expirySweepBatchSize())
@@ -256,6 +234,41 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         log.atDebug().addKeyValue("reason", "connect_options_absent")
                 .log("pubsub.listener.disabled");
         return Future.succeededFuture();
+    }
+
+    private void observeExpirySweep(Future<PgExpirySweeper.SweepResult> sweep, long sweepStartedAt) {
+        Objects.requireNonNull(sweep, "sweep");
+        synchronized (expirySweepObservationLock) {
+            if (sweep == observedExpirySweep) {
+                return;
+            }
+            observedExpirySweep = sweep;
+        }
+        sweep.onSuccess(result -> {
+                    metrics.recordExpirySweep(result.deletedRows(),
+                            java.time.Duration.ofNanos(System.nanoTime() - sweepStartedAt),
+                            result.oldestExpiredRowLag(), null);
+                    expirySweepFailures.recordRecovery().ifPresent(suppressed ->
+                            log.atInfo().addKeyValue("schema", options.storeConfig().schemaName())
+                                    .addKeyValue("suppressed.failures", suppressed)
+                                    .log("cache.expiry_sweep.recovered"));
+                    if (result.deletedRows() > 0) {
+                        log.atDebug().addKeyValue("schema", options.storeConfig().schemaName())
+                                .addKeyValue("deleted.rows", result.deletedRows())
+                                .addKeyValue("oldest.lag.ms", result.oldestExpiredRowLag().toMillis())
+                                .log("cache.expiry_sweep.completed");
+                    }
+                })
+                .onFailure(err -> {
+                    metrics.recordExpirySweep(0,
+                            java.time.Duration.ofNanos(System.nanoTime() - sweepStartedAt),
+                            java.time.Duration.ZERO, err);
+                    RecurringFailureTracker.Failure observation = expirySweepFailures.recordFailure();
+                    if (observation.firstFailure()) {
+                        log.atWarn().addKeyValue("schema", options.storeConfig().schemaName())
+                                .setCause(err).log("cache.expiry_sweep.failed");
+                    }
+                });
     }
 
     private Future<Void> stopBackgroundComponents() {

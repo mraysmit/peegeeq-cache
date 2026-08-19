@@ -34,8 +34,10 @@ import java.time.Duration;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -126,16 +128,72 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
     }
 
     @Test
-    void overlappingSweepsShareOneCompletionAndAwaitIdleWaitsForIt(VertxTestContext ctx) {
+    void overlappingSweepsShareOneCompletionAndAwaitIdleWaitsForIt(Vertx vertx, VertxTestContext ctx) {
         PgExpirySweeper sweeper = new PgExpirySweeper(pool, SCHEMA);
 
-        Future<PgExpirySweeper.SweepResult> first = sweeper.sweepDetailed(10);
-        Future<PgExpirySweeper.SweepResult> overlapping = sweeper.sweepDetailed(10);
+        pool.getConnection()
+                .compose(connection -> connection.begin()
+                        .compose(transaction -> connection
+                                .query("LOCK TABLE " + SCHEMA + ".cache_entries IN ACCESS EXCLUSIVE MODE")
+                                .execute()
+                                .compose(ignored -> {
+                                    Future<PgExpirySweeper.SweepResult> first = sweeper.sweepDetailed(10);
+                                    Future<PgExpirySweeper.SweepResult> overlapping = sweeper.sweepDetailed(10);
+                                    Future<Void> idle = sweeper.awaitIdle();
 
-        ctx.verify(() -> assertSame(first, overlapping,
-                "An overlapping request must observe the active sweep, not an empty synthetic result"));
-        first.compose(result -> sweeper.awaitIdle().map(result))
-                .onComplete(ctx.succeeding(result -> ctx.verify(ctx::completeNow)));
+                                    ctx.verify(() -> assertSame(first, overlapping,
+                                            "An overlapping request must observe the active sweep"));
+                                    return Future.future(promise -> vertx.setTimer(25, id -> promise.complete()))
+                                            .compose(waited -> {
+                                                ctx.verify(() -> {
+                                                    assertFalse(first.isComplete(),
+                                                            "The table lock must keep the sweep active");
+                                                    assertFalse(idle.isComplete(),
+                                                            "awaitIdle must wait for the active sweep");
+                                                });
+                                                return transaction.rollback()
+                                                        .compose(rolledBack -> Future.all(first, idle).mapEmpty());
+                                            });
+                                }))
+                        .eventually(connection::close))
+                .onComplete(ctx.succeeding(ignored -> ctx.verify(ctx::completeNow)));
+    }
+
+    @Test
+    void coalescedPeriodicSweepRecordsTelemetryOnce(Vertx vertx, VertxTestContext ctx) {
+        RecordingTelemetry telemetry = new RecordingTelemetry();
+        PeeGeeCacheConfig runtime = new PeeGeeCacheConfig(
+                null, Duration.ofMillis(10), 10, true);
+        PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
+                runtime, new PgCacheStoreConfig(SCHEMA, SCHEMA), null, telemetry);
+        PgPeeGeeCacheManager manager = new PgPeeGeeCacheManager(vertx, pool, options);
+
+        pool.getConnection()
+                .compose(connection -> connection.begin()
+                        .compose(transaction -> connection
+                                .query("LOCK TABLE " + SCHEMA + ".cache_entries IN ACCESS EXCLUSIVE MODE")
+                                .execute()
+                                .compose(ignored -> manager.startReactive())
+                                .compose(ignored -> Future.future(
+                                        promise -> vertx.setTimer(75, id -> promise.complete())))
+                                .compose(ignored -> {
+                                    Future<Void> stopping = manager.stopReactive();
+                                    return Future.future(
+                                                    promise -> vertx.setTimer(25, id -> promise.complete()))
+                                            .compose(waited -> {
+                                                ctx.verify(() -> assertFalse(stopping.isComplete(),
+                                                        "Manager shutdown must wait for the blocked sweep"));
+                                                return transaction.rollback().compose(rolledBack -> stopping);
+                                            });
+                                }))
+                        .eventually(connection::close))
+                .compose(ignored -> Future.future(
+                        promise -> vertx.runOnContext(event -> promise.complete())))
+                .onComplete(ctx.succeeding(ignored -> ctx.verify(() -> {
+                    assertEquals(1, telemetry.expirySweepRecords.get(),
+                            "One physical sweep must produce one telemetry record");
+                    ctx.completeNow();
+                })));
     }
 
     @Test
@@ -274,6 +332,7 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
         private final CopyOnWriteArrayList<CacheOperation> completed = new CopyOnWriteArrayList<>();
         private final CopyOnWriteArrayList<CacheOperation> failed = new CopyOnWriteArrayList<>();
         private final CopyOnWriteArrayList<Boolean> lifecycle = new CopyOnWriteArrayList<>();
+        private final AtomicInteger expirySweepRecords = new AtomicInteger();
 
         @Override
         public OperationSpan startOperation(CacheOperation operation) {
@@ -290,6 +349,12 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
         @Override
         public void recordLifecycle(boolean started) {
             lifecycle.add(started);
+        }
+
+        @Override
+        public void recordExpirySweep(
+                int deletedRows, Duration duration, Duration oldestExpiredRowLag, Throwable failure) {
+            expirySweepRecords.incrementAndGet();
         }
     }
 }

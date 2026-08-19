@@ -10,7 +10,9 @@ The evidence-capture implementation is Java and uses the same Maven command on W
 mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-capture -DskipTests
 ```
 
-The default command performs three independent benchmark repetitions with a controlled 5-second warm-up before each measured 30-second workload, 8 foreground workers, a 12-connection pool, PostgreSQL 18.3, and the standard acceptance gates. Warm-up operations are discarded before the latency histograms and throughput clocks start. It skips the ordinary test suite so test execution does not become an uncontrolled warm-up or thermal load. The Java runner receives typed results directly from `CacheBenchmarkMain`; it never parses Maven or console output to reconstruct measurements.
+The default command performs three sequential benchmark repetitions in one capture JVM. Each repetition uses a controlled 5-second warm-up before every measured 30-second workload, 8 foreground workers, a 12-connection pool, PostgreSQL 18.3, and the standard acceptance gates. Warm-up operations are discarded before the latency histograms and throughput clocks start. It skips the ordinary test suite so test execution does not become an uncontrolled warm-up or thermal load. The Java runner receives typed results directly from `CacheBenchmarkMain`; it never parses Maven or console output to reconstruct measurements.
+
+Repetitions recreate benchmark resources but are not statistically independent process forks: JVM compilation state, host temperature, and operating-system caches can carry across runs. The HTML report is therefore repeatable regression evidence, not a substitute for a forked benchmark methodology when independent samples are required.
 
 For release evidence from a clean checkout:
 
@@ -63,7 +65,7 @@ The typed result model, portable capture configuration, single-file HTML layout,
 mvn -pl peegee-cache-benchmarks -am test
 ```
 
-For meaningful comparisons, keep the Git commit or recorded dirty state, benchmark configuration, PostgreSQL image digest, topology, Docker CPU/memory allocation, power policy, and competing host workload equivalent. Use a clean worktree for release evidence, avoid unrelated workloads, and allow the host to reach a stable thermal state. The current harness provisions PostgreSQL through local Testcontainers; the topology description must not imply that it benchmarks a remote database. Local Docker results remain regression evidence, not production capacity commitments.
+For meaningful comparisons, keep the Git commit or recorded dirty state, benchmark configuration, PostgreSQL image digest, topology, Docker CPU/memory allocation, power policy, and competing host workload equivalent. Use a clean worktree for release evidence, avoid unrelated workloads, and allow the host to reach a stable thermal state. Treat the per-scenario warm-up as mitigation rather than proof that JIT, run-order, cache-state, or thermal bias has been eliminated. The current harness provisions PostgreSQL through local Testcontainers; the topology description must not imply that it benchmarks a remote database. Local Docker results remain regression evidence, not production capacity commitments.
 
 ## Direct Maven execution
 

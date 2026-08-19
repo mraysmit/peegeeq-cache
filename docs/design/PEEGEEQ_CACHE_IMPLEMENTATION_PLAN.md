@@ -859,7 +859,7 @@ Current:
 - configurable unrecorded warm-up before every measured scenario
 - repeatable Java evidence capture producing one portable HTML report with hardware/toolchain/Docker/Git metadata, aggregate/per-run results, raw logs, and immutable PostgreSQL image identity
 
-Remaining release-hardening work: execute the benchmark on the intended production topology before turning the local regression figures into capacity or SLO commitments. The diagnosed local pool-saturation timeouts are fixed, systematic warm-up bias is excluded from measured windows, and the benchmark contract is complete.
+Remaining release-hardening work: execute the benchmark on the intended production topology before turning the local regression figures into capacity or SLO commitments. The diagnosed local pool-saturation timeouts are fixed, and warm-up operations are excluded from measured windows. Per-scenario warm-up mitigates startup bias, but the sequential same-JVM repetitions do not eliminate JIT, run-order, operating-system cache, or thermal effects; independent process forks remain future work if statistically independent samples are required.
 
 ### `peegee-cache-examples`
 
