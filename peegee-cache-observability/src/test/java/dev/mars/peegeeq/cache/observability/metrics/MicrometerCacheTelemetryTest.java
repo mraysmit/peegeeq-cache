@@ -40,4 +40,31 @@ class MicrometerCacheTelemetryTest {
         assertNotNull(registry.find("peegeeq.cache.pubsub.notification.dispatch").timer());
         assertEquals(0, registry.get("peegeeq.cache.operations.active").gauge().value());
     }
+
+    @Test
+    void aggregatesGaugesAcrossAdaptersSharingARegistry() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MicrometerCacheTelemetry first = new MicrometerCacheTelemetry(registry);
+        MicrometerCacheTelemetry second = new MicrometerCacheTelemetry(registry);
+
+        CacheTelemetry.OperationSpan firstOperation = first.startOperation(CacheOperation.CACHE_GET);
+        CacheTelemetry.OperationSpan secondOperation = second.startOperation(CacheOperation.CACHE_SET);
+        first.recordActiveSubscriptions(2);
+        second.recordActiveSubscriptions(3);
+        first.recordLifecycle(true);
+        second.recordLifecycle(true);
+
+        assertEquals(2, registry.get("peegeeq.cache.operations.active").gauge().value());
+        assertEquals(5, registry.get("peegeeq.cache.pubsub.subscriptions").gauge().value());
+        assertEquals(2, registry.get("peegeeq.cache.runtime.started").gauge().value());
+
+        firstOperation.complete(null);
+        secondOperation.complete(null);
+        first.recordActiveSubscriptions(1);
+        first.recordLifecycle(false);
+
+        assertEquals(0, registry.get("peegeeq.cache.operations.active").gauge().value());
+        assertEquals(4, registry.get("peegeeq.cache.pubsub.subscriptions").gauge().value());
+        assertEquals(1, registry.get("peegeeq.cache.runtime.started").gauge().value());
+    }
 }

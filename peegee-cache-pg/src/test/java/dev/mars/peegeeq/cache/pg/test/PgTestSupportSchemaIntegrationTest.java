@@ -5,19 +5,17 @@ import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
+import io.vertx.junit5.VertxTestContext;
 import io.vertx.sqlclient.Pool;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @ExtendWith(VertxExtension.class)
+@io.vertx.junit5.Timeout(value = 90, timeUnit = java.util.concurrent.TimeUnit.SECONDS)
 class PgTestSupportSchemaIntegrationTest {
 
     private static final String CUSTOM_SCHEMA = "test_support_custom";
@@ -26,49 +24,34 @@ class PgTestSupportSchemaIntegrationTest {
     private static Pool pool;
 
     @BeforeAll
-    static void start(Vertx vertx) throws Exception {
-        pg.start(vertx);
-        pool = pg.createPool(vertx);
+    static void start(Vertx vertx, VertxTestContext ctx) {
+        pg.start(vertx)
+                .onSuccess(ignored -> ctx.verify(() -> {
+                    pool = pg.createPool(vertx);
+                    ctx.completeNow();
+                }))
+                .onFailure(ctx::failNow);
     }
 
     @AfterAll
-    static void stop() throws Exception {
-        if (pool != null) {
-            await(pool.close(), 10_000);
-            pool = null;
-        }
-        pg.stop();
+    static void stop(Vertx vertx, VertxTestContext ctx) {
+        (pool == null ? pg.stop(vertx) : pg.stopAfter(vertx, pool.close()))
+                .onSuccess(ignored -> {
+                    pool = null;
+                    ctx.completeNow();
+                })
+                .onFailure(ctx::failNow);
     }
 
     @Test
-    void startCreatesConfiguredSchemaObjects() throws Exception {
-        var rows = await(pool.query(
-                "SELECT to_regclass('" + CUSTOM_SCHEMA + ".cache_entries') AS regclass").execute(), 10_000);
-        assertEquals(CUSTOM_SCHEMA + ".cache_entries", rows.iterator().next().getString("regclass"));
-    }
-
-    private static <T> T await(Future<T> future, long timeoutMillis) throws Exception {
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<T> resultRef = new AtomicReference<>();
-        AtomicReference<Throwable> errorRef = new AtomicReference<>();
-
-        future.onComplete(ar -> {
-            if (ar.succeeded()) {
-                resultRef.set(ar.result());
-            } else {
-                errorRef.set(ar.cause());
-            }
-            latch.countDown();
-        });
-
-        if (!latch.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new RuntimeException("Timed out waiting for Vert.x SQL operation");
-        }
-
-        Throwable error = errorRef.get();
-        if (error != null) {
-            throw new RuntimeException(error);
-        }
-        return resultRef.get();
+    void startCreatesConfiguredSchemaObjects(VertxTestContext ctx) {
+        pool.query("SELECT to_regclass('" + CUSTOM_SCHEMA + ".cache_entries') AS regclass")
+                .execute()
+                .onSuccess(rows -> ctx.verify(() -> {
+                    assertEquals(CUSTOM_SCHEMA + ".cache_entries",
+                            rows.iterator().next().getString("regclass"));
+                    ctx.completeNow();
+                }))
+                .onFailure(ctx::failNow);
     }
 }

@@ -16,8 +16,8 @@ import dev.mars.peegeeq.cache.api.model.TtlState;
 import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
 import dev.mars.peegeeq.cache.core.telemetry.CacheTelemetry;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
-import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
+import dev.mars.peegeeq.cache.runtime.expiry.PgExpirySweeper;
 import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -36,9 +36,11 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(VertxExtension.class)
+@io.vertx.junit5.Timeout(value = 90, timeUnit = java.util.concurrent.TimeUnit.SECONDS)
 class PgPeeGeeCacheManagerExpiryIntegrationTest {
 
     private static final String SCHEMA = "expiry_runtime_schema";
@@ -47,10 +49,13 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
     private static Pool pool;
 
     @BeforeAll
-    static void startPostgres(Vertx vertx, VertxTestContext ctx) throws Exception {
-        pg.start(vertx);
-        pool = pg.createPool(vertx);
-        ctx.completeNow();
+    static void startPostgres(Vertx vertx, VertxTestContext ctx) {
+        pg.start(vertx)
+                .onSuccess(ignored -> ctx.verify(() -> {
+                    pool = pg.createPool(vertx);
+                    ctx.completeNow();
+                }))
+                .onFailure(ctx::failNow);
     }
 
     @BeforeEach
@@ -62,16 +67,10 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
     }
 
     @AfterAll
-    static void stopPostgres(VertxTestContext ctx) {
-        if (pool == null) {
-            pg.stop();
-            ctx.completeNow();
-            return;
-        }
-        pool.close().onComplete(ctx.succeeding(v -> {
-            pg.stop();
-            ctx.completeNow();
-        }));
+    static void stopPostgres(Vertx vertx, VertxTestContext ctx) {
+        (pool == null ? pg.stop(vertx) : pg.stopAfter(vertx, pool.close()))
+                .onSuccess(ignored -> ctx.completeNow())
+                .onFailure(ctx::failNow);
     }
 
     @Test
@@ -124,6 +123,19 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
                 .compose(manager -> awaitAllRowsDeleted(vertx, 100)
                         .compose(v -> manager.stopReactive()))
                 .onComplete(ctx.succeeding(v -> ctx.completeNow()));
+    }
+
+    @Test
+    void overlappingSweepsShareOneCompletionAndAwaitIdleWaitsForIt(VertxTestContext ctx) {
+        PgExpirySweeper sweeper = new PgExpirySweeper(pool, SCHEMA);
+
+        Future<PgExpirySweeper.SweepResult> first = sweeper.sweepDetailed(10);
+        Future<PgExpirySweeper.SweepResult> overlapping = sweeper.sweepDetailed(10);
+
+        ctx.verify(() -> assertSame(first, overlapping,
+                "An overlapping request must observe the active sweep, not an empty synthetic result"));
+        first.compose(result -> sweeper.awaitIdle().map(result))
+                .onComplete(ctx.succeeding(result -> ctx.verify(ctx::completeNow)));
     }
 
     @Test

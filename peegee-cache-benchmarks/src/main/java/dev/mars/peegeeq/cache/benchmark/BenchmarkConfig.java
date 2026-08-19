@@ -4,21 +4,21 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Repeatable benchmark capacity, duration, and acceptance thresholds. */
-public record BenchmarkConfig(int concurrency, int poolSize, Duration duration, double minimumThroughput,
-                              Duration maximumP99, Duration maximumFailoverRecovery,
-                              Duration maximumExpiryLag, double maximumTelemetryOverheadPercent) {
+/** Repeatable benchmark capacity, warm-up, duration, and acceptance thresholds. */
+public record BenchmarkConfig(int concurrency, int poolSize, Duration warmup, Duration duration, double minimumThroughput,
+                               Duration maximumP99, Duration maximumFailoverRecovery,
+                               Duration maximumExpiryLag, double maximumTelemetryOverheadPercent) {
 
     public BenchmarkConfig {
         if (concurrency <= 0 || poolSize <= concurrency
-                || duration.isZero() || duration.isNegative() || minimumThroughput <= 0
+                || warmup.isNegative() || duration.isZero() || duration.isNegative() || minimumThroughput <= 0
                 || maximumP99.isZero() || maximumP99.isNegative()
                 || maximumFailoverRecovery.isZero() || maximumFailoverRecovery.isNegative()
                 || maximumExpiryLag.isZero() || maximumExpiryLag.isNegative()
                 || maximumTelemetryOverheadPercent < 0) {
             throw new IllegalArgumentException(
-                    "Benchmark values and thresholds must be positive, and poolSize must exceed concurrency "
-                            + "(telemetry overhead may be zero)");
+                    "Benchmark values and thresholds must be positive, warmup must be non-negative, "
+                            + "and poolSize must exceed concurrency (telemetry overhead may be zero)");
         }
     }
 
@@ -27,6 +27,7 @@ public record BenchmarkConfig(int concurrency, int poolSize, Duration duration, 
         return new BenchmarkConfig(
                 concurrency,
                 Integer.getInteger("peegeeq.benchmark.poolSize", concurrency + 4),
+                Duration.ofSeconds(Long.getLong("peegeeq.benchmark.warmupSeconds", 5)),
                 Duration.ofSeconds(Long.getLong("peegeeq.benchmark.durationSeconds", 30)),
                 Double.parseDouble(System.getProperty("peegeeq.benchmark.minimumThroughput", "50")),
                 Duration.ofMillis(Long.getLong("peegeeq.benchmark.maximumP99Millis", 1_000)),
@@ -40,6 +41,7 @@ public record BenchmarkConfig(int concurrency, int poolSize, Duration duration, 
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("concurrency", concurrency);
         value.put("poolSize", poolSize);
+        value.put("warmupSeconds", warmup.toSeconds());
         value.put("durationSeconds", duration.toSeconds());
         value.put("minimumThroughput", minimumThroughput);
         value.put("maximumP99Milliseconds", maximumP99.toMillis());

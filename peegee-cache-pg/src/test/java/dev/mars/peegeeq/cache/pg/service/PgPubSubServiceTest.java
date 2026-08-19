@@ -28,6 +28,7 @@ import java.util.function.BooleanSupplier;
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(VertxExtension.class)
+@io.vertx.junit5.Timeout(value = 90, timeUnit = java.util.concurrent.TimeUnit.SECONDS)
 class PgPubSubServiceTest {
 
     private static final String SCHEMA = "peegee_cache";
@@ -40,16 +41,21 @@ class PgPubSubServiceTest {
     private PgPubSubService service;
 
     @BeforeAll
-    static void startContainer(Vertx vertx) throws Exception {
-        pg.start(vertx);
-        pool = pg.createPool(vertx);
-        config = new PgCacheStoreConfig(SCHEMA, PREFIX);
+    static void startContainer(Vertx vertx, VertxTestContext ctx) {
+        pg.start(vertx)
+                .onSuccess(ignored -> ctx.verify(() -> {
+                    pool = pg.createPool(vertx);
+                    config = new PgCacheStoreConfig(SCHEMA, PREFIX);
+                    ctx.completeNow();
+                }))
+                .onFailure(ctx::failNow);
     }
 
     @AfterAll
-    static void stopContainer() throws Exception {
-        if (pool != null) pool.close();
-        pg.stop();
+    static void stopContainer(Vertx vertx, VertxTestContext ctx) {
+        (pool == null ? pg.stop(vertx) : pg.stopAfter(vertx, pool.close()))
+                .onSuccess(ignored -> ctx.completeNow())
+                .onFailure(ctx::failNow);
     }
 
     @BeforeEach

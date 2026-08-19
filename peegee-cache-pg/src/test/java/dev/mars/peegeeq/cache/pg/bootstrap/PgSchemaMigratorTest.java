@@ -2,6 +2,7 @@ package dev.mars.peegeeq.cache.pg.bootstrap;
 
 import dev.mars.peegeeq.cache.test.PostgreSQLTestConstants;
 import dev.mars.peegeeq.cache.test.SharedPostgresContainerManager;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -17,6 +18,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(VertxExtension.class)
@@ -89,6 +91,20 @@ class PgSchemaMigratorTest {
                 .onComplete(context.failing(failure -> context.verify(() -> {
                     assertInstanceOf(IllegalStateException.class, failure);
                     assertTrue(failure.getMessage().contains("newer than this library"));
+                    context.completeNow();
+                })));
+    }
+
+    @Test
+    void rollbackFailureIsSuppressedWithoutReplacingMigrationFailure(VertxTestContext context) {
+        IllegalStateException migrationFailure = new IllegalStateException("migration failed");
+        IllegalStateException rollbackFailure = new IllegalStateException("rollback failed");
+
+        PgSchemaMigrator.rollbackPreserving(
+                        migrationFailure, () -> Future.failedFuture(rollbackFailure))
+                .onComplete(context.failing(failure -> context.verify(() -> {
+                    assertSame(migrationFailure, failure);
+                    assertArrayEquals(new Throwable[]{rollbackFailure}, failure.getSuppressed());
                     context.completeNow();
                 })));
     }

@@ -1,9 +1,13 @@
 package dev.mars.peegeeq.cache.test;
 
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.io.IOException;
@@ -12,11 +16,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /** Disposable PostgreSQL fixture with peegee-cache schema bootstrap. */
 public final class PgTestSupport {
 
+    private static final Logger log = LoggerFactory.getLogger(PgTestSupport.class);
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final Duration SQL_TIMEOUT = Duration.ofSeconds(10);
     private final String ownerLabel;
@@ -32,22 +38,44 @@ public final class PgTestSupport {
         this.schemaName = schema;
     }
 
-    public void start(Vertx vertx) throws Exception {
-        postgres = SharedPostgresContainerManager.acquire(ownerLabel);
+    public Future<Void> start(Vertx vertx) {
+        Objects.requireNonNull(vertx, "vertx");
+        final String bootstrapSql;
         try {
-            execute(vertx, renderBootstrapSql());
-            resetDatabaseState(vertx);
-        } catch (Exception failure) {
-            stop();
-            throw failure;
+            bootstrapSql = renderBootstrapSql();
+        } catch (RuntimeException failure) {
+            return Future.failedFuture(failure);
         }
+
+        return vertx.executeBlocking(() -> {
+                    postgres = SharedPostgresContainerManager.acquire(ownerLabel);
+                    return null;
+                })
+                .compose(ignored -> initializeDatabase(vertx, bootstrapSql))
+                .transform(startResult -> {
+                    if (startResult.succeeded()) {
+                        return Future.succeededFuture();
+                    }
+                    return stop(vertx).transform(stopResult -> failedAfterCleanup(startResult.cause(), stopResult));
+                });
     }
 
-    public void stop() {
-        if (postgres != null) {
+    public Future<Void> stop(Vertx vertx) {
+        Objects.requireNonNull(vertx, "vertx");
+        if (postgres == null) {
+            return Future.succeededFuture();
+        }
+        return vertx.executeBlocking(() -> {
             SharedPostgresContainerManager.release(ownerLabel);
             postgres = null;
-        }
+            return null;
+        });
+    }
+
+    public Future<Void> stopAfter(Vertx vertx, Future<Void> prerequisite) {
+        Objects.requireNonNull(prerequisite, "prerequisite");
+        return prerequisite.transform(prerequisiteResult -> stop(vertx)
+                .transform(stopResult -> completeAfterCleanup(prerequisiteResult, stopResult)));
     }
 
     public Pool createPool(Vertx vertx) {
@@ -66,19 +94,75 @@ public final class PgTestSupport {
                 .setPassword(PostgreSQLTestConstants.DEFAULT_PASSWORD);
     }
 
-    private void resetDatabaseState(Vertx vertx) throws Exception {
-        execute(vertx, "TRUNCATE TABLE %s.cache_entries, %s.cache_counters, %s.cache_locks"
-                .formatted(schemaName, schemaName, schemaName));
-        execute(vertx, "ALTER SEQUENCE %s.lock_fencing_seq RESTART WITH 1".formatted(schemaName));
+    private Future<Void> initializeDatabase(Vertx vertx, String bootstrapSql) {
+        Pool pool = Pool.pool(vertx, connectOptions(), new PoolOptions().setMaxSize(1));
+        Future<Void> initialization = execute(pool, "bootstrap", bootstrapSql)
+                .compose(ignored -> resetDatabaseState(pool));
+        return initialization.transform(initializationResult -> observePhase("initialization.pool_close",
+                        pool.close().timeout(SQL_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .transform(closeResult -> completeAfterCleanup(initializationResult, closeResult)));
     }
 
-    private void execute(Vertx vertx, String sql) throws Exception {
-        Pool pool = Pool.pool(vertx, connectOptions(), new PoolOptions().setMaxSize(1));
-        try {
-            VertxAwait.await(pool.query(sql).execute().mapEmpty(), SQL_TIMEOUT);
-        } finally {
-            VertxAwait.await(pool.close(), SQL_TIMEOUT);
+    private Future<Void> resetDatabaseState(Pool pool) {
+        return execute(pool, "reset.truncate",
+                "TRUNCATE TABLE %s.cache_entries, %s.cache_counters, %s.cache_locks"
+                        .formatted(schemaName, schemaName, schemaName))
+                .compose(ignored -> execute(pool, "reset.lock_fencing_sequence",
+                        "ALTER SEQUENCE %s.lock_fencing_seq RESTART WITH 1".formatted(schemaName)));
+    }
+
+    private Future<Void> execute(Pool pool, String phase, String sql) {
+        return observePhase(phase, pool.query(sql).execute().<Void>mapEmpty()
+                .timeout(SQL_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
+    }
+
+    private Future<Void> observePhase(String phase, Future<Void> operation) {
+        long startedAt = System.nanoTime();
+        return operation
+                .onSuccess(ignored -> logPhaseCompleted(phase, startedAt))
+                .onFailure(failure -> logPhaseFailed(phase, startedAt, failure));
+    }
+
+    private static Future<Void> completeAfterCleanup(
+            AsyncResult<Void> primaryResult,
+            AsyncResult<Void> cleanupResult) {
+        if (primaryResult.succeeded() && cleanupResult.succeeded()) {
+            return Future.succeededFuture();
         }
+        if (primaryResult.failed()) {
+            return failedAfterCleanup(primaryResult.cause(), cleanupResult);
+        }
+        return Future.failedFuture(cleanupResult.cause());
+    }
+
+    private static Future<Void> failedAfterCleanup(Throwable primaryFailure, AsyncResult<Void> cleanupResult) {
+        if (cleanupResult.failed() && cleanupResult.cause() != primaryFailure) {
+            primaryFailure.addSuppressed(cleanupResult.cause());
+        }
+        return Future.failedFuture(primaryFailure);
+    }
+
+    private void logPhaseCompleted(String phase, long startedAt) {
+        log.atInfo()
+                .addKeyValue("test.suite", ownerLabel)
+                .addKeyValue("schema", schemaName)
+                .addKeyValue("phase", phase)
+                .addKeyValue("elapsed_ms", elapsedMillis(startedAt))
+                .log("test.postgres_fixture.phase.completed");
+    }
+
+    private void logPhaseFailed(String phase, long startedAt, Throwable failure) {
+        log.atError()
+                .setCause(failure)
+                .addKeyValue("test.suite", ownerLabel)
+                .addKeyValue("schema", schemaName)
+                .addKeyValue("phase", phase)
+                .addKeyValue("elapsed_ms", elapsedMillis(startedAt))
+                .log("test.postgres_fixture.phase.failed");
+    }
+
+    private static long elapsedMillis(long startedAt) {
+        return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
     private String renderBootstrapSql() {

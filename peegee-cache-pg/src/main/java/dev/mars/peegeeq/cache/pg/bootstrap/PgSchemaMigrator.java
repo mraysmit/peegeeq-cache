@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /** Applies bundled peegee-cache schema migrations once, in version order. */
@@ -95,7 +96,30 @@ public final class PgSchemaMigrator {
                                 + "ON CONFLICT (version) DO NOTHING")
                         .execute(Tuple.of(migration.version(), migration.description())))
                 .compose(ignored -> transaction.commit())
-                .recover(failure -> transaction.rollback()
-                        .compose(ignored -> Future.failedFuture(failure)));
+                .recover(failure -> rollbackPreserving(failure, transaction::rollback));
+    }
+
+    static Future<Void> rollbackPreserving(Throwable primaryFailure, Supplier<Future<Void>> rollback) {
+        Objects.requireNonNull(primaryFailure, "primaryFailure");
+        Objects.requireNonNull(rollback, "rollback");
+        Future<Void> rollbackResult;
+        try {
+            rollbackResult = Objects.requireNonNull(rollback.get(), "rollback future");
+        } catch (Throwable rollbackFailure) {
+            addSuppressed(primaryFailure, rollbackFailure);
+            return Future.failedFuture(primaryFailure);
+        }
+        return rollbackResult.transform(result -> {
+            if (result.failed()) {
+                addSuppressed(primaryFailure, result.cause());
+            }
+            return Future.failedFuture(primaryFailure);
+        });
+    }
+
+    private static void addSuppressed(Throwable primaryFailure, Throwable rollbackFailure) {
+        if (rollbackFailure != null && rollbackFailure != primaryFailure) {
+            primaryFailure.addSuppressed(rollbackFailure);
+        }
     }
 }

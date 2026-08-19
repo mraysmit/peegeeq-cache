@@ -4,7 +4,6 @@ import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
 import dev.mars.peegeeq.cache.api.model.CacheValue;
 import dev.mars.peegeeq.cache.api.model.CounterOptions;
-import dev.mars.peegeeq.cache.api.model.EntryStats;
 import dev.mars.peegeeq.cache.api.model.LockAcquireRequest;
 import dev.mars.peegeeq.cache.api.model.LockKey;
 import dev.mars.peegeeq.cache.api.model.SetMode;
@@ -25,6 +24,7 @@ import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @ExtendWith(VertxExtension.class)
+@io.vertx.junit5.Timeout(value = 90, timeUnit = java.util.concurrent.TimeUnit.SECONDS)
 class PgAdminRepositoryTest {
 
     private static final String SCHEMA = "peegee_cache";
@@ -36,19 +36,24 @@ class PgAdminRepositoryTest {
     private static PgLockRepository lockRepo;
 
     @BeforeAll
-    static void startContainer(Vertx vertx) throws Exception {
-        pg.start(vertx);
-        pool = pg.createPool(vertx);
-        adminRepo = new PgAdminRepository(pool, SCHEMA);
-        cacheRepo = new PgCacheRepository(pool, SCHEMA);
-        counterRepo = new PgCounterRepository(pool, SCHEMA);
-        lockRepo = new PgLockRepository(pool, SCHEMA);
+    static void startContainer(Vertx vertx, VertxTestContext ctx) {
+        pg.start(vertx)
+                .onSuccess(ignored -> ctx.verify(() -> {
+                    pool = pg.createPool(vertx);
+                    adminRepo = new PgAdminRepository(pool, SCHEMA);
+                    cacheRepo = new PgCacheRepository(pool, SCHEMA);
+                    counterRepo = new PgCounterRepository(pool, SCHEMA);
+                    lockRepo = new PgLockRepository(pool, SCHEMA);
+                    ctx.completeNow();
+                }))
+                .onFailure(ctx::failNow);
     }
 
     @AfterAll
-    static void stopContainer() throws Exception {
-        if (pool != null) pool.close();
-        pg.stop();
+    static void stopContainer(Vertx vertx, VertxTestContext ctx) {
+        (pool == null ? pg.stop(vertx) : pg.stopAfter(vertx, pool.close()))
+                .onSuccess(ignored -> ctx.completeNow())
+                .onFailure(ctx::failNow);
     }
 
     @BeforeEach

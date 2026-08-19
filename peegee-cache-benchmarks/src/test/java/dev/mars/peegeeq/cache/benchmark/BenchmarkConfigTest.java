@@ -12,6 +12,7 @@ class BenchmarkConfigTest {
         BenchmarkConfig config = BenchmarkConfig.fromSystemProperties();
         assertEquals(8, config.concurrency());
         assertEquals(12, config.poolSize());
+        assertEquals(5, config.warmup().toSeconds());
         assertEquals(30, config.duration().toSeconds());
         assertEquals(100.0, config.maximumTelemetryOverheadPercent());
     }
@@ -20,13 +21,17 @@ class BenchmarkConfigTest {
     void rejectsNonPositiveValues() {
         BenchmarkConfig defaults = BenchmarkConfig.fromSystemProperties();
         assertThrows(IllegalArgumentException.class, () -> new BenchmarkConfig(
-                0, defaults.poolSize(), defaults.duration(), defaults.minimumThroughput(), defaults.maximumP99(),
+                0, defaults.poolSize(), defaults.warmup(), defaults.duration(), defaults.minimumThroughput(), defaults.maximumP99(),
                 defaults.maximumFailoverRecovery(), defaults.maximumExpiryLag(),
                 defaults.maximumTelemetryOverheadPercent()));
         assertThrows(IllegalArgumentException.class, () -> new BenchmarkConfig(
-                defaults.concurrency(), defaults.poolSize(), defaults.duration(), defaults.minimumThroughput(),
+                defaults.concurrency(), defaults.poolSize(), defaults.warmup(), defaults.duration(), defaults.minimumThroughput(),
                 defaults.maximumP99(),
                 defaults.maximumFailoverRecovery(), defaults.maximumExpiryLag(), -0.01));
+        assertThrows(IllegalArgumentException.class, () -> new BenchmarkConfig(
+                defaults.concurrency(), defaults.poolSize(), java.time.Duration.ofSeconds(-1), defaults.duration(),
+                defaults.minimumThroughput(), defaults.maximumP99(), defaults.maximumFailoverRecovery(),
+                defaults.maximumExpiryLag(), defaults.maximumTelemetryOverheadPercent()));
     }
 
     @Test
@@ -34,7 +39,7 @@ class BenchmarkConfigTest {
         BenchmarkConfig defaults = BenchmarkConfig.fromSystemProperties();
 
         assertThrows(IllegalArgumentException.class, () -> new BenchmarkConfig(
-                defaults.concurrency(), defaults.concurrency(), defaults.duration(),
+                defaults.concurrency(), defaults.concurrency(), defaults.warmup(), defaults.duration(),
                 defaults.minimumThroughput(), defaults.maximumP99(), defaults.maximumFailoverRecovery(),
                 defaults.maximumExpiryLag(), defaults.maximumTelemetryOverheadPercent()));
     }

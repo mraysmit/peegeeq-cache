@@ -1,12 +1,12 @@
 package dev.mars.peegeeq.cache.runtime.expiry;
 
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Tuple;
 
 import java.util.Objects;
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 /**
@@ -20,7 +20,7 @@ public final class PgExpirySweeper {
     private final String deleteExpiredEntries;
     private final String deleteExpiredCounters;
     private final String deleteExpiredLocks;
-    private final AtomicBoolean running = new AtomicBoolean(false);
+    private final Object sweepLock = new Object();
     private volatile Future<SweepResult> activeSweep = Future.succeededFuture(SweepResult.empty());
 
     public PgExpirySweeper(Pool pool, String schemaName) {
@@ -47,27 +47,36 @@ public final class PgExpirySweeper {
         if (batchSize <= 0) {
             return Future.failedFuture(new IllegalArgumentException("batchSize must be > 0"));
         }
-        if (!running.compareAndSet(false, true)) {
-            return Future.succeededFuture(SweepResult.empty());
+        Promise<SweepResult> completion;
+        synchronized (sweepLock) {
+            if (!activeSweep.isComplete()) {
+                return activeSweep;
+            }
+            completion = Promise.promise();
+            activeSweep = completion.future();
         }
 
         Tuple params = Tuple.of(batchSize);
-        Future<SweepResult> sweep = pool.preparedQuery(deleteExpiredEntries).execute(params)
-                .compose(entries -> pool.preparedQuery(deleteExpiredCounters).execute(params)
-                        .compose(counters -> pool.preparedQuery(deleteExpiredLocks).execute(params)
-                                .map(locks -> merge(entries.iterator().next(), counters.iterator().next(),
-                                        locks.iterator().next()))))
-                .eventually(() -> {
-                    running.set(false);
-                    return Future.succeededFuture();
-                });
-        activeSweep = sweep;
-        return sweep;
+        try {
+            pool.preparedQuery(deleteExpiredEntries).execute(params)
+                    .compose(entries -> pool.preparedQuery(deleteExpiredCounters).execute(params)
+                            .compose(counters -> pool.preparedQuery(deleteExpiredLocks).execute(params)
+                                    .map(locks -> merge(entries.iterator().next(), counters.iterator().next(),
+                                            locks.iterator().next()))))
+                    .onComplete(completion);
+        } catch (Throwable failure) {
+            completion.tryFail(failure);
+        }
+        return completion.future();
     }
 
     /** Waits for an already-running sweep without allowing its failure to prevent shutdown. */
     public Future<Void> awaitIdle() {
-        return activeSweep.<Void>mapEmpty().recover(ignored -> Future.<Void>succeededFuture());
+        Future<SweepResult> sweep;
+        synchronized (sweepLock) {
+            sweep = activeSweep;
+        }
+        return sweep.<Void>mapEmpty().recover(ignored -> Future.<Void>succeededFuture());
     }
 
     private static String boundedDelete(String table, String keyColumn, String expiryColumn) {

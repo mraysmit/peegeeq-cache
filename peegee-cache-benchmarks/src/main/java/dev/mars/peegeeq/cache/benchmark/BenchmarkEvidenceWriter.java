@@ -97,6 +97,7 @@ public final class BenchmarkEvidenceWriter {
         Map<?, ?> config = child(environment.values(), "benchmarkConfiguration");
         out.append("<section><h2>Configuration and acceptance gates</h2><div class=\"grid\">");
         card(out, "Repetitions", report.runsRequested());
+        card(out, "Warm-up / workload", value(config, "warmupSeconds", "unknown") + " s");
         card(out, "Duration / workload", value(config, "durationSeconds", "unknown") + " s");
         card(out, "Concurrency", value(config, "concurrency", "unknown"));
         card(out, "Pool size", value(config, "poolSize", "unknown"));

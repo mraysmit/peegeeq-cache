@@ -629,7 +629,7 @@ Status legend:
 - NOT STARTED: no meaningful implementation work landed yet
 - DEFERRED: intentionally postponed with rationale
 
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-19
 
 | Phase | Status | Evidence snapshot | Remaining to exit |
 |---|---|---|---|
@@ -638,7 +638,7 @@ Last reviewed: 2026-08-17
 | Phase 2: PostgreSQL schema and bootstrap | COMPLETE | The single unreleased V001 baseline provides the core schema, functions, stable read views, and migration ledger; `PgSchemaMigrator` is retained for future ordered transactional upgrades | None |
 | Phase 3: Repository and SQL statement catalogue | COMPLETE | Repositories and SQL catalogues are in place: `PgCacheRepository`, `PgCounterRepository`, `PgLockRepository` and `CacheSql`, `CounterSql`, `LockSql` in `peegee-cache-pg/src/main/java/dev/mars/peegeeq/cache/pg/` | None |
 | Phase 4: Service implementations for V1 Core | COMPLETE | Services are implemented and now share centralized argument validation via `peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/validation/CoreValidation.java`, wired in `PgCacheService`, `PgCounterService`, and `PgLockService`; service/repository/migration tests are green | None |
-| Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
+| Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Overlapping manual sweeps now share the same in-flight result, and `awaitIdle()` observes that result atomically. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, sweep coalescing, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
 | Phase 6: V1 completion features | COMPLETE | Safe/recovering pub/sub, scan, bulk operations, all-operation telemetry contracts, comprehensive readiness, and interleaved telemetry/lock/pub-sub benchmark scenarios are implemented and green. | None |
 | Phase 7: Native SQL contract hardening | COMPLETE | Eight mutation functions have exact documented signatures; three stable read views, migration ledger/runner, compatibility policy, and real baseline idempotence and forward-version rejection tests are present. | None |
 | Phase 8: V2 and later | DEFERRED | V1 Phases 0–7 are complete. Detailed strict-TDD plans exist for write-behind (8.1) and the management API backend (8.2); the production browser console is separately registered as 8.3 and still requires its own detailed plan. No Phase 8 implementation has started. | Make an explicit start/scope decision for one V2 slice; do not advance backend or UI implicitly. |
@@ -650,12 +650,13 @@ Tracking update rules:
 3. include concrete evidence (classes, migrations, tests) in each status change
 4. if status changes are uncertain, keep the lower status and add a verification task
 
-## 3.2 Current strict verification (2026-08-16)
+## 3.2 Current strict verification (2026-08-19)
 
 The current verification record is based on the complete reactor rather than historical module subsets.
 
 Execution evidence:
 
+- `mvn clean install` — BUILD SUCCESS across all 9 reactor projects; the complete reactor was rebuilt, tested, packaged, and installed into the local Maven repository
 - `mvn clean verify` — BUILD SUCCESS
 - final `mvn verify` after all code and benchmark changes — BUILD SUCCESS
 - `mvn verify -Pcentral-release '-Dgpg.skip=true'` — BUILD SUCCESS with the Central release profile loaded and signing intentionally skipped
@@ -668,7 +669,11 @@ Execution evidence:
 - logging maturity hardening — SLF4J 2.0.18 provider isolation, unified Vert.x routing, structured lifecycle/failure/recovery events, TRACE-only sanitized operation detail, failure-episode suppression, and a one-second captured benchmark smoke all passed
 - no publication or external upload occurred during verification
 
-The interleaved local telemetry smoke measured 0.22% Micrometer throughput overhead and 20.67% p99 overhead. Before the pool-layout fix, two of three identical full-duration executions timed out in different scenarios. Diagnosis isolated client-side pool saturation: eight workers shared an eight-connection pool with two independent sweepers, while PostgreSQL sampling found no one-second SQL or lock wait. The strict-TDD fix reserves connection headroom, removes sweepers from sustained-workload managers, and uses one dedicated expiry-measurement manager. Three identical post-fix runs passed; the worst p99 was 30.628 ms, expiry lag was 16–28 ms, and failover recovery was 13–16 ms. These local-container figures remain regression evidence, not production SLOs.
+The 2026-08-19 review of commits `8fdfc31` through `ef3611a` added four correctness hardenings. Overlapping expiry sweeps now coalesce onto one atomic in-flight future; Micrometer gauges aggregate independent adapters that share a registry; migration rollback failure is attached as a suppressed exception without replacing the initiating migration failure; and every measured benchmark scenario now has an explicit, unrecorded warm-up interval configured by `peegeeq.benchmark.warmupSeconds` (default 5 seconds). Regression coverage exercises each behavior.
+
+The review also removed `VertxAwait`. PostgreSQL fixtures, repository/service/SQL tests, runtime integration tests, and benchmark orchestration now compose Vert.x `Future` values directly, including asynchronous cleanup and failure preservation. A source scan found no remaining Java reference to `VertxAwait`.
+
+The interleaved local telemetry smoke measured 0.22% Micrometer throughput overhead and 20.67% p99 overhead. Before the pool-layout fix, two of three identical full-duration executions timed out in different scenarios. Diagnosis isolated deterministic client-side pool saturation: eight workers shared an eight-connection pool with two independent sweepers, while PostgreSQL sampling found no one-second SQL or lock wait. The strict-TDD fix reserves connection headroom, removes sweepers from sustained-workload managers, and uses one dedicated expiry-measurement manager. Three identical post-fix runs passed; the worst p99 was 30.628 ms, expiry lag was 16–28 ms, and failover recovery was 13–16 ms. These local-container figures remain regression evidence, not production SLOs.
 
 Observed automated test inventory:
 
@@ -676,12 +681,14 @@ Observed automated test inventory:
 |---|---:|---:|---:|---:|
 | `peegee-cache-api` | 34 | 0 | 0 | 0 |
 | `peegee-cache-core` | 14 | 0 | 0 | 0 |
-| `peegee-cache-pg` | 194 | 0 | 0 | 0 |
-| `peegee-cache-runtime` | 23 | 0 | 0 | 0 |
-| `peegee-cache-observability` | 4 | 0 | 0 | 0 |
+| `peegee-cache-pg` | 195 | 0 | 0 | 0 |
+| `peegee-cache-runtime` | 24 | 0 | 0 | 0 |
+| `peegee-cache-observability` | 5 | 0 | 0 | 0 |
 | `peegee-cache-test-support` | 4 | 0 | 0 | 0 |
-| `peegee-cache-benchmarks` | 13 | 0 | 0 | 0 |
-| **Total** | **286** | **0** | **0** | **0** |
+| `peegee-cache-benchmarks` | 14 | 0 | 0 | 0 |
+| **Total** | **290** | **0** | **0** | **0** |
+
+The count above is the sum of the 44 Surefire XML suites produced under the seven tested `peegee-cache-*` reactor modules by the clean install. Stale reports under legacy, non-reactor `pg-cache-*` directories are deliberately excluded.
 
 Criteria verdicts:
 
@@ -830,7 +837,7 @@ Current:
 
 - PostgreSQL Testcontainers helpers
 - schema bootstrap fixtures
-- Vert.x Future awaiting for non-event-loop harnesses
+- composable Vert.x `Future` fixture setup and cleanup, with cleanup failures preserved alongside primary failures
 - latency percentile and throughput calculation
 
 Potential later work:
@@ -849,9 +856,10 @@ Current:
 - physical expiry lag
 - pool recovery after forced backend termination
 - configurable regression thresholds
+- configurable unrecorded warm-up before every measured scenario
 - repeatable Java evidence capture producing one portable HTML report with hardware/toolchain/Docker/Git metadata, aggregate/per-run results, raw logs, and immutable PostgreSQL image identity
 
-Remaining release-hardening work: execute the benchmark on the intended production topology before turning the local regression figures into capacity or SLO commitments. The intermittent local operation stalls are fixed and the benchmark contract is complete.
+Remaining release-hardening work: execute the benchmark on the intended production topology before turning the local regression figures into capacity or SLO commitments. The diagnosed local pool-saturation timeouts are fixed, systematic warm-up bias is excluded from measured windows, and the benchmark contract is complete.
 
 ### `peegee-cache-examples`
 
@@ -974,6 +982,8 @@ Completed:
 8. all 30 asynchronous operation identifiers are covered by one real-runtime telemetry contract test
 9. native SQL has stable read views, exact supported signatures, a compatibility policy, and baseline migration safety tests
 10. benchmarks cover telemetry overhead, lock contention, and publish-to-receive latency; matching runnable examples are present
+11. expiry sweep coalescing, registry-wide Micrometer gauge aggregation, and migration rollback failure preservation have explicit regression coverage
+12. blocking `VertxAwait` test support has been removed in favor of Vert.x `Future` composition, and benchmark measurement windows begin only after explicit unrecorded warm-up
 
 Maven Central publication defaults are now configured: Apache-2.0 licensing, canonical GitHub project/SCM/developer metadata, source and Javadoc artifacts, GPG best-practices signing, and Sonatype Central Portal upload with manual promotion. Actual publication remains gated only on namespace verification, a non-SNAPSHOT version, and credentials/signing keys supplied outside the repository.
 

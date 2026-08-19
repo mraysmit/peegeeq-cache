@@ -24,7 +24,6 @@ public final class CacheBatchAndTtlExample {
 
     private CacheBatchAndTtlExample() {
     }
-
     public static void main(String[] args) throws Exception {
         Vertx vertx = Vertx.vertx();
         PostgreSQLContainer container = null;
@@ -45,7 +44,7 @@ public final class CacheBatchAndTtlExample {
             CacheKey beta = new CacheKey("batch", "beta");
             CacheKey gamma = new CacheKey("batch", "gamma");
 
-            List<CacheSetRequest> requests = List.of(
+            var requests = List.of(
                     new CacheSetRequest(alpha, CacheValue.ofString("A"), Duration.ofMinutes(5), SetMode.UPSERT, null, false),
                     new CacheSetRequest(beta, CacheValue.ofString("B"), Duration.ofSeconds(30), SetMode.UPSERT, null, false),
                     new CacheSetRequest(gamma, CacheValue.ofString("C"), null, SetMode.UPSERT, null, false)
@@ -55,33 +54,23 @@ public final class CacheBatchAndTtlExample {
                 ExampleLogSupport.timed(log, "cache.setMany", () ->
                     ExampleRuntimeSupport.await(cache.cache().setMany(requests)));
 
-                var loaded = ExampleLogSupport.timed(log, "cache.getMany", () ->
-                    ExampleRuntimeSupport.await(cache.cache().getMany(List.of(alpha, beta, gamma))));
-                ExampleLogSupport.logData(log, "batch-get dataset",
-                    "requested", requests.size(),
-                    "present", loaded.values().stream().filter(java.util.Optional::isPresent).count());
+                var loaded = ExampleLogSupport.timed(log, "cache.getMany", () -> ExampleRuntimeSupport.await(cache.cache().getMany(List.of(alpha, beta, gamma))));
+                ExampleLogSupport.logData(log, "batch-get dataset", "requested", requests.size(), "present", loaded.values().stream().filter(value -> value.isPresent()).count());
 
-                ExampleLogSupport.timed(log, "cache.expire", () ->
-                    ExampleRuntimeSupport.await(cache.cache().expire(gamma, Duration.ofSeconds(20))));
-                ExampleLogSupport.timed(log, "cache.touch", () ->
-                    ExampleRuntimeSupport.await(cache.cache().touch(beta, Duration.ofSeconds(45))));
-                ExampleLogSupport.timed(log, "cache.persist", () ->
-                    ExampleRuntimeSupport.await(cache.cache().persist(alpha)));
+                ExampleLogSupport.timed(log, "cache.expire", () -> ExampleRuntimeSupport.await(cache.cache().expire(gamma, Duration.ofSeconds(20))));
+                ExampleLogSupport.timed(log, "cache.touch", () -> ExampleRuntimeSupport.await(cache.cache().touch(beta, Duration.ofSeconds(45))));
+                ExampleLogSupport.timed(log, "cache.persist", () -> ExampleRuntimeSupport.await(cache.cache().persist(alpha)));
 
-                TtlResult alphaTtl = ExampleLogSupport.timed(log, "cache.ttl(alpha)", () ->
-                    ExampleRuntimeSupport.await(cache.cache().ttl(alpha)));
-                TtlResult betaTtl = ExampleLogSupport.timed(log, "cache.ttl(beta)", () ->
-                    ExampleRuntimeSupport.await(cache.cache().ttl(beta)));
-                TtlResult gammaTtl = ExampleLogSupport.timed(log, "cache.ttl(gamma)", () ->
-                    ExampleRuntimeSupport.await(cache.cache().ttl(gamma)));
+                TtlResult alphaTtl = ExampleLogSupport.timed(log, "cache.ttl(alpha)", () -> ExampleRuntimeSupport.await(cache.cache().ttl(alpha)));
+                TtlResult betaTtl = ExampleLogSupport.timed(log, "cache.ttl(beta)", () -> ExampleRuntimeSupport.await(cache.cache().ttl(beta)));
+                TtlResult gammaTtl = ExampleLogSupport.timed(log, "cache.ttl(gamma)", () -> ExampleRuntimeSupport.await(cache.cache().ttl(gamma)));
 
                 ExampleLogSupport.logData(log, "ttl states",
                     "alphaState", alphaTtl.state(),
                     "betaState", betaTtl.state(),
                     "gammaState", gammaTtl.state());
 
-                long removed = ExampleLogSupport.timed(log, "cache.deleteMany", () ->
-                    ExampleRuntimeSupport.await(cache.cache().deleteMany(List.of(alpha, beta, gamma))));
+                long removed = ExampleLogSupport.timed(log, "cache.deleteMany", () -> ExampleRuntimeSupport.await(cache.cache().deleteMany(List.of(alpha, beta, gamma))));
                 ExampleLogSupport.logData(log, "batch-delete result", "removed", removed);
         } catch (Exception ex) {
             log.atError().setCause(ex).log("example.cache_batch_ttl.failed");

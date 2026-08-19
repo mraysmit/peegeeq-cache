@@ -9,7 +9,9 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
+import java.util.WeakHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -17,10 +19,12 @@ import java.util.concurrent.atomic.AtomicLong;
 /** Production Micrometer metrics adapter for peegee-cache. */
 public final class MicrometerCacheTelemetry implements CacheTelemetry {
 
+    private static final Map<MeterRegistry, SharedGauges> SHARED_GAUGES = new WeakHashMap<>();
+
     private final MeterRegistry registry;
-    private final AtomicLong activeOperations = new AtomicLong();
-    private final AtomicInteger activeSubscriptions = new AtomicInteger();
-    private final AtomicInteger lifecycle = new AtomicInteger();
+    private final SharedGauges gauges;
+    private final AtomicInteger localActiveSubscriptions = new AtomicInteger();
+    private final AtomicInteger localLifecycle = new AtomicInteger();
     private final Counter lockContention;
     private final DistributionSummary expiryRows;
     private final DistributionSummary expiryLag;
@@ -28,15 +32,7 @@ public final class MicrometerCacheTelemetry implements CacheTelemetry {
 
     public MicrometerCacheTelemetry(MeterRegistry registry) {
         this.registry = Objects.requireNonNull(registry, "registry");
-        Gauge.builder("peegeeq.cache.operations.active", activeOperations, AtomicLong::doubleValue)
-                .description("Currently executing peegee-cache operations")
-                .register(registry);
-        Gauge.builder("peegeeq.cache.pubsub.subscriptions", activeSubscriptions, AtomicInteger::doubleValue)
-                .description("Active local pub/sub subscriptions")
-                .register(registry);
-        Gauge.builder("peegeeq.cache.runtime.started", lifecycle, AtomicInteger::doubleValue)
-                .description("Whether the managed runtime is started")
-                .register(registry);
+        gauges = sharedGauges(registry);
         lockContention = Counter.builder("peegeeq.cache.lock.contention")
                 .description("Lock acquisition attempts that were not granted")
                 .register(registry);
@@ -57,11 +53,11 @@ public final class MicrometerCacheTelemetry implements CacheTelemetry {
     @Override
     public OperationSpan startOperation(CacheOperation operation) {
         Objects.requireNonNull(operation, "operation");
-        activeOperations.incrementAndGet();
+        gauges.activeOperations.incrementAndGet();
         long startedAt = System.nanoTime();
         return failure -> {
             long elapsed = Math.max(0, System.nanoTime() - startedAt);
-            activeOperations.decrementAndGet();
+            gauges.activeOperations.decrementAndGet();
             Timer.builder("peegeeq.cache.operation")
                     .description("Completed peegee-cache operation latency")
                     .publishPercentileHistogram()
@@ -111,15 +107,45 @@ public final class MicrometerCacheTelemetry implements CacheTelemetry {
 
     @Override
     public void recordActiveSubscriptions(int subscriptions) {
-        activeSubscriptions.set(Math.max(0, subscriptions));
+        int normalized = Math.max(0, subscriptions);
+        int previous = localActiveSubscriptions.getAndSet(normalized);
+        gauges.activeSubscriptions.addAndGet(normalized - previous);
     }
 
     @Override
     public void recordLifecycle(boolean started) {
-        lifecycle.set(started ? 1 : 0);
+        int current = started ? 1 : 0;
+        int previous = localLifecycle.getAndSet(current);
+        gauges.startedRuntimes.addAndGet(current - previous);
+    }
+
+    private static SharedGauges sharedGauges(MeterRegistry registry) {
+        synchronized (SHARED_GAUGES) {
+            return SHARED_GAUGES.computeIfAbsent(registry, MicrometerCacheTelemetry::registerGauges);
+        }
+    }
+
+    private static SharedGauges registerGauges(MeterRegistry registry) {
+        SharedGauges gauges = new SharedGauges();
+        Gauge.builder("peegeeq.cache.operations.active", gauges.activeOperations, AtomicLong::doubleValue)
+                .description("Currently executing peegee-cache operations")
+                .register(registry);
+        Gauge.builder("peegeeq.cache.pubsub.subscriptions", gauges.activeSubscriptions, AtomicLong::doubleValue)
+                .description("Active local pub/sub subscriptions across managed runtimes")
+                .register(registry);
+        Gauge.builder("peegeeq.cache.runtime.started", gauges.startedRuntimes, AtomicLong::doubleValue)
+                .description("Number of started managed runtimes")
+                .register(registry);
+        return gauges;
     }
 
     private static String outcome(Throwable failure) {
         return failure == null ? "success" : "failure";
+    }
+
+    private static final class SharedGauges {
+        private final AtomicLong activeOperations = new AtomicLong();
+        private final AtomicLong activeSubscriptions = new AtomicLong();
+        private final AtomicLong startedRuntimes = new AtomicLong();
     }
 }

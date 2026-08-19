@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @ExtendWith(VertxExtension.class)
+@io.vertx.junit5.Timeout(value = 90, timeUnit = java.util.concurrent.TimeUnit.SECONDS)
 class PgAdminServiceTest {
 
     private static final String SCHEMA = "peegee_cache";
@@ -37,17 +38,22 @@ class PgAdminServiceTest {
     private PgAdminService service;
 
     @BeforeAll
-    static void startContainer(Vertx vertx) throws Exception {
-        pg.start(vertx);
-        pool = pg.createPool(vertx);
-        adminRepo = new PgAdminRepository(pool, SCHEMA);
-        cacheRepo = new PgCacheRepository(pool, SCHEMA);
+    static void startContainer(Vertx vertx, VertxTestContext ctx) {
+        pg.start(vertx)
+                .onSuccess(ignored -> ctx.verify(() -> {
+                    pool = pg.createPool(vertx);
+                    adminRepo = new PgAdminRepository(pool, SCHEMA);
+                    cacheRepo = new PgCacheRepository(pool, SCHEMA);
+                    ctx.completeNow();
+                }))
+                .onFailure(ctx::failNow);
     }
 
     @AfterAll
-    static void stopContainer() throws Exception {
-        if (pool != null) pool.close();
-        pg.stop();
+    static void stopContainer(Vertx vertx, VertxTestContext ctx) {
+        (pool == null ? pg.stop(vertx) : pg.stopAfter(vertx, pool.close()))
+                .onSuccess(ignored -> ctx.completeNow())
+                .onFailure(ctx::failNow);
     }
 
     @BeforeEach

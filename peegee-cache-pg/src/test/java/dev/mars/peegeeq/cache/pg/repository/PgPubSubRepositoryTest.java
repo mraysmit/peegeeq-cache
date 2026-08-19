@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(VertxExtension.class)
+@io.vertx.junit5.Timeout(value = 90, timeUnit = java.util.concurrent.TimeUnit.SECONDS)
 class PgPubSubRepositoryTest {
 
     private static final String SCHEMA = "peegee_cache";
@@ -28,17 +29,22 @@ class PgPubSubRepositoryTest {
     private static PgPubSubRepository repo;
 
     @BeforeAll
-    static void startContainer(Vertx vertx) throws Exception {
-        pg.start(vertx);
-        pool = pg.createPool(vertx);
-        PgCacheStoreConfig config = new PgCacheStoreConfig(SCHEMA, PREFIX);
-        repo = new PgPubSubRepository(pool, config);
+    static void startContainer(Vertx vertx, VertxTestContext ctx) {
+        pg.start(vertx)
+                .onSuccess(ignored -> ctx.verify(() -> {
+                    pool = pg.createPool(vertx);
+                    PgCacheStoreConfig config = new PgCacheStoreConfig(SCHEMA, PREFIX);
+                    repo = new PgPubSubRepository(pool, config);
+                    ctx.completeNow();
+                }))
+                .onFailure(ctx::failNow);
     }
 
     @AfterAll
-    static void stopContainer() throws Exception {
-        if (pool != null) pool.close();
-        pg.stop();
+    static void stopContainer(Vertx vertx, VertxTestContext ctx) {
+        (pool == null ? pg.stop(vertx) : pg.stopAfter(vertx, pool.close()))
+                .onSuccess(ignored -> ctx.completeNow())
+                .onFailure(ctx::failNow);
     }
 
     // --- Publish ---

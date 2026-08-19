@@ -17,6 +17,7 @@
     <properties>
         <peegeeq.benchmark.concurrency>8</peegeeq.benchmark.concurrency>
         <peegeeq.benchmark.poolSize>12</peegeeq.benchmark.poolSize>
+        <peegeeq.benchmark.warmupSeconds>5</peegeeq.benchmark.warmupSeconds>
         <peegeeq.benchmark.durationSeconds>30</peegeeq.benchmark.durationSeconds>
         <peegeeq.benchmark.minimumThroughput>50</peegeeq.benchmark.minimumThroughput>
         <peegeeq.benchmark.maximumP99Millis>1000</peegeeq.benchmark.maximumP99Millis>
@@ -86,6 +87,7 @@
                         <argument>-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd'T'HH:mm:ss.SSSXXX</argument>
                         <argument>-Dpeegeeq.benchmark.concurrency=${peegeeq.benchmark.concurrency}</argument>
                         <argument>-Dpeegeeq.benchmark.poolSize=${peegeeq.benchmark.poolSize}</argument>
+                        <argument>-Dpeegeeq.benchmark.warmupSeconds=${peegeeq.benchmark.warmupSeconds}</argument>
                         <argument>-Dpeegeeq.benchmark.durationSeconds=${peegeeq.benchmark.durationSeconds}</argument>
                         <argument>-Dpeegeeq.benchmark.minimumThroughput=${peegeeq.benchmark.minimumThroughput}</argument>
                         <argument>-Dpeegeeq.benchmark.maximumP99Millis=${peegeeq.benchmark.maximumP99Millis}</argument>

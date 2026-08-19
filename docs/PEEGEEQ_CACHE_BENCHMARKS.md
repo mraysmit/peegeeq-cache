@@ -10,7 +10,7 @@ The evidence-capture implementation is Java and uses the same Maven command on W
 mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-capture -DskipTests
 ```
 
-The default command performs three independent 30-second benchmark repetitions with 8 foreground workers, a 12-connection pool, PostgreSQL 18.3, and the standard acceptance gates. It skips the ordinary test suite so test execution does not become an uncontrolled warm-up or thermal load. The Java runner receives typed results directly from `CacheBenchmarkMain`; it never parses Maven or console output to reconstruct measurements.
+The default command performs three independent benchmark repetitions with a controlled 5-second warm-up before each measured 30-second workload, 8 foreground workers, a 12-connection pool, PostgreSQL 18.3, and the standard acceptance gates. Warm-up operations are discarded before the latency histograms and throughput clocks start. It skips the ordinary test suite so test execution does not become an uncontrolled warm-up or thermal load. The Java runner receives typed results directly from `CacheBenchmarkMain`; it never parses Maven or console output to reconstruct measurements.
 
 For release evidence from a clean checkout:
 
@@ -18,6 +18,7 @@ For release evidence from a clean checkout:
 mvn verify
 mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-capture -DskipTests \
   '-Dpeegeeq.benchmark.capture.runs=3' \
+  '-Dpeegeeq.benchmark.warmupSeconds=5' \
   '-Dpeegeeq.benchmark.durationSeconds=30' \
   '-Dpeegeeq.benchmark.capture.requireCleanGit=true' \
   '-Dpeegeeq.benchmark.capture.topology=Dedicated benchmark host; local Docker PostgreSQL; no competing workloads; performance power profile'
@@ -28,7 +29,7 @@ The backslashes above are shell line continuations; PowerShell users can put the
 For a short end-to-end capture smoke, run:
 
 ```shell
-mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-capture -DskipTests '-Dpeegeeq.benchmark.capture.runs=1' '-Dpeegeeq.benchmark.durationSeconds=2'
+mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-capture -DskipTests '-Dpeegeeq.benchmark.capture.runs=1' '-Dpeegeeq.benchmark.warmupSeconds=1' '-Dpeegeeq.benchmark.durationSeconds=2'
 ```
 
 Each invocation creates exactly one ignored evidence file: `benchmark-results/<UTC timestamp>-<Git commit>.html`. The self-contained report has no external assets and includes:
@@ -75,7 +76,7 @@ mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark -DskipTests
 For a short smoke run:
 
 ```shell
-mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark -DskipTests '-Dpeegeeq.benchmark.durationSeconds=2'
+mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark -DskipTests '-Dpeegeeq.benchmark.warmupSeconds=1' '-Dpeegeeq.benchmark.durationSeconds=2'
 ```
 
 The harness reports operations, sustained throughput, and p50/p95/p99 latency for:
@@ -92,6 +93,7 @@ Default acceptance thresholds are 50 operations/second, p99 at or below 1 second
 
 - `peegeeq.benchmark.concurrency`
 - `peegeeq.benchmark.poolSize` (default: concurrency + 4; must exceed concurrency)
+- `peegeeq.benchmark.warmupSeconds` (default: 5; unrecorded per-scenario warm-up)
 - `peegeeq.benchmark.durationSeconds`
 - `peegeeq.benchmark.minimumThroughput`
 - `peegeeq.benchmark.maximumP99Millis`
