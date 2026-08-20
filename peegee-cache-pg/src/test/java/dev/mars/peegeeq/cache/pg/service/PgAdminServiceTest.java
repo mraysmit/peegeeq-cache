@@ -60,9 +60,7 @@ class PgAdminServiceTest {
     void cleanTables(VertxTestContext ctx) {
         metrics = new CacheMetrics();
         service = new PgAdminService(adminRepo, metrics);
-        pool.query("DELETE FROM %s.cache_entries; DELETE FROM %s.cache_counters; DELETE FROM %s.cache_locks"
-                        .formatted(SCHEMA, SCHEMA, SCHEMA))
-                .execute()
+        pg.resetDatabaseState(pool)
                 .onComplete(ctx.succeeding(v -> ctx.completeNow()));
     }
 

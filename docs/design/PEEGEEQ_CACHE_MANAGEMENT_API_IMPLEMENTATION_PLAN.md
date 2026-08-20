@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management API Implementation Plan
 
-**Status:** Implementation not started
+**Status:** Phase M0 complete; Phase M1 in progress
 
 **Date:** 17 August 2026
 
@@ -174,8 +174,8 @@ Fixtures remain in the lowest reusable module that does not create a production 
 
 | Phase | Status | Primary deliverable |
 |---|---|---|
-| M0 | NOT STARTED | Contract synchronization and build decision record |
-| M1 | NOT STARTED | Module skeleton, OpenAPI baseline, and protocol primitives |
+| M0 | COMPLETE | Contract synchronization and build decision record |
+| M1 | IN PROGRESS | Module skeleton, OpenAPI baseline, and protocol primitives |
 | M2 | NOT STARTED | Typed Java management contract |
 | M3 | NOT STARTED | PostgreSQL inspection/read model |
 | M4 | NOT STARTED | Atomic PostgreSQL mutation and reveal model |
@@ -191,6 +191,11 @@ Only one phase may be `IN PROGRESS`. A phase remains incomplete if any required 
 ## 8. Phase M0 — Contract and build synchronization
 
 Objective: remove contradictory inputs before code or OpenAPI generation.
+
+Evidence artifacts:
+
+- [PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md](PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md) records the accepted sibling-module Maven topology and REST configuration/secret-reference invariants.
+- [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) closes all 50 exact V1 operations and their security, schema, status, header, error, capability, limit, audit, and retry contracts.
 
 Tasks:
 
@@ -212,6 +217,8 @@ Verification:
 - no management implementation class exists yet.
 
 Exit criteria: there is one non-contradictory contract and an accepted module/build shape.
+
+Status: **COMPLETE** — the UI design is synchronized with the API authority; all 50 exact operations are closed in the reviewed manifest; configuration and secret-reference shapes and the two-child-module build topology are accepted; both empty module boundaries are present in the 11-project root reactor; all local Markdown links under `docs/design` resolve; `mvn validate` succeeds for all 11 projects; and neither management module contains a Java implementation class.
 
 ## 9. Phase M1 — OpenAPI baseline and protocol primitives
 
@@ -274,6 +281,15 @@ Phase gate:
 - OpenAPI validation green;
 - `peegee-cache-rest` module test suite green;
 - no database or route behavior implemented prematurely.
+
+Current M1.1 evidence (in progress):
+
+- `loadsOpenApi31Document` red: the packaged OpenAPI resource was absent; green after adding the minimal `3.1.0` document at the required resource path.
+- `matchesReviewedOperationManifest` red: actual operation inventory was empty; green after declaring the exact 50 method/path/operation-ID tuples.
+- `declaresSecurityAndProblemResponsesForEveryProtectedOperation` red first on the missing problem component and then exposed unsupported YAML merge-key inheritance; green only after every operation explicitly declared its effective security profile, OpenAPI security requirement or bootstrap exception, and reusable problem response.
+- `declaresSseAndWebSocketComponentSchemas` red: transport schemas were absent; green after declaring pub/sub SSE, metrics SSE, monitoring WebSocket, nullable pub/sub content type, and reset schemas/extensions.
+- `mvn -pl peegee-cache-rest test` passes 4 tests with zero failures/errors/skips; `mvn validate` passes all 11 reactor projects; no route or management Java implementation exists.
+- M1.1 remains open until every operation has its complete request/parameter/success-response/header schema and a standards-aware OpenAPI validation test. M1.2 identifier-codec work must not begin before that closure.
 
 ## 10. Phase M2 — Typed Java management contract
 

@@ -526,6 +526,8 @@ Explicit non-goal unless strategy changes:
 
 ### Phase 8.1: Write-behind write buffering
 
+**Status:** **COMPLETE** — all six ordered implementation steps and exit criteria are covered by unit, lifecycle, telemetry, concurrency, and real-PostgreSQL integration tests.
+
 **Reference design:** `PEEGEEQ_CACHE_DESIGN.md` section 12a — read the full section before starting implementation.
 
 **Prerequisite:** Phase 1 (Phases 0–7) is stable and tests are green on `master`.
@@ -582,7 +584,7 @@ Explicit non-goal unless strategy changes:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md)
 
-**Status:** **NOT STARTED** — the strict-TDD implementation sequence is defined, but no management module or production behavior has been implemented.
+**Status:** **IN PROGRESS (M1)** — M0 is complete with synchronized API/UI contracts, a reviewed 50-operation manifest, an accepted configuration/build decision, two empty management module boundaries, resolved local design links, and an 11-project `mvn validate` success. M1 OpenAPI and protocol primitives are now proceeding through strict TDD; no route implementation exists.
 
 Scope:
 
@@ -629,7 +631,7 @@ Status legend:
 - NOT STARTED: no meaningful implementation work landed yet
 - DEFERRED: intentionally postponed with rationale
 
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-20
 
 | Phase | Status | Evidence snapshot | Remaining to exit |
 |---|---|---|---|
@@ -641,7 +643,7 @@ Last reviewed: 2026-08-19
 | Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Overlapping manual sweeps now share the same in-flight result, and `awaitIdle()` observes that result atomically. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, sweep coalescing, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
 | Phase 6: V1 completion features | COMPLETE | Safe/recovering pub/sub, scan, bulk operations, all-operation telemetry contracts, comprehensive readiness, and interleaved telemetry/lock/pub-sub benchmark scenarios are implemented and green. | None |
 | Phase 7: Native SQL contract hardening | COMPLETE | Eight mutation functions have exact documented signatures; three stable read views, migration ledger/runner, compatibility policy, and real baseline idempotence and forward-version rejection tests are present. | None |
-| Phase 8: V2 and later | DEFERRED | V1 Phases 0–7 are complete. Detailed strict-TDD plans exist for write-behind (8.1) and the management API backend (8.2); the production browser console is separately registered as 8.3 and still requires its own detailed plan. No Phase 8 implementation has started. | Make an explicit start/scope decision for one V2 slice; do not advance backend or UI implicitly. |
+| Phase 8: V2 and later | IN PROGRESS | Phase 8.1 write-behind is complete: bounded last-write-wins buffering, overflow fallback, TTL-adjusted DELETE-before-SET batch flushing, bounded retry/discard telemetry, shutdown admission gating/drain, disabled-by-default configuration, and real PostgreSQL coverage are implemented. | Phase 8.2 management API and Phase 8.3 browser console remain NOT STARTED and require independent explicit start decisions. |
 
 Tracking update rules:
 
@@ -650,7 +652,7 @@ Tracking update rules:
 3. include concrete evidence (classes, migrations, tests) in each status change
 4. if status changes are uncertain, keep the lower status and add a verification task
 
-## 3.2 Current strict verification (2026-08-19)
+## 3.2 Current strict verification (2026-08-20)
 
 The current verification record is based on the complete reactor rather than historical module subsets.
 
@@ -671,7 +673,7 @@ Execution evidence:
 
 The 2026-08-19 review of commits `8fdfc31` through `ef3611a` added four correctness hardenings. Overlapping expiry sweeps now coalesce onto one atomic in-flight future; Micrometer gauges aggregate independent adapters that share a registry; migration rollback failure is attached as a suppressed exception without replacing the initiating migration failure; and every measured benchmark scenario now has an explicit, unrecorded warm-up interval configured by `peegeeq.benchmark.warmupSeconds` (default 5 seconds). Regression coverage exercises each behavior.
 
-The review also removed `VertxAwait`. PostgreSQL fixtures, repository/service/SQL tests, runtime integration tests, and benchmark orchestration now compose Vert.x `Future` values directly, including asynchronous cleanup and failure preservation. A source scan found no remaining Java reference to `VertxAwait`.
+The review also removed `VertxAwait`. PostgreSQL fixtures, repository/service/SQL tests, runtime integration tests, and benchmark orchestration now compose Vert.x `Future` values directly, including asynchronous cleanup and failure preservation. `PgTestSupport.resetDatabaseState(Pool)` centralizes schema-aware truncation and fencing-sequence reset for test isolation; its real-PostgreSQL contract test verifies all three domain tables are cleared and the next fencing token is 1. A source scan found no remaining Java reference to `VertxAwait`.
 
 The interleaved local telemetry smoke measured 0.22% Micrometer throughput overhead and 20.67% p99 overhead. Before the pool-layout fix, two of three identical full-duration executions timed out in different scenarios. Diagnosis isolated deterministic client-side pool saturation: eight workers shared an eight-connection pool with two independent sweepers, while PostgreSQL sampling found no one-second SQL or lock wait. The strict-TDD fix reserves connection headroom, removes sweepers from sustained-workload managers, and uses one dedicated expiry-measurement manager. Three identical post-fix runs passed; the worst p99 was 30.628 ms, expiry lag was 16–28 ms, and failover recovery was 13–16 ms. These local-container figures remain regression evidence, not production SLOs.
 
@@ -680,15 +682,15 @@ Observed automated test inventory:
 | Module | Tests | Failures | Errors | Skipped |
 |---|---:|---:|---:|---:|
 | `peegee-cache-api` | 34 | 0 | 0 | 0 |
-| `peegee-cache-core` | 14 | 0 | 0 | 0 |
-| `peegee-cache-pg` | 195 | 0 | 0 | 0 |
-| `peegee-cache-runtime` | 24 | 0 | 0 | 0 |
+| `peegee-cache-core` | 20 | 0 | 0 | 0 |
+| `peegee-cache-pg` | 196 | 0 | 0 | 0 |
+| `peegee-cache-runtime` | 48 | 0 | 0 | 0 |
 | `peegee-cache-observability` | 5 | 0 | 0 | 0 |
 | `peegee-cache-test-support` | 4 | 0 | 0 | 0 |
 | `peegee-cache-benchmarks` | 14 | 0 | 0 | 0 |
-| **Total** | **290** | **0** | **0** | **0** |
+| **Total** | **321** | **0** | **0** | **0** |
 
-The count above is the sum of the 44 Surefire XML suites produced under the seven tested `peegee-cache-*` reactor modules by the clean install. Stale reports under legacy, non-reactor `pg-cache-*` directories are deliberately excluded.
+The count above is the sum of the 49 Surefire XML suites produced under the seven tested `peegee-cache-*` reactor modules by the clean install. Stale reports under legacy, non-reactor `pg-cache-*` directories are deliberately excluded.
 
 Criteria verdicts:
 
@@ -697,6 +699,7 @@ Criteria verdicts:
 - Phase 5: COMPLETE — bootstrap, managed lifecycle, bounded expiry sweeping, default TTL, and deterministic shutdown criteria are satisfied
 - Phase 6: COMPLETE — pub/sub identifier safety, comprehensive readiness, all-operation telemetry coverage, and overhead evidence satisfy the exit criteria
 - Phase 7: COMPLETE — stable reads, exact function signatures, compatibility policy, migration runner, and upgrade tests satisfy the SQL contract
+- Phase 8.1: COMPLETE — opt-in write-behind buffering satisfies coalescing, capacity fallback, TTL accounting, retry/telemetry, PostgreSQL delivery, and manager shutdown-drain criteria
 
 ## 4. Feature rollout by milestone
 
@@ -837,6 +840,7 @@ Current:
 
 - PostgreSQL Testcontainers helpers
 - schema bootstrap fixtures
+- centralized schema-aware domain-table and fencing-sequence reset
 - composable Vert.x `Future` fixture setup and cleanup, with cleanup failures preserved alongside primary failures
 - latency percentile and throughput calculation
 

@@ -32,6 +32,10 @@ public final class OpenTelemetryCacheTelemetry implements CacheTelemetry {
     private final DoubleHistogram expiryLag;
     private final LongCounter reconnects;
     private final DoubleHistogram notificationDispatch;
+    private final LongCounter writeBehindOverflow;
+    private final LongCounter writeBehindDiscard;
+    private final LongCounter writeBehindFlushEntries;
+    private final DoubleHistogram writeBehindFlushDuration;
     private final AtomicLong activeOperations = new AtomicLong();
     private final AtomicLong subscriptions = new AtomicLong();
     private final AtomicLong lifecycle = new AtomicLong();
@@ -48,6 +52,14 @@ public final class OpenTelemetryCacheTelemetry implements CacheTelemetry {
         expiryLag = meter.histogramBuilder("peegeeq.cache.expiry.lag").setUnit("s").build();
         reconnects = meter.counterBuilder("peegeeq.cache.pubsub.reconnect").setUnit("{attempt}").build();
         notificationDispatch = meter.histogramBuilder("peegeeq.cache.pubsub.notification.dispatch")
+                .setUnit("s").build();
+        writeBehindOverflow = meter.counterBuilder("peegeeq.cache.write.behind.overflow")
+                .setUnit("{mutation}").build();
+        writeBehindDiscard = meter.counterBuilder("peegeeq.cache.write.behind.discard")
+                .setUnit("{mutation}").build();
+        writeBehindFlushEntries = meter.counterBuilder("peegeeq.cache.write.behind.flush.entries")
+                .setUnit("{mutation}").build();
+        writeBehindFlushDuration = meter.histogramBuilder("peegeeq.cache.write.behind.flush.duration")
                 .setUnit("s").build();
         meter.gaugeBuilder("peegeeq.cache.operations.active").ofLongs()
                 .buildWithCallback(measurement -> measurement.record(activeOperations.get()));
@@ -128,6 +140,23 @@ public final class OpenTelemetryCacheTelemetry implements CacheTelemetry {
     @Override
     public void recordLifecycle(boolean started) {
         lifecycle.set(started ? 1 : 0);
+    }
+
+    @Override
+    public void recordWriteBehindOverflow() {
+        writeBehindOverflow.add(1);
+    }
+
+    @Override
+    public void recordWriteBehindFlush(int entryCount, Duration duration, Throwable failure) {
+        Attributes attributes = Attributes.of(OUTCOME, failure == null ? "success" : "failure");
+        writeBehindFlushEntries.add(entryCount, attributes);
+        writeBehindFlushDuration.record(duration.toNanos() / 1_000_000_000.0, attributes);
+    }
+
+    @Override
+    public void recordWriteBehindDiscard(int entryCount) {
+        writeBehindDiscard.add(entryCount);
     }
 
     private static double secondsSince(long startedAt) {

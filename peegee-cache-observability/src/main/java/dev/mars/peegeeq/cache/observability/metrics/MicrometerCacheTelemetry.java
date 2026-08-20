@@ -29,6 +29,9 @@ public final class MicrometerCacheTelemetry implements CacheTelemetry {
     private final DistributionSummary expiryRows;
     private final DistributionSummary expiryLag;
     private final DistributionSummary notificationHandlers;
+    private final Counter writeBehindOverflow;
+    private final Counter writeBehindDiscard;
+    private final DistributionSummary writeBehindFlushEntries;
 
     public MicrometerCacheTelemetry(MeterRegistry registry) {
         this.registry = Objects.requireNonNull(registry, "registry");
@@ -47,6 +50,16 @@ public final class MicrometerCacheTelemetry implements CacheTelemetry {
         notificationHandlers = DistributionSummary.builder("peegeeq.cache.pubsub.notification.handlers")
                 .baseUnit("handlers")
                 .description("Local handlers invoked per PostgreSQL notification")
+                .register(registry);
+        writeBehindOverflow = Counter.builder("peegeeq.cache.write.behind.overflow")
+                .description("Write-behind mutations that fell back to write-through at buffer capacity")
+                .register(registry);
+        writeBehindDiscard = Counter.builder("peegeeq.cache.write.behind.discard")
+                .description("Write-behind mutations discarded after terminal flush or shutdown failure")
+                .register(registry);
+        writeBehindFlushEntries = DistributionSummary.builder("peegeeq.cache.write.behind.flush.entries")
+                .baseUnit("entries")
+                .description("Buffered mutations included in each write-behind flush")
                 .register(registry);
     }
 
@@ -117,6 +130,27 @@ public final class MicrometerCacheTelemetry implements CacheTelemetry {
         int current = started ? 1 : 0;
         int previous = localLifecycle.getAndSet(current);
         gauges.startedRuntimes.addAndGet(current - previous);
+    }
+
+    @Override
+    public void recordWriteBehindOverflow() {
+        writeBehindOverflow.increment();
+    }
+
+    @Override
+    public void recordWriteBehindFlush(int entryCount, Duration duration, Throwable failure) {
+        Timer.builder("peegeeq.cache.write.behind.flush")
+                .description("Write-behind batch flush latency")
+                .publishPercentileHistogram()
+                .tag("outcome", outcome(failure))
+                .register(registry)
+                .record(duration);
+        writeBehindFlushEntries.record(entryCount);
+    }
+
+    @Override
+    public void recordWriteBehindDiscard(int entryCount) {
+        writeBehindDiscard.increment(entryCount);
     }
 
     private static SharedGauges sharedGauges(MeterRegistry registry) {

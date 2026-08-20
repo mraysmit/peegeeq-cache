@@ -20,7 +20,7 @@ PeeGeeQ Cache is currently a library, not a daemon. A usable browser console the
 
 The first release manages multiple PostgreSQL cache setups, exposes authoritative database state, supports guarded administrative operations, and keeps sensitive values masked unless an authorized operator explicitly reveals them.
 
-The corresponding interactive screen designs are available in [the management UI mockups](mockups/peegeeq-cache-management-ui-mockups.html). The complete REST, streaming, security, error, and Java service contracts are defined in [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md).
+The corresponding interactive screen designs are available in [the management UI mockups](UI%20mockups/peegeeq-cache-management-ui-mockups.html). The complete REST, streaming, security, error, and Java service contracts are defined in [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md).
 
 ## 2. Fixed decisions
 
@@ -32,12 +32,12 @@ The following decisions are part of the approved design:
 | Visual design | Match the PeeGeeQ Management UI shell and interaction conventions |
 | Connection model | Multiple registered cache setups |
 | Administration | Full guarded administration |
-| Authentication | Authenticated reverse proxy supplies trusted identity and roles |
+| Authentication | Exactly one server mode: trusted-proxy identity or single-use loopback local-token bootstrap; both establish bounded management sessions |
 | Sensitive data | Masked by default; explicit operator-only reveal with an audit event |
 | Telemetry | Database truth first; process-local metrics are explicitly labelled |
 | Design artifact | This single Markdown specification |
 | Setup persistence | Startup-configured setups are durable; UI-added setups are memory-only |
-| Audit authority | Structured server logs; the UI activity feed is bounded and non-durable |
+| Audit authority | Durable fail-closed `ManagementAuditSink`; the UI activity feed is bounded, process-local, and non-authoritative |
 
 ## 3. Design principles
 
@@ -145,22 +145,27 @@ An operator has viewer access and can:
 - publish a pub/sub message;
 - register or detach a setup.
 
-### 5.3 Proxy identity contract
+### 5.3 Authentication and management-session contract
 
-The reverse proxy supplies normalized identity headers configured by the server. The default names are:
+Production deployments normally use trusted-proxy mode. The reverse proxy supplies normalized identity headers configured by the server. The default names are:
 
 - `X-PeeGeeQ-User`
 - `X-PeeGeeQ-Roles`
 
 Roles are comma-separated and map to `viewer` or `operator`. The server:
 
-- binds to `127.0.0.1` by default;
 - accepts trusted identity headers only from configured proxy addresses;
 - rejects protected requests without an identity;
 - rejects identity headers received from an untrusted peer;
 - never accepts a role sent in a request body or query parameter;
 - enforces authorization on the server independently of UI visibility;
-- restricts mutations to allowed origins and same-origin UI deployment.
+- rejects duplicate, malformed, oversized, or unknown-role identity headers rather than partially accepting them.
+
+For direct local operation, `LOCAL_TOKEN` mode binds only to loopback. Startup creates a cryptographically random 256-bit bootstrap token, exposes it once outside the logging system, and retains only its digest. `POST /api/v1/session/local` atomically consumes that token and creates the fixed `local-operator` identity. The token cannot be replayed or regenerated through HTTP.
+
+Both authentication modes establish an in-memory `PGQMGMTSESSION` cookie with `HttpOnly`, `SameSite=Strict`, path `/`, and `Secure` under HTTPS. The default idle lifetime is 30 minutes, the default absolute lifetime is eight hours, and configuration cannot extend the absolute lifetime beyond 24 hours. `GET /api/v1/session` creates or refreshes the trusted-proxy session; identity or role changes invalidate it. Session and bootstrap secrets never enter browser persistence or logs.
+
+Every state-changing request except the initial local-token exchange requires an allowed `Origin` and matching session-bound `X-PeeGeeQ-CSRF` value. The bootstrap exception is limited to loopback, exact same origin, JSON, the single-use token, disabled CORS, and a dedicated rate limit. SSE and WebSocket handshakes also validate the management session and origin. Exactly one authentication mode is configured; there is no anonymous mode.
 
 The proxy must strip client-supplied identity headers before adding authoritative values and must terminate TLS for non-loopback use.
 
@@ -377,6 +382,8 @@ An operator or viewer enters a channel and starts an SSE stream. The page displa
 
 Operators can publish text or JSON up to the configured cache payload limit. The form shows encoded byte length and disables publishing when the limit is exceeded. Closing the tab or stopping the session closes the subscription.
 
+Native PostgreSQL notifications do not carry content type, so received messages display `contentType: null`; the console does not infer it from payload text. A successful publish displays `accepted: true`, meaning PostgreSQL accepted `pg_notify`, never a listener count or delivery guarantee. Publish is never automatically retried.
+
 Creating a console subscription returns an opaque subscription identifier. Received messages are assigned opaque identifiers and retained in a bounded server-side session buffer so an operator can explicitly reveal one payload. Stopping the subscription, detaching the setup, expiring the session, or restarting the server removes that buffer. The displayed message history is explicitly labelled non-durable.
 
 ### 7.9 Monitoring
@@ -483,7 +490,7 @@ flowchart LR
     Registry["Cache setup registry"]
     API["PeeGeeQ Cache API services"]
     PG["PostgreSQL cache schemas"]
-    Audit["Structured audit log"]
+    Audit["Durable management audit sink"]
 
     Browser -->|"REST / SSE / WebSocket"| Proxy
     Proxy -->|"Trusted identity and roles"| Rest
@@ -507,7 +514,7 @@ flowchart LR
 - structured audit events;
 - static `webroot` serving with SPA fallback.
 
-`peegee-cache-management-ui` builds into `peegee-cache-rest/src/main/resources/webroot` during the Maven package lifecycle, matching the PeeGeeQ deployment pattern.
+Both modules are Maven children of the root reactor. `peegee-cache-management-ui` owns the Node/Vite build and exposes its compiled webroot as a Maven artifact; `peegee-cache-rest` consumes that artifact during packaging. Generated frontend output is never written into another module's source tree. The backend remains buildable through the root reactor before Phase 8.3 by using an explicitly empty, validated UI artifact.
 
 ### 9.2 Default ports and paths
 
@@ -542,7 +549,8 @@ Concurrent connect/detach operations for one setup are serialized. Disconnecting
 - Durations crossing the HTTP boundary use integer milliseconds.
 - Cursor values are opaque.
 - List endpoints enforce a maximum page size.
-- Errors use `{ code, message, correlationId, fieldErrors? }`.
+- PostgreSQL/Java 64-bit integers use decimal strings; durations remain bounded integer milliseconds.
+- Errors use RFC 9457-style `application/problem+json` with `type`, `title`, `status`, `code`, safe `detail`, `instance`, `correlationId`, and `fieldErrors`.
 - Responses containing revealed data use `Cache-Control: no-store`.
 - Passwords, values, and owner tokens are removed before logging.
 
@@ -550,7 +558,9 @@ Concurrent connect/detach operations for one setup are serialized. Disconnecting
 
 | Method | Path | Role | Purpose |
 |---|---|---|---|
-| `GET` | `/api/v1/session` | authenticated | Current proxy identity, roles, and API version |
+| `GET` | `/api/v1/session` | authenticated | Current identity, roles, bounded session, CSRF token, and API version |
+| `POST` | `/api/v1/session/local` | loopback bootstrap | Atomically exchange the single-use local token for a bounded session |
+| `DELETE` | `/api/v1/session/local` | authenticated local operator | Invalidate the local session; requires Origin and CSRF |
 | `GET` | `/api/v1/setups` | viewer | List secret-free setup summaries |
 | `POST` | `/api/v1/setups/actions/test` | operator | Test an unregistered connection without saving it |
 | `POST` | `/api/v1/setups` | operator | Register and connect an in-memory setup |
@@ -578,6 +588,8 @@ Capability response:
   "sensitiveValueReveal": true
 }
 ```
+
+Health/setup detail also reports migration version decimal string `"1"`, corresponding to the current V001 baseline. Later versions are reported from the migration ledger rather than inferred from table presence.
 
 The UI hides unavailable navigation destinations and disables unavailable actions. Authorization remains independently enforced.
 
@@ -655,32 +667,7 @@ Every stream sends a typed initial snapshot or `ready` event, periodic heartbeat
 
 Management inspection and mutation must remain typed and testable without making REST handlers depend on PostgreSQL implementation classes.
 
-A new `ManagementService`, exposed through a backward-compatible default `PeeGeeCache.management()` accessor, provides:
-
-```java
-AdminCapabilities capabilities();
-Future<AdminPage<NamespaceStats>> namespaces(NamespaceQuery query);
-Future<ManagementEntryMetadata> entry(CacheKey key, boolean includeExpired);
-Future<CacheValue> revealEntry(CacheKey key);
-Future<CacheSetResult> setEntry(ManagementCacheSetRequest request);
-Future<Boolean> expireEntry(VersionedEntryTtlRequest request);
-Future<Boolean> persistEntry(VersionedCacheKeyRequest request);
-Future<TouchResult> touchEntry(VersionedEntryTouchRequest request);
-Future<Boolean> deleteEntry(VersionedEntryDeleteRequest request);
-Future<AdminPage<CounterEntry>> counters(CounterQuery query);
-Future<CounterEntry> counter(CacheKey key);
-Future<CounterEntry> setCounter(ManagementCounterSetRequest request);
-Future<CounterEntry> adjustCounter(ManagementCounterAdjustRequest request);
-Future<Boolean> deleteCounter(VersionedCounterDeleteRequest request);
-Future<AdminPage<LockState>> locks(LockQuery query);
-Future<DatabaseStats> databaseStats();
-Future<ExpiryStats> expiryStats();
-Future<BulkDeletePreview> previewEntryDelete(EntryDeleteFilter filter);
-Future<BulkDeleteResult> executeEntryDelete(ConfirmedEntryDelete request);
-Future<BulkDeletePreview> previewCounterDelete(CounterDeleteSelection selection);
-Future<BulkDeleteResult> executeCounterDelete(ConfirmedCounterDelete request);
-Future<Boolean> forceReleaseLock(ForceReleaseLockRequest request);
-```
+A new `ManagementService`, exposed through a backward-compatible default `PeeGeeCache.management()` accessor, provides the exact typed signatures in [the authoritative Java API contract](PEEGEEQ_CACHE_MANAGEMENT_API.md#16-java-api-contract). Sensitive, mutation, and actor-bound bulk methods require a `ManagementActionContext`; reveals return versioned snapshot DTOs; mutations return `ManagementSetResult` or `VersionedMutationResult<T>` with `APPLIED`, `NOT_FOUND`, `VERSION_MISMATCH`, or `CONDITION_NOT_MET`.
 
 The default accessor reports unsupported capability and its service methods return a failed `Future`. The PostgreSQL implementation supports the complete V1 contract. REST always checks capabilities before invoking an optional operation. Existing application-facing cache, counter, lock, scan, pub/sub, and admin contracts remain unchanged.
 
@@ -697,7 +684,10 @@ New immutable models include:
 - `VersionedEntryDeleteRequest` containing key and expected version;
 - `EntryDeleteFilter`;
 - `BulkDeletePreview`, `ConfirmedEntryDelete`, and `BulkDeleteResult`;
-- `ForceReleaseLockRequest` containing key and expected version;
+- `RevealedEntryValue` and `RevealedLockOwner`, each carrying value/owner and version from one database snapshot;
+- `ManagementActionContext` containing authenticated actor, bounded roles, correlation identifier, and sanitized source address;
+- `VersionedMutationResult<T>`, `ManagementMutationOutcome`, and `ManagementSetResult`;
+- `ForceReleaseLockRequest` containing key, expected version, confirmation key, and optional bounded reason;
 - `AdminCapabilities`.
 
 Existing `MetricsSnapshot`, `CacheService`, `CounterService`, `LockService`, `PubSubService`, `ScanService`, and `AdminService` contracts remain unchanged.
@@ -710,18 +700,20 @@ Metadata responses cannot contain value fields, binary buffers, owner tokens, or
 
 ### 12.2 Audit event
 
-Each reveal or mutation emits a structured event containing:
+Before each reveal or mutation, the configured `ManagementAuditSink` must durably accept a bounded intent and reserve capacity for one terminal outcome. If it cannot, the operation fails closed before database work with `503 AUDIT_UNAVAILABLE`. After database work, the reservation is completed idempotently as `SUCCEEDED`, `REJECTED`, `FAILED`, or `UNKNOWN`; conflicting second completion is rejected. Incomplete durable intents recover as `UNKNOWN` on restart. Failure to persist a possibly committed terminal outcome returns uncertain `503 AUDIT_OUTCOME_UNAVAILABLE`, marks mutation readiness down, and blocks further reveals/mutations until recovery.
+
+The intent and outcome contain:
 
 - event identifier and timestamp;
 - correlation identifier;
 - authenticated actor and role;
 - action and outcome;
-- setup and namespace;
-- resource type and identifier;
+- setup and resource type;
+- versioned, at-least-128-bit HMAC-SHA-256 fingerprints of user-controlled identifiers, produced with a server-held rotation key and accompanied only by its non-secret key identifier;
 - non-sensitive request metadata;
 - sanitized failure category.
 
-The event must not contain a cache value, pub/sub payload, lock owner token, database password, or raw authorization header.
+The event must not contain a raw namespace/key/channel/prefix/cursor, cache value or derived hash/preview, pub/sub payload, lock owner token, database username/password, authorization header, request SQL, or stack trace. The bounded activity feed may show raw identifiers to authorized viewers but is not the audit authority.
 
 ### 12.3 Bulk confirmation storage
 
@@ -756,6 +748,9 @@ JUnit and real PostgreSQL cover:
 - stale-version forced lock release;
 - bulk preview scope, expiry, reuse, mismatch, partial failure, and cleanup;
 - pub/sub serialization, payload limits, disconnect, and reconnect;
+- PostgreSQL channel-byte limits, nullable received content type, and publication-acceptance semantics;
+- single-use local-token exchange, bounded sessions, Origin/CSRF enforcement, and bootstrap exception isolation;
+- durable audit reservation, terminal completion, recovery to `UNKNOWN`, and keyed fingerprint redaction;
 - trusted versus untrusted proxy requests;
 - missing/invalid roles and forbidden mutations;
 - graceful shutdown of pools, subscriptions, SSE clients, and WebSockets.
@@ -790,7 +785,7 @@ Playwright mirrors the PeeGeeQ Management UI environment:
 
 Required journeys include:
 
-1. authenticate through the test proxy and register a setup;
+1. authenticate through both the test proxy and single-use local-token modes and register a setup;
 2. switch setup/namespace scope and validate Overview counts;
 3. create, browse, reveal, edit with CAS, expire, persist, touch, and delete a key;
 4. preview and confirm selected-entry deletion and reject a stale preview;
@@ -859,15 +854,15 @@ The management UI is complete when:
 5. all approved mutations work against the real cache API with concurrency protection;
 6. bulk entry deletion cannot execute without a valid preview, actor/scope match, and typed confirmation;
 7. values, owner tokens, and passwords are masked by default and absent from ordinary responses and logs;
-8. the server independently enforces viewer/operator authorization behind a trusted proxy boundary;
-9. reveal and mutation operations produce sanitized structured audit events;
+8. the server independently enforces viewer/operator authorization, bounded management sessions, Origin, and CSRF in both trusted-proxy and loopback local-token modes;
+9. reveal and mutation operations fail closed unless durable audit intent/outcome capacity is reserved, and audit records contain only keyed fingerprints for user-controlled identifiers;
 10. REST, SSE, and WebSocket interruptions are visible and recover without resource leaks;
 11. tests use real PostgreSQL and no mocking framework;
 12. the Maven package contains and serves the compiled UI.
 
 ## 16. Explicitly out of scope for V1
 
-- Built-in users, passwords, sessions, or identity provider integration.
+- Persistent management users/passwords or embedded identity-provider integration.
 - Persistent storage of UI-entered database credentials.
 - Database or cache-schema drop operations.
 - One-click deletion of every resource in a namespace.
@@ -878,6 +873,6 @@ The management UI is complete when:
 - Retained pub/sub history or discovery of all channels across clients.
 - Claims of application-wide hit rate or latency.
 - Prometheus querying or central telemetry ingestion.
-- Treating the UI activity feed as a compliance-grade durable audit store.
+- Treating the UI activity feed as the durable audit authority; that role belongs to `ManagementAuditSink`.
 
 These capabilities require separate design decisions and must not be inferred from the V1 interface.

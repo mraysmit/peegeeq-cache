@@ -26,6 +26,10 @@ class MicrometerCacheTelemetryTest {
         telemetry.recordPubSubReconnect(2, Duration.ofMillis(5), null);
         telemetry.recordNotificationDispatch(3, Duration.ofMillis(2));
         telemetry.recordActiveSubscriptions(4);
+        telemetry.recordWriteBehindOverflow();
+        telemetry.recordWriteBehindFlush(5, Duration.ofMillis(4), null);
+        telemetry.recordWriteBehindFlush(2, Duration.ofMillis(6), new IllegalStateException("flush failed"));
+        telemetry.recordWriteBehindDiscard(2);
 
         assertEquals(1, registry.get("peegeeq.cache.operation")
                 .tag("operation", "cache.get").tag("outcome", "success").timer().count());
@@ -38,6 +42,13 @@ class MicrometerCacheTelemetryTest {
                 .tag("outcome", "success").timer().count());
         assertEquals(4, registry.get("peegeeq.cache.pubsub.subscriptions").gauge().value());
         assertNotNull(registry.find("peegeeq.cache.pubsub.notification.dispatch").timer());
+        assertEquals(1, registry.get("peegeeq.cache.write.behind.overflow").counter().count());
+        assertEquals(2, registry.get("peegeeq.cache.write.behind.discard").counter().count());
+        assertEquals(7, registry.get("peegeeq.cache.write.behind.flush.entries").summary().totalAmount());
+        assertEquals(1, registry.get("peegeeq.cache.write.behind.flush")
+                .tag("outcome", "success").timer().count());
+        assertEquals(1, registry.get("peegeeq.cache.write.behind.flush")
+                .tag("outcome", "failure").timer().count());
         assertEquals(0, registry.get("peegeeq.cache.operations.active").gauge().value());
     }
 

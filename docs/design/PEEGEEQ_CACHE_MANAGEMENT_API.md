@@ -18,9 +18,11 @@ It is the implementation contract for:
 - the PostgreSQL implementation of management inspection and guarded administration;
 - integration and browser tests.
 
-Implementation has not started. Under the authoritative plan's deferred Phase 8, the backend is registered as Phase 8.2 and the browser console as Phase 8.3. Section 19 defines the remaining start, module-ownership, and evidence gates; this contract becomes executable only after an explicit Phase 8.2 start decision and validation of the OpenAPI companion.
+Phase 8.2 completed its non-executable M0 contract/build gate and is now in M1. No management runtime behavior or route implementation exists yet. The browser console remains separately tracked as Phase 8.3. Section 19 defines module ownership and evidence gates; executable work begins with red OpenAPI contract tests.
 
 The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The interactive screen designs are in [UI mockups/peegeeq-cache-management-ui-mockups.html](UI%20mockups/peegeeq-cache-management-ui-mockups.html).
+
+The reviewed exact route inventory is [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md). The accepted reactor topology and server configuration/secret-reference shapes are in [PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md](PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md).
 
 ## 2. Contract principles
 
@@ -1607,7 +1609,7 @@ Phase 8.3 owns the production React console and its full-browser journeys for se
 
 ## 19. Implementation state and module ownership
 
-Status: **NOT STARTED**. This document defines the reviewed contract; it does not mark the management system as implemented or override the authoritative implementation plan. `PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md` registers the backend as Phase 8.2 and the browser console as Phase 8.3 under the intentionally deferred overall Phase 8. Code work begins only after an explicit Phase 8.2 start decision and completion of the Phase M0 contract/build gate.
+Status: **IN PROGRESS AT M1**. This document defines the reviewed contract; it does not claim that the management system is implemented or override the authoritative implementation plan. `PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md` registers the backend as Phase 8.2 and the browser console as separate Phase 8.3 work. M0 closed the contract and build topology without production classes; M1 starts the machine-readable OpenAPI and pure protocol boundary through strict red/green tests.
 
 Planned ownership is:
 
@@ -1643,7 +1645,7 @@ SSE and WebSocket message schemas belong in OpenAPI component schemas with descr
 
 ### 20.1 Contract-closure gate
 
-Before the first OpenAPI file is accepted, Phase M0 produces a reviewed operation manifest for every REST route. Each manifest row contains:
+Before the first OpenAPI file is accepted, Phase M0 produces the reviewed [management operation manifest](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) for every REST route. Each manifest row contains:
 
 - exact method and complete path, with no abbreviated `...` form;
 - unique operation identifier and owning service method;

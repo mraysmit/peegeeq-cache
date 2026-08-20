@@ -46,9 +46,7 @@ class NativeSqlLockFunctionTest {
 
     @BeforeEach
     void cleanTables(VertxTestContext ctx) {
-        pool.query("DELETE FROM %s.cache_locks".formatted(SCHEMA))
-                .execute()
-                .compose(v -> pool.query("ALTER SEQUENCE %s.lock_fencing_seq RESTART WITH 1".formatted(SCHEMA)).execute())
+        pg.resetDatabaseState(pool)
                 .onComplete(ctx.succeeding(v -> ctx.completeNow()));
     }
 

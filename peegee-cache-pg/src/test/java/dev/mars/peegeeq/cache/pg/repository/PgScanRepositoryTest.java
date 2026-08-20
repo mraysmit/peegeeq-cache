@@ -50,8 +50,7 @@ class PgScanRepositoryTest {
 
     @BeforeEach
     void cleanTable(VertxTestContext ctx) {
-        pool.query("DELETE FROM " + SCHEMA + ".cache_entries")
-                .execute()
+        pg.resetDatabaseState(pool)
                 .onComplete(ctx.succeeding(v -> ctx.completeNow()));
     }
 

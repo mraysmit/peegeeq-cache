@@ -140,6 +140,18 @@ public final class CacheMetrics {
         safeRun(() -> telemetry.recordLifecycle(started));
     }
 
+    public void recordWriteBehindOverflow() {
+        safeRun(telemetry::recordWriteBehindOverflow);
+    }
+
+    public void recordWriteBehindFlush(int entryCount, Duration duration, Throwable failure) {
+        safeRun(() -> telemetry.recordWriteBehindFlush(entryCount, duration, failure));
+    }
+
+    public void recordWriteBehindDiscard(int entryCount) {
+        safeRun(() -> telemetry.recordWriteBehindDiscard(entryCount));
+    }
+
     public MetricsSnapshot snapshot() {
         return new MetricsSnapshot(
                 cacheGets.sum(),

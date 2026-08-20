@@ -1,7 +1,9 @@
 package dev.mars.peegeeq.cache.runtime.bootstrap;
 
 import dev.mars.peegeeq.cache.api.PeeGeeCache;
+import dev.mars.peegeeq.cache.api.cache.CacheService;
 import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
+import dev.mars.peegeeq.cache.core.writebehind.WriteBehindBuffer;
 import dev.mars.peegeeq.cache.pg.PgPeeGeeCache;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.pg.bootstrap.PgSchemaMigrator;
@@ -22,6 +24,8 @@ import dev.mars.peegeeq.cache.runtime.PeeGeeCacheManager;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
 import dev.mars.peegeeq.cache.runtime.expiry.PgExpirySweeper;
 import dev.mars.peegeeq.cache.runtime.logging.RecurringFailureTracker;
+import dev.mars.peegeeq.cache.runtime.writebehind.WriteBehindCacheService;
+import dev.mars.peegeeq.cache.runtime.writebehind.WriteBehindFlusher;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
@@ -50,6 +54,8 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
     private final PeeGeeCache cache;
     private final PgPubSubService pubSubService;
     private final PgExpirySweeper expirySweeper;
+    private final WriteBehindFlusher writeBehindFlusher;
+    private final WriteBehindCacheService writeBehindCacheService;
     private final CacheMetrics metrics;
     private final AtomicBoolean started = new AtomicBoolean(false);
     private final RecurringFailureTracker expirySweepFailures = new RecurringFailureTracker();
@@ -72,8 +78,23 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         PgCounterRepository counterRepo = new PgCounterRepository(pool, schemaName);
         PgLockRepository lockRepo = new PgLockRepository(pool, schemaName);
 
-        PgCacheService cacheService = new PgCacheService(
+        PgCacheService databaseCacheService = new PgCacheService(
                 cacheRepo, this.metrics, this.options.runtimeConfig().defaultTtl());
+        CacheService cacheService = databaseCacheService;
+        if (this.options.runtimeConfig().writeBehind().enabled()) {
+            WriteBehindBuffer writeBehindBuffer = new WriteBehindBuffer(
+                    this.options.runtimeConfig().writeBehind().maxBufferSize());
+            this.writeBehindFlusher = new WriteBehindFlusher(
+                    vertx, databaseCacheService, writeBehindBuffer,
+                    this.options.runtimeConfig().writeBehind(), this.metrics);
+            this.writeBehindCacheService = new WriteBehindCacheService(
+                    databaseCacheService, writeBehindBuffer, this.writeBehindFlusher::requestFlush,
+                    this.metrics);
+            cacheService = this.writeBehindCacheService;
+        } else {
+            this.writeBehindFlusher = null;
+            this.writeBehindCacheService = null;
+        }
         PgCounterService counterService = new PgCounterService(counterRepo, this.metrics);
         PgLockService lockService = new PgLockService(lockRepo, this.metrics);
 
@@ -114,6 +135,7 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
                     log.atInfo()
                             .addKeyValue("schema", options.storeConfig().schemaName())
                             .addKeyValue("expiry.sweeper", options.runtimeConfig().enableExpirySweeper())
+                            .addKeyValue("write.behind", writeBehindFlusher != null)
                             .addKeyValue("pubsub", pubSubService != null)
                             .log("cache.manager.started");
                 })
@@ -197,6 +219,10 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
         return pubSubService != null && pubSubService.isListenerConnected();
     }
 
+    boolean isWriteBehindRunning() {
+        return writeBehindFlusher != null && writeBehindFlusher.isRunning();
+    }
+
     private Future<Void> startBackgroundComponents() {
         return applySchemaPolicy().compose(ignored -> startConfiguredBackgroundComponents());
     }
@@ -214,6 +240,15 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
 
     private Future<Void> startConfiguredBackgroundComponents() {
         PeeGeeCacheConfig runtime = options.runtimeConfig();
+
+        if (writeBehindFlusher != null) {
+            writeBehindCacheService.startAcceptingWrites();
+            writeBehindFlusher.start();
+            log.atInfo()
+                    .addKeyValue("interval.ms", runtime.writeBehind().flushInterval().toMillis())
+                    .addKeyValue("batch.size", runtime.writeBehind().flushBatchSize())
+                    .log("cache.write_behind.started");
+        }
 
         if (runtime.enableExpirySweeper()) {
             long intervalMillis = runtime.expirySweepInterval().toMillis();
@@ -279,7 +314,16 @@ final class PgPeeGeeCacheManager implements PeeGeeCacheManager {
             log.atInfo().log("cache.expiry_sweeper.stopped");
         }
 
-        Future<Void> sweeperStopped = expirySweeper.awaitIdle();
+        Future<Void> writeBehindStopped;
+        if (writeBehindFlusher != null) {
+            writeBehindCacheService.stopAcceptingWrites();
+            writeBehindStopped = writeBehindFlusher.stopAndDrain()
+                    .onSuccess(ignored -> log.atInfo().log("cache.write_behind.stopped"));
+        } else {
+            writeBehindStopped = Future.succeededFuture();
+        }
+
+        Future<Void> sweeperStopped = writeBehindStopped.compose(ignored -> expirySweeper.awaitIdle());
         if (pubSubService != null) {
             return sweeperStopped.compose(ignored -> pubSubService.stop())
                     .onSuccess(v -> log.atInfo().log("pubsub.listener.stopped"))

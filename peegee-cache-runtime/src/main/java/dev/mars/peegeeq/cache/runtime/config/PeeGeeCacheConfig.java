@@ -9,15 +9,18 @@ import java.time.Duration;
  * @param expirySweepInterval   interval between expiry sweeper runs
  * @param expirySweepBatchSize  max rows deleted per sweeper pass
  * @param enableExpirySweeper   whether to start the background expiry sweeper
+ * @param writeBehind           optional cache write-behind configuration
  */
 public record PeeGeeCacheConfig(
         Duration defaultTtl,
         Duration expirySweepInterval,
         int expirySweepBatchSize,
-        boolean enableExpirySweeper
+        boolean enableExpirySweeper,
+        WriteBehindConfig writeBehind
 ) {
 
     public PeeGeeCacheConfig {
+        writeBehind = writeBehind != null ? writeBehind : WriteBehindConfig.disabled();
         if (defaultTtl != null && (defaultTtl.isZero() || defaultTtl.isNegative())) {
             throw new IllegalArgumentException("defaultTtl must be > 0 when configured");
         }
@@ -29,6 +32,19 @@ public record PeeGeeCacheConfig(
                 throw new IllegalArgumentException("expirySweepBatchSize must be > 0 when enableExpirySweeper=true");
             }
         }
+        if (writeBehind.enabled() && defaultTtl != null
+                && writeBehind.flushInterval().compareTo(defaultTtl) > 0) {
+            throw new IllegalArgumentException("writeBehind.flushInterval must be <= defaultTtl when configured");
+        }
+    }
+
+    public PeeGeeCacheConfig(
+            Duration defaultTtl,
+            Duration expirySweepInterval,
+            int expirySweepBatchSize,
+            boolean enableExpirySweeper) {
+        this(defaultTtl, expirySweepInterval, expirySweepBatchSize,
+                enableExpirySweeper, WriteBehindConfig.disabled());
     }
 
     public static PeeGeeCacheConfig defaults() {
@@ -36,7 +52,8 @@ public record PeeGeeCacheConfig(
                 null,
                 Duration.ofSeconds(30),
                 500,
-                false
+                false,
+                WriteBehindConfig.disabled()
         );
     }
 }

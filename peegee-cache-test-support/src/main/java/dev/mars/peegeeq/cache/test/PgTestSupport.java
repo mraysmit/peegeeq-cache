@@ -103,7 +103,14 @@ public final class PgTestSupport {
                 .transform(closeResult -> completeAfterCleanup(initializationResult, closeResult)));
     }
 
-    private Future<Void> resetDatabaseState(Pool pool) {
+    /**
+     * Removes all domain rows from this fixture's schema and restarts the lock fencing sequence.
+     *
+     * @param pool pool connected to the fixture database
+     * @return a future completed after the schema state has been reset
+     */
+    public Future<Void> resetDatabaseState(Pool pool) {
+        Objects.requireNonNull(pool, "pool");
         return execute(pool, "reset.truncate",
                 "TRUNCATE TABLE %s.cache_entries, %s.cache_counters, %s.cache_locks"
                         .formatted(schemaName, schemaName, schemaName))

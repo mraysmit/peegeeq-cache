@@ -62,9 +62,7 @@ class PgPeeGeeCacheManagerExpiryIntegrationTest {
 
     @BeforeEach
     void clearTables(VertxTestContext ctx) {
-        pool.query("TRUNCATE TABLE " + SCHEMA + ".cache_entries, "
-                        + SCHEMA + ".cache_counters, " + SCHEMA + ".cache_locks")
-                .execute()
+        pg.resetDatabaseState(pool)
                 .onComplete(ctx.succeeding(v -> ctx.completeNow()));
     }
 

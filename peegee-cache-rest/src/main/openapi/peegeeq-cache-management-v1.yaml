@@ -1,0 +1,566 @@
+openapi: 3.1.0
+info:
+  title: PeeGeeQ Cache Management API
+  version: 1.0.0-draft
+  description: Management API contract for PeeGeeQ Cache.
+paths:
+  /api/v1/session:
+    get:
+      x-security-profile: SESSION
+      security:
+        - trustedProxyIdentity: []
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getSession
+  /api/v1/session/local:
+    post:
+      x-security-profile: LOCAL_BOOTSTRAP
+      security: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: exchangeLocalToken
+    delete:
+      x-security-profile: VIEW_MUTATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: deleteLocalSession
+  /api/v1/setups:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: listSetups
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: registerSetup
+  /api/v1/setups/actions/test:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: testUnregisteredSetup
+  /api/v1/setups/{setupId}:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getSetup
+    delete:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: forgetSetup
+  /api/v1/setups/{setupId}/connect:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: connectSetup
+  /api/v1/setups/{setupId}/test:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: testRegisteredSetup
+  /api/v1/setups/{setupId}/detach:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: detachSetup
+  /api/v1/setups/{setupId}/health:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getSetupHealth
+  /api/v1/setups/{setupId}/capabilities:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getSetupCapabilities
+  /api/v1/setups/{setupId}/overview:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getOverview
+  /api/v1/setups/{setupId}/namespaces:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: listNamespaces
+  /api/v1/setups/{setupId}/namespaces/export:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: exportNamespaces
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getNamespace
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: listEntries
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getEntry
+    put:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: setEntry
+    delete:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: deleteEntry
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/value/reveal:
+    post:
+      x-security-profile: REVEAL
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: revealEntryValue
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/ttl:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: expireEntry
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/persist:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: persistEntry
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/touch:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: touchEntry
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/preview:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: previewEntryBulkDelete
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: executeEntryBulkDelete
+  /api/v1/setups/{setupId}/counters:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: listCounters
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getCounter
+    put:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: setCounter
+    delete:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: deleteCounter
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/increment:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: adjustCounter
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/ttl:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: expireCounter
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/persist:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: persistCounter
+  /api/v1/setups/{setupId}/counters/bulk-delete/preview:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: previewCounterBulkDelete
+  /api/v1/setups/{setupId}/counters/bulk-delete/execute:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: executeCounterBulkDelete
+  /api/v1/setups/{setupId}/locks:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: listLocks
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getLock
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/owner/reveal:
+    post:
+      x-security-profile: REVEAL
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: revealLockOwner
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/force-release:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: forceReleaseLock
+  /api/v1/setups/{setupId}/pubsub/subscriptions:
+    post:
+      x-security-profile: VIEW_MUTATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: createPubSubSubscription
+  /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}/stream:
+    get:
+      x-security-profile: SSE
+      x-transport: sse
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: streamPubSubMessages
+  /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}/messages/{messageId}/payload/reveal:
+    post:
+      x-security-profile: REVEAL
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: revealPubSubPayload
+  /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}:
+    delete:
+      x-security-profile: VIEW_MUTATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: deletePubSubSubscription
+  /api/v1/setups/{setupId}/pubsub/publish:
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: publishPubSubMessage
+  /api/v1/setups/{setupId}/monitoring/database:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getDatabaseMonitoring
+  /api/v1/setups/{setupId}/monitoring/runtime:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getRuntimeMonitoring
+  /api/v1/setups/{setupId}/sse/metrics:
+    get:
+      x-security-profile: SSE
+      x-transport: sse
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: streamMetrics
+  /api/v1/setups/{setupId}/activity:
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: listActivity
+  /ws/monitoring:
+    get:
+      x-security-profile: WS
+      x-transport: websocket
+      security:
+        - managementSession: []
+      responses:
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: monitoringWebSocket
+components:
+  securitySchemes:
+    managementSession:
+      type: apiKey
+      in: cookie
+      name: PGQMGMTSESSION
+    trustedProxyIdentity:
+      type: apiKey
+      in: header
+      name: X-PeeGeeQ-User
+  responses:
+    ManagementProblem:
+      description: Safe management API problem response.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ManagementProblem'
+  schemas:
+    PubSubSseEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, event, data]
+      properties:
+        eventId:
+          type: string
+        event:
+          type: string
+          enum: [ready, pubsub.message, reset]
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/PubSubMessageMetadata'
+            - $ref: '#/components/schemas/StreamReset'
+    PubSubMessageMetadata:
+      type: object
+      additionalProperties: false
+      required: [messageId, channel, contentType, payloadBytes, receivedAt, payloadState]
+      properties:
+        messageId:
+          type: string
+        channel:
+          type: string
+        contentType:
+          type: [string, 'null']
+        payloadBytes:
+          type: integer
+          minimum: 0
+        receivedAt:
+          type: string
+          format: date-time
+        payloadState:
+          type: string
+          const: MASKED
+    MetricsSseEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, event, data]
+      properties:
+        eventId:
+          type: string
+        event:
+          type: string
+          enum: [ready, overview.snapshot, runtime.snapshot, health.changed, reset]
+        data:
+          type: object
+    MonitoringWebSocketEnvelope:
+      type: object
+      additionalProperties: false
+      required: [eventId, type, occurredAt, setupId, data]
+      properties:
+        eventId:
+          type: string
+        type:
+          type: string
+          enum: [connection.ready, setup.state.changed, health.changed, activity.created, resource.changed, stream.reset, server.shutting_down]
+        occurredAt:
+          type: string
+          format: date-time
+        setupId:
+          type: string
+        data:
+          type: object
+    StreamReset:
+      type: object
+      additionalProperties: false
+      required: [oldestAvailableEventId]
+      properties:
+        oldestAvailableEventId:
+          type: [string, 'null']
+    ManagementProblem:
+      type: object
+      required: [type, title, status, code, detail, instance, correlationId, fieldErrors]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+        detail:
+          type: string
+        instance:
+          type: string
+        correlationId:
+          type: string
+        fieldErrors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false

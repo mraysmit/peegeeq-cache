@@ -36,6 +36,15 @@ public interface CacheTelemetry {
     default void recordLifecycle(boolean started) {
     }
 
+    default void recordWriteBehindOverflow() {
+    }
+
+    default void recordWriteBehindFlush(int entryCount, Duration duration, Throwable failure) {
+    }
+
+    default void recordWriteBehindDiscard(int entryCount) {
+    }
+
     static CacheTelemetry noop() {
         return NOOP;
     }

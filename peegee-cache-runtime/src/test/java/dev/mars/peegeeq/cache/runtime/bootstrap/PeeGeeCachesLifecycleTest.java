@@ -5,6 +5,7 @@ import dev.mars.peegeeq.cache.core.telemetry.CacheOperation;
 import dev.mars.peegeeq.cache.core.telemetry.CacheTelemetry;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.runtime.config.PeeGeeCacheConfig;
+import dev.mars.peegeeq.cache.runtime.config.WriteBehindConfig;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -221,6 +222,27 @@ class PeeGeeCachesLifecycleTest {
                     PgPeeGeeCacheManager pgManager = (PgPeeGeeCacheManager) manager;
                     assertFalse(pgManager.isExpirySweeperRunning());
                     assertFalse(pgManager.isListenerRunning());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void startOwnsAndStopsWriteBehindLifecycle(Vertx vertx, VertxTestContext ctx) {
+        WriteBehindConfig writeBehind = new WriteBehindConfig(
+                true, Duration.ofHours(1), 100, 10, 0, Duration.ofSeconds(5));
+        PeeGeeCacheBootstrapOptions options = new PeeGeeCacheBootstrapOptions(
+                new PeeGeeCacheConfig(null, Duration.ofSeconds(30), 500, false, writeBehind),
+                PgCacheStoreConfig.defaults());
+
+        PeeGeeCaches.create(vertx, pool, options)
+                .compose(manager -> manager.startReactive().map(manager))
+                .compose(manager -> {
+                    ctx.verify(() -> assertTrue(
+                            ((PgPeeGeeCacheManager) manager).isWriteBehindRunning()));
+                    return manager.stopReactive().map(manager);
+                })
+                .onComplete(ctx.succeeding(manager -> ctx.verify(() -> {
+                    assertFalse(((PgPeeGeeCacheManager) manager).isWriteBehindRunning());
                     ctx.completeNow();
                 })));
     }

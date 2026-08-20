@@ -45,8 +45,7 @@ class NativeSqlCounterFunctionTest {
 
     @BeforeEach
     void cleanTables(VertxTestContext ctx) {
-        pool.query("DELETE FROM %s.cache_counters".formatted(SCHEMA))
-                .execute()
+        pg.resetDatabaseState(pool)
                 .onComplete(ctx.succeeding(v -> ctx.completeNow()));
     }
 

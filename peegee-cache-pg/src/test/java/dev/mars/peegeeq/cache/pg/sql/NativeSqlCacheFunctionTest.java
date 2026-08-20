@@ -46,8 +46,7 @@ class NativeSqlCacheFunctionTest {
 
     @BeforeEach
     void cleanTables(VertxTestContext ctx) {
-        pool.query("DELETE FROM %s.cache_entries".formatted(SCHEMA))
-                .execute()
+        pg.resetDatabaseState(pool)
                 .onComplete(ctx.succeeding(v -> ctx.completeNow()));
     }
 

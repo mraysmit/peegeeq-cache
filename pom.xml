@@ -47,6 +47,8 @@
         <module>peegee-cache-pg</module>
         <module>peegee-cache-runtime</module>
         <module>peegee-cache-observability</module>
+        <module>peegee-cache-management-ui</module>
+        <module>peegee-cache-rest</module>
         <module>peegee-cache-test-support</module>
         <module>peegee-cache-benchmarks</module>
         <module>peegee-cache-examples</module>
