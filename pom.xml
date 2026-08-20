@@ -64,6 +64,7 @@
         <opentelemetry.version>1.64.0</opentelemetry.version>
         <slf4j.version>2.0.18</slf4j.version>
         <postgresql.version>42.7.5</postgresql.version>
+        <swagger.parser.version>2.1.46</swagger.parser.version>
         <maven.source.plugin.version>3.4.0</maven.source.plugin.version>
         <maven.javadoc.plugin.version>3.12.0</maven.javadoc.plugin.version>
         <maven.gpg.plugin.version>3.2.8</maven.gpg.plugin.version>

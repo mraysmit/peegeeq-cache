@@ -11,6 +11,8 @@ paths:
         - trustedProxyIdentity: []
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/CurrentSessionNoStore'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getSession
@@ -18,7 +20,13 @@ paths:
     post:
       x-security-profile: LOCAL_BOOTSTRAP
       security: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        $ref: '#/components/requestBodies/LocalTokenExchangeRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/CurrentSessionNoStore'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: exchangeLocalToken
@@ -26,7 +34,12 @@ paths:
       x-security-profile: VIEW_MUTATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
       responses:
+        '204':
+          $ref: '#/components/responses/LocalSessionDeleted'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: deleteLocalSession
@@ -36,6 +49,8 @@ paths:
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/SetupSummaryList'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: listSetups
@@ -43,7 +58,14 @@ paths:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/SetupRegistrationRequest'
       responses:
+        '201':
+          $ref: '#/components/responses/SetupSummaryCreated'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: registerSetup
@@ -52,16 +74,27 @@ paths:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/SetupConnectionRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/SetupConnectionTest'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: testUnregisteredSetup
   /api/v1/setups/{setupId}:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/SetupDetails'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getSetup
@@ -69,114 +102,208 @@ paths:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
       responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: forgetSetup
   /api/v1/setups/{setupId}/connect:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
       responses:
+        '200':
+          $ref: '#/components/responses/SetupSummary'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: connectSetup
   /api/v1/setups/{setupId}/test:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
       responses:
+        '200':
+          $ref: '#/components/responses/SetupConnectionTest'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: testRegisteredSetup
   /api/v1/setups/{setupId}/detach:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
       responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: detachSetup
   /api/v1/setups/{setupId}/health:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/SetupHealth'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getSetupHealth
   /api/v1/setups/{setupId}/capabilities:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/SetupCapabilities'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getSetupCapabilities
   /api/v1/setups/{setupId}/overview:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/Overview'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getOverview
   /api/v1/setups/{setupId}/namespaces:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/NamespacePrefix'
+        - $ref: '#/components/parameters/NamespaceStatus'
+        - $ref: '#/components/parameters/NamespaceSort'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageLimit'
       responses:
+        '200':
+          $ref: '#/components/responses/AdminPageNamespaceStats'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: listNamespaces
   /api/v1/setups/{setupId}/namespaces/export:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/NamespacePrefix'
+        - $ref: '#/components/parameters/NamespaceStatus'
+        - $ref: '#/components/parameters/NamespaceSort'
+        - $ref: '#/components/parameters/NamespaceExportAccept'
       responses:
+        '200':
+          $ref: '#/components/responses/NamespaceExport'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: exportNamespaces
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/NamespaceDetails'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getNamespace
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Prefix'
+        - $ref: '#/components/parameters/EntryValueType'
+        - $ref: '#/components/parameters/EntryTtlState'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/EntrySort'
       responses:
+        '200':
+          $ref: '#/components/responses/AdminPageManagementEntryMetadata'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: listEntries
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/IncludeExpired'
       responses:
+        '200':
+          $ref: '#/components/responses/ManagementEntryMetadataEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getEntry
     put:
       x-security-profile: OPERATE
+      x-wildcard-condition-not-met: SET_MODE_NOT_APPLIED
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ConditionalIfMatch'
+        - $ref: '#/components/parameters/ConditionalIfNoneMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/ManagementCacheSetBody'
       responses:
+        '200':
+          $ref: '#/components/responses/ManagementSetResultEntity'
+        '201':
+          $ref: '#/components/responses/ManagementSetResultEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: setEntry
@@ -184,87 +311,188 @@ paths:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ExactIfMatch'
       responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: deleteEntry
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/value/reveal:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: REVEAL
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/OptionalRevealReasonRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/RevealedEntryValue'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: revealEntryValue
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/ttl:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ExactIfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/EntryTtlRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/ManagementEntryMetadataEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: expireEntry
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/persist:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ExactIfMatch'
       responses:
+        '200':
+          $ref: '#/components/responses/ManagementEntryMetadataEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: persistEntry
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/touch:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: OPERATE
+      x-version-stable: true
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ExactIfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/EntryTouchRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/ManagementEntryMetadataEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: touchEntry
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/preview:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/EntryDeleteSelection'
       responses:
+        '200':
+          $ref: '#/components/responses/BulkDeletePreview'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: previewEntryBulkDelete
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/ConfirmedEntryDelete'
       responses:
+        '200':
+          $ref: '#/components/responses/BulkDeleteResult'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: executeEntryBulkDelete
   /api/v1/setups/{setupId}/counters:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/NamespaceFilter'
+        - $ref: '#/components/parameters/Prefix'
+        - $ref: '#/components/parameters/EntryTtlState'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/EntrySort'
       responses:
+        '200':
+          $ref: '#/components/responses/AdminPageCounterEntry'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: listCounters
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/CounterEntryEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getCounter
     put:
       x-security-profile: OPERATE
+      x-wildcard-condition-not-met: SET_MODE_NOT_APPLIED
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ConditionalIfMatch'
+        - $ref: '#/components/parameters/ConditionalIfNoneMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/ManagementCounterSetBody'
       responses:
+        '200':
+          $ref: '#/components/responses/CounterEntryEntity'
+        '201':
+          $ref: '#/components/responses/CounterEntryEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: setCounter
@@ -272,171 +500,340 @@ paths:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ExactIfMatch'
       responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: deleteCounter
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/increment:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: OPERATE
+      x-wildcard-condition-not-met: SET_MODE_NOT_APPLIED
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ConditionalIfMatch'
+        - $ref: '#/components/parameters/ConditionalIfNoneMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/ManagementCounterAdjustBody'
       responses:
+        '200':
+          $ref: '#/components/responses/CounterEntryEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: adjustCounter
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/ttl:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ExactIfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/CounterTtlRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/CounterEntryEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: expireCounter
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/persist:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ExactIfMatch'
       responses:
+        '200':
+          $ref: '#/components/responses/CounterEntryEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: persistCounter
   /api/v1/setups/{setupId}/counters/bulk-delete/preview:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/CounterDeleteSelection'
       responses:
+        '200':
+          $ref: '#/components/responses/BulkDeletePreview'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: previewCounterBulkDelete
   /api/v1/setups/{setupId}/counters/bulk-delete/execute:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/ConfirmedCounterDelete'
       responses:
+        '200':
+          $ref: '#/components/responses/BulkDeleteResult'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: executeCounterBulkDelete
   /api/v1/setups/{setupId}/locks:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/NamespaceFilter'
+        - $ref: '#/components/parameters/Prefix'
+        - $ref: '#/components/parameters/LeaseState'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageLimit'
       responses:
+        '200':
+          $ref: '#/components/responses/AdminPageLockState'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: listLocks
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/LockStateEntity'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getLock
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/owner/reveal:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: REVEAL
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/OptionalRevealReasonRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/RevealedLockOwner'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: revealLockOwner
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/force-release:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+        - $ref: '#/components/parameters/ExactIfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/ForceReleaseLockBody'
       responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: forceReleaseLock
   /api/v1/setups/{setupId}/pubsub/subscriptions:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     post:
       x-security-profile: VIEW_MUTATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/CreateSubscriptionRequest'
       responses:
+        '201':
+          $ref: '#/components/responses/SubscriptionSummaryCreated'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: createPubSubSubscription
   /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}/stream:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/SubscriptionId'
     get:
       x-security-profile: SSE
       x-transport: sse
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/LastEventId'
       responses:
+        '200':
+          $ref: '#/components/responses/PubSubSse'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: streamPubSubMessages
   /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}/messages/{messageId}/payload/reveal:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/SubscriptionId'
+      - $ref: '#/components/parameters/MessageId'
     post:
       x-security-profile: REVEAL
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/OptionalRevealReasonRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/RevealedPubSubPayload'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: revealPubSubPayload
   /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/SubscriptionId'
     delete:
       x-security-profile: VIEW_MUTATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
       responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: deletePubSubSubscription
   /api/v1/setups/{setupId}/pubsub/publish:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     post:
       x-security-profile: OPERATE
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/PublishRequest'
       responses:
+        '200':
+          $ref: '#/components/responses/PublishAccepted'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: publishPubSubMessage
   /api/v1/setups/{setupId}/monitoring/database:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/DatabaseMonitoring'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getDatabaseMonitoring
   /api/v1/setups/{setupId}/monitoring/runtime:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
       responses:
+        '200':
+          $ref: '#/components/responses/RuntimeMonitoring'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getRuntimeMonitoring
   /api/v1/setups/{setupId}/sse/metrics:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: SSE
       x-transport: sse
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/LastEventId'
       responses:
+        '200':
+          $ref: '#/components/responses/MetricsSse'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: streamMetrics
   /api/v1/setups/{setupId}/activity:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
     get:
       x-security-profile: VIEW
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/ActivityAfter'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/NamespaceFilter'
+        - $ref: '#/components/parameters/ActivityAction'
+        - $ref: '#/components/parameters/ActivityOutcome'
       responses:
+        '200':
+          $ref: '#/components/responses/ActivityPage'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: listActivity
@@ -444,9 +841,17 @@ paths:
     get:
       x-security-profile: WS
       x-transport: websocket
+      x-websocket-message-schema:
+        $ref: '#/components/schemas/MonitoringWebSocketEnvelope'
       security:
         - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/MonitoringSetupId'
+        - $ref: '#/components/parameters/AfterEventId'
       responses:
+        '101':
+          $ref: '#/components/responses/MonitoringWebSocket'
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: monitoringWebSocket
@@ -460,6 +865,333 @@ components:
       type: apiKey
       in: header
       name: X-PeeGeeQ-User
+  parameters:
+    SetupId:
+      name: setupId
+      in: path
+      required: true
+      description: Stable server-side setup identifier.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'
+    EncodedNamespace:
+      name: encodedNamespace
+      in: path
+      required: true
+      description: Canonical unpadded Base64 URL encoding of a non-empty UTF-8 namespace.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 171
+        pattern: '^[A-Za-z0-9_-]+$'
+    EncodedKey:
+      name: encodedKey
+      in: path
+      required: true
+      description: Canonical unpadded Base64 URL encoding of a non-empty UTF-8 key.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 1366
+        pattern: '^[A-Za-z0-9_-]+$'
+    SubscriptionId:
+      name: subscriptionId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    MessageId:
+      name: messageId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Browser origin validated against the configured exact-origin policy.
+      schema: {type: string, format: uri, maxLength: 2048}
+    Csrf:
+      name: X-PeeGeeQ-CSRF
+      in: header
+      required: true
+      description: Session-scoped CSRF token for state-changing requests.
+      schema: {type: string, minLength: 32, maxLength: 512}
+    ExactIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Required strong decimal version tag.
+      schema: {type: string, pattern: '^"v[0-9]+"$'}
+    ConditionalIfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: Exact strong version tag or wildcard as permitted by the selected mode.
+      schema: {type: string, pattern: '^(\*|"v[0-9]+")$'}
+    ConditionalIfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: Wildcard creation precondition.
+      schema: {type: string, const: '*'}
+    LastEventId:
+      name: Last-Event-ID
+      in: header
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128}
+    NamespaceExportAccept:
+      name: Accept
+      in: header
+      required: false
+      schema: {type: string, enum: [application/json, text/csv]}
+    Prefix:
+      name: prefix
+      in: query
+      required: false
+      schema: {type: string, maxLength: 1024}
+    NamespacePrefix:
+      name: prefix
+      in: query
+      required: false
+      schema: {type: string, maxLength: 128}
+    NamespaceStatus:
+      name: status
+      in: query
+      required: false
+      schema: {type: string, enum: [ALL, HEALTHY, EXPIRED_BACKLOG, ACTIVE_LOCKS], default: ALL}
+    NamespaceSort:
+      name: sort
+      in: query
+      required: false
+      schema: {type: string, enum: ['namespace:asc', 'entryCount:desc'], default: 'namespace:asc'}
+    EntrySort:
+      name: sort
+      in: query
+      required: false
+      schema: {type: string, const: 'key:asc'}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    EntryValueType:
+      name: valueType
+      in: query
+      required: false
+      schema: {type: string, enum: [STRING, JSON, LONG, BYTES]}
+    EntryTtlState:
+      name: ttlState
+      in: query
+      required: false
+      schema: {type: string, enum: [ALL_LIVE, PERSISTENT, EXPIRING, INCLUDE_EXPIRED], default: ALL_LIVE}
+    IncludeExpired:
+      name: includeExpired
+      in: query
+      required: false
+      schema: {type: boolean, default: false}
+    NamespaceFilter:
+      name: namespace
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128}
+    LeaseState:
+      name: leaseState
+      in: query
+      required: false
+      schema: {type: string, enum: [ACTIVE, EXPIRING_SOON], default: ACTIVE}
+    ActivityAfter:
+      name: after
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128}
+    ActivityAction:
+      name: action
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128}
+    ActivityOutcome:
+      name: outcome
+      in: query
+      required: false
+      schema: {type: string, enum: [SUCCEEDED, REJECTED, FAILED, UNKNOWN]}
+    MonitoringSetupId:
+      name: setupId
+      in: query
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}
+    AfterEventId:
+      name: afterEventId
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128}
+  requestBodies:
+    LocalTokenExchangeRequest:
+      description: Single-use local bootstrap token exchange.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LocalTokenExchangeRequest'
+    SetupConnectionRequest:
+      description: Unregistered PostgreSQL connection to test.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupConnectionRequest'
+    SetupRegistrationRequest:
+      description: Setup registration and secret references.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupRegistrationRequest'
+    OptionalRevealReasonRequest:
+      description: Optional bounded reason for revealing sensitive data.
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RevealReasonRequest'
+    ManagementCacheSetBody:
+      description: Cache value and atomic TTL mode.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ManagementCacheSetBody'
+    EntryTtlRequest:
+      description: Positive cache-entry TTL.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EntryTtlRequest'
+    EntryTouchRequest:
+      description: Optional positive TTL to refresh while preserving the entry version.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EntryTouchRequest'
+    EntryDeleteSelection:
+      description: Explicit or filter-based entry deletion selection.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EntryDeleteSelection'
+    ConfirmedEntryDelete:
+      description: Single-use entry deletion preview confirmation.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConfirmedEntryDelete'
+    ManagementCounterSetBody:
+      description: Counter value and atomic TTL mode.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ManagementCounterSetBody'
+    ManagementCounterAdjustBody:
+      description: Non-zero counter delta and atomic creation/TTL rules.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ManagementCounterAdjustBody'
+    CounterTtlRequest:
+      description: Positive counter TTL.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CounterTtlRequest'
+    CounterDeleteSelection:
+      description: Explicit counter deletion targets.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CounterDeleteSelection'
+    ConfirmedCounterDelete:
+      description: Single-use counter deletion preview confirmation.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConfirmedCounterDelete'
+    ForceReleaseLockBody:
+      description: Exact decoded lock-key confirmation and optional reason.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ForceReleaseLockBody'
+    CreateSubscriptionRequest:
+      description: Bounded process-local PostgreSQL channel subscription.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CreateSubscriptionRequest'
+    PublishRequest:
+      description: PostgreSQL channel and bounded UTF-8 payload.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PublishRequest'
+  headers:
+    XCorrelationID:
+      description: Request correlation identifier echoed by the server.
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CacheControl:
+      description: Endpoint-specific cache prevention directive.
+      required: true
+      schema:
+        type: string
+    Pragma:
+      description: Legacy cache prevention directive for sensitive reveals.
+      required: true
+      schema:
+        type: string
+        const: no-cache
+    ETag:
+      description: Strong decimal resource version tag.
+      required: true
+      schema:
+        type: string
+        pattern: '^"v[0-9]+"$'
+    Connection:
+      description: SSE connection persistence directive for HTTP/1.1 clients.
+      required: true
+      schema:
+        type: string
+        const: keep-alive
+    SetCookie:
+      description: Rotated, created, or expired management-session cookie.
+      required: false
+      schema:
+        type: string
   responses:
     ManagementProblem:
       description: Safe management API problem response.
@@ -467,7 +1199,1175 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ManagementProblem'
+    CurrentSessionNoStore:
+      description: Current authenticated management session.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Set-Cookie:
+          $ref: '#/components/headers/SetCookie'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CurrentSession'
+    NoContent:
+      description: Operation completed without a response body.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+    LocalSessionDeleted:
+      description: Local session deleted and its cookie expired.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Set-Cookie:
+          $ref: '#/components/headers/SetCookie'
+    SetupSummaryList:
+      description: Registered setup summaries.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupSummaryList'
+    SetupConnectionTest:
+      description: Setup connection test result.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupConnectionTest'
+    SetupSummaryCreated:
+      description: Registered setup summary.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupSummary'
+    SetupSummary:
+      description: Setup summary.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupSummary'
+    SetupDetails:
+      description: Setup details.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupDetails'
+    SetupHealth:
+      description: Setup health snapshot.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupHealth'
+    SetupCapabilities:
+      description: Effective setup capabilities and limits.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SetupCapabilities'
+    Overview:
+      description: Setup overview snapshot.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Overview'
+    AdminPageNamespaceStats:
+      description: Page of namespace statistics.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminPageNamespaceStats'
+    NamespaceExport:
+      description: Bounded namespace metadata export.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NamespaceExport'
+        text/csv:
+          schema:
+            type: string
+    NamespaceDetails:
+      description: Namespace details.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NamespaceDetails'
+    AdminPageManagementEntryMetadata:
+      description: Page of cache-entry metadata.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminPageManagementEntryMetadata'
+    ManagementEntryMetadataEntity:
+      description: Versioned cache-entry metadata.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ManagementEntryMetadata'
+    RevealedEntryValue:
+      description: Sensitive cache-entry value snapshot.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RevealedEntryValue'
+    ManagementSetResultEntity:
+      description: Applied cache-entry set result.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ManagementSetResult'
+    BulkDeletePreview:
+      description: Bounded bulk-delete preview.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BulkDeletePreview'
+    BulkDeleteResult:
+      description: Bulk-delete execution result.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BulkDeleteResult'
+    AdminPageCounterEntry:
+      description: Page of counters.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminPageCounterEntry'
+    CounterEntryEntity:
+      description: Versioned counter.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CounterEntry'
+    AdminPageLockState:
+      description: Page of active locks.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminPageLockState'
+    LockStateEntity:
+      description: Versioned active lock.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LockState'
+    RevealedLockOwner:
+      description: Sensitive lock-owner snapshot.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RevealedLockOwner'
+    SubscriptionSummaryCreated:
+      description: Process-local pub/sub subscription.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SubscriptionSummary'
+    PubSubSse:
+      description: Pub/sub server-sent event stream.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Connection:
+          $ref: '#/components/headers/Connection'
+      content:
+        text/event-stream:
+          schema:
+            $ref: '#/components/schemas/PubSubSseEvent'
+    RevealedPubSubPayload:
+      description: Sensitive retained pub/sub payload.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RevealedPubSubPayload'
+    PublishAccepted:
+      description: Accepted PostgreSQL pub/sub publication.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PublishAccepted'
+    DatabaseMonitoring:
+      description: PostgreSQL monitoring snapshot.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DatabaseMonitoring'
+    RuntimeMonitoring:
+      description: Management-process runtime snapshot.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RuntimeMonitoring'
+    MetricsSse:
+      description: Metrics server-sent event stream.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Connection:
+          $ref: '#/components/headers/Connection'
+      content:
+        text/event-stream:
+          schema:
+            $ref: '#/components/schemas/MetricsSseEvent'
+    ActivityPage:
+      description: Bounded process-local activity page.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ActivityPage'
+    MonitoringWebSocket:
+      description: Switching protocols; subsequent frames follow the declared WebSocket envelope.
   schemas:
+    DecimalString:
+      type: string
+      pattern: '^-?(0|[1-9][0-9]*)$'
+      description: Signed 64-bit integer represented as a decimal string.
+    NonNegativeDecimalString:
+      type: string
+      pattern: '^(0|[1-9][0-9]*)$'
+      description: Non-negative 64-bit value represented as a decimal string.
+    UtcInstant:
+      type: string
+      format: date-time
+      pattern: 'Z$'
+    NamespaceQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        prefix: {type: string, maxLength: 128}
+        status: {type: string, enum: [ALL, HEALTHY, EXPIRED_BACKLOG, ACTIVE_LOCKS], default: ALL}
+        sort: {type: string, enum: ['namespace:asc', 'entryCount:desc'], default: 'namespace:asc'}
+        cursor: {type: string, minLength: 1, maxLength: 4096}
+        limit: {type: integer, minimum: 1, maximum: 200, default: 50}
+    NamespaceExportQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        prefix: {type: string, maxLength: 128}
+        status: {type: string, enum: [ALL, HEALTHY, EXPIRED_BACKLOG, ACTIVE_LOCKS], default: ALL}
+        sort: {type: string, enum: ['namespace:asc', 'entryCount:desc'], default: 'namespace:asc'}
+    EntryQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        prefix: {type: string, maxLength: 1024}
+        valueType: {type: string, enum: [STRING, JSON, LONG, BYTES]}
+        ttlState: {type: string, enum: [ALL_LIVE, PERSISTENT, EXPIRING, INCLUDE_EXPIRED], default: ALL_LIVE}
+        cursor: {type: string, minLength: 1, maxLength: 4096}
+        limit: {type: integer, minimum: 1, maximum: 200, default: 50}
+        sort: {type: string, const: 'key:asc'}
+    CounterQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        prefix: {type: string, maxLength: 1024}
+        ttlState: {type: string, enum: [ALL_LIVE, PERSISTENT, EXPIRING, INCLUDE_EXPIRED], default: ALL_LIVE}
+        cursor: {type: string, minLength: 1, maxLength: 4096}
+        limit: {type: integer, minimum: 1, maximum: 200, default: 50}
+        sort: {type: string, const: 'key:asc'}
+    LockQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        prefix: {type: string, maxLength: 1024}
+        leaseState: {type: string, enum: [ACTIVE, EXPIRING_SOON], default: ACTIVE}
+        cursor: {type: string, minLength: 1, maxLength: 4096}
+        limit: {type: integer, minimum: 1, maximum: 200, default: 50}
+    ActivityQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        after: {type: string, minLength: 1, maxLength: 128}
+        limit: {type: integer, minimum: 1, maximum: 200, default: 50}
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        action: {type: string, minLength: 1, maxLength: 128}
+        outcome: {type: string, enum: [SUCCEEDED, REJECTED, FAILED, UNKNOWN]}
+    CurrentSession:
+      type: object
+      additionalProperties: false
+      required: [user, roles, serverVersion, apiVersion, authenticationMode, csrfToken, sessionIdleExpiresAt, sessionExpiresAt, features]
+      properties:
+        user: {type: string, minLength: 1, maxLength: 256}
+        roles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, enum: [viewer, operator]}
+        serverVersion: {type: string}
+        apiVersion: {type: string, const: v1}
+        authenticationMode: {type: string, enum: [TRUSTED_PROXY, LOCAL_TOKEN]}
+        csrfToken: {type: string, minLength: 32, maxLength: 512}
+        sessionIdleExpiresAt: {$ref: '#/components/schemas/UtcInstant'}
+        sessionExpiresAt: {$ref: '#/components/schemas/UtcInstant'}
+        features:
+          type: object
+          additionalProperties: false
+          required: [setupRegistration, sensitiveReveal]
+          properties:
+            setupRegistration: {type: boolean}
+            sensitiveReveal: {type: boolean}
+    LocalTokenExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: {type: string, minLength: 43, maxLength: 512}
+    SetupConnectionRequest:
+      type: object
+      additionalProperties: false
+      required: [host, port, database, schema, username, password, sslMode, poolMaxSize]
+      properties:
+        host: {type: string, minLength: 1, maxLength: 253}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        database: {type: string, minLength: 1, maxLength: 63}
+        schema: {type: string, minLength: 1, maxLength: 63}
+        username: {type: string, minLength: 1, maxLength: 128}
+        password: {type: string, minLength: 1, maxLength: 4096, writeOnly: true}
+        sslMode: {type: string, enum: [DISABLE, REQUIRE, VERIFY_CA, VERIFY_FULL]}
+        trustProfileId: {type: [string, 'null'], maxLength: 128}
+        poolMaxSize: {type: integer, minimum: 1, maximum: 100}
+    SetupRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [setupId, displayName, host, port, database, schema, username, password, sslMode, poolMaxSize]
+      properties:
+        setupId: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}
+        displayName: {type: string, minLength: 1, maxLength: 128}
+        host: {type: string, minLength: 1, maxLength: 253}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        database: {type: string, minLength: 1, maxLength: 63}
+        schema: {type: string, minLength: 1, maxLength: 63}
+        username: {type: string, minLength: 1, maxLength: 128}
+        password: {type: string, minLength: 1, maxLength: 4096, writeOnly: true}
+        sslMode: {type: string, enum: [DISABLE, REQUIRE, VERIFY_CA, VERIFY_FULL]}
+        trustProfileId: {type: [string, 'null'], maxLength: 128}
+        poolMaxSize: {type: integer, minimum: 1, maximum: 100}
+    SetupHealthSummary:
+      type: object
+      additionalProperties: false
+      required: [status, latencyMillis, checkedAt]
+      properties:
+        status: {type: string, enum: [UP, DOWN, DEGRADED]}
+        latencyMillis: {type: integer, minimum: 0}
+        checkedAt: {$ref: '#/components/schemas/UtcInstant'}
+    SetupSummary:
+      type: object
+      additionalProperties: false
+      required: [setupId, displayName, host, port, database, schema, sslMode, source, state, schemaState, lastHealth]
+      properties:
+        setupId: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}
+        displayName: {type: string, minLength: 1, maxLength: 128}
+        host: {type: string}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        database: {type: string}
+        schema: {type: string}
+        sslMode: {type: string, enum: [DISABLE, REQUIRE, VERIFY_CA, VERIFY_FULL]}
+        source: {type: string, enum: [CONFIGURED, UI_SESSION]}
+        state: {type: string, enum: [CONNECTING, CONNECTED, DETACHING, DETACHED, UNHEALTHY]}
+        schemaState: {type: string, enum: [READY, MISSING, OUTDATED, UNKNOWN]}
+        lastHealth:
+          oneOf:
+            - $ref: '#/components/schemas/SetupHealthSummary'
+            - type: 'null'
+    SetupSummaryList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/SetupSummary'}
+    SetupCapabilities:
+      type: object
+      additionalProperties: false
+      required: [migrationVersion, capabilities, limits]
+      properties:
+        migrationVersion: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        capabilities:
+          type: object
+          additionalProperties: false
+          required: [namespaceInspection, expiredEntryInspection, counterInspection, lockInspection, forcedLockRelease, bulkEntryDelete, bulkCounterDelete, pubSub, databaseStatistics, sensitiveValueReveal]
+          properties:
+            namespaceInspection: {type: boolean}
+            expiredEntryInspection: {type: boolean}
+            counterInspection: {type: boolean}
+            lockInspection: {type: boolean}
+            forcedLockRelease: {type: boolean}
+            bulkEntryDelete: {type: boolean}
+            bulkCounterDelete: {type: boolean}
+            pubSub: {type: boolean}
+            databaseStatistics: {type: boolean}
+            sensitiveValueReveal: {type: boolean}
+        limits:
+          type: object
+          additionalProperties: false
+          required: [pubSubChannelMaxBytes, pubSubPayloadMaxBytes, maximumValueBytes]
+          properties:
+            pubSubChannelMaxBytes: {type: integer, minimum: 1, maximum: 63}
+            pubSubPayloadMaxBytes: {type: integer, minimum: 1}
+            maximumValueBytes: {type: integer, minimum: 1}
+    SetupConnectionTest:
+      type: object
+      additionalProperties: false
+      required: [databaseReachable, schemaState, migrationVersion, latencyMillis, capabilities, limits]
+      properties:
+        databaseReachable: {type: boolean}
+        schemaState: {type: string, enum: [READY, MISSING, OUTDATED, UNKNOWN]}
+        migrationVersion: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        latencyMillis: {type: integer, minimum: 0}
+        capabilities: {$ref: '#/components/schemas/SetupCapabilities/properties/capabilities'}
+        limits: {$ref: '#/components/schemas/SetupCapabilities/properties/limits'}
+    SetupDetails:
+      type: object
+      additionalProperties: false
+      required: [setup, migrationVersion, runtime, registeredAt, connectedAt]
+      properties:
+        setup: {$ref: '#/components/schemas/SetupSummary'}
+        migrationVersion: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        runtime:
+          type: object
+          additionalProperties: false
+          required: [defaultTtlMillis, expirySweeperEnabled, expirySweepIntervalMillis, expirySweepBatchSize, poolMaxSize]
+          properties:
+            defaultTtlMillis: {type: [integer, 'null'], minimum: 1}
+            expirySweeperEnabled: {type: boolean}
+            expirySweepIntervalMillis: {type: integer, minimum: 1}
+            expirySweepBatchSize: {type: integer, minimum: 1}
+            poolMaxSize: {type: integer, minimum: 1}
+        registeredAt: {$ref: '#/components/schemas/UtcInstant'}
+        connectedAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+    SetupHealth:
+      type: object
+      additionalProperties: false
+      required: [status, schemaReady, latencyMillis, checkedAt, detail]
+      properties:
+        status: {type: string, enum: [UP, DOWN, DEGRADED]}
+        schemaReady: {type: boolean}
+        latencyMillis: {type: integer, minimum: 0}
+        checkedAt: {$ref: '#/components/schemas/UtcInstant'}
+        detail: {type: string, maxLength: 512}
+    OverviewTotals:
+      type: object
+      additionalProperties: false
+      required: [namespaceCount, liveEntryCount, liveCounterCount, activeLockCount, expiredEntryCount, schemaBytes]
+      properties:
+        namespaceCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        liveEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        liveCounterCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        activeLockCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        expiredEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        schemaBytes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+    ExpiryOverview:
+      type: object
+      additionalProperties: false
+      required: [oldestExpiredRowLagMillis, sweeperEnabled, lastSweepAt, lastSweepDeletedRows]
+      properties:
+        oldestExpiredRowLagMillis: {type: [integer, 'null'], minimum: 0}
+        sweeperEnabled: {type: boolean}
+        lastSweepAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+        lastSweepDeletedRows: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+    Overview:
+      type: object
+      additionalProperties: false
+      required: [scope, observedAt, health, totals, expiry, valueTypeCounts, topNamespaces]
+      properties:
+        scope: {type: string, const: DATABASE}
+        observedAt: {$ref: '#/components/schemas/UtcInstant'}
+        health: {$ref: '#/components/schemas/SetupHealth'}
+        totals: {$ref: '#/components/schemas/OverviewTotals'}
+        expiry: {$ref: '#/components/schemas/ExpiryOverview'}
+        valueTypeCounts:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+          propertyNames: {enum: [STRING, JSON, LONG, BYTES]}
+        topNamespaces:
+          type: array
+          maxItems: 20
+          items: {$ref: '#/components/schemas/NamespaceStats'}
+    NamespaceStats:
+      type: object
+      additionalProperties: false
+      required: [namespace, encodedNamespace, liveEntryCount, liveCounterCount, activeLockCount, expiringEntryCount, expiredEntryCount, estimatedStorageBytes, observedAt]
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        encodedNamespace: {type: string, pattern: '^[A-Za-z0-9_-]+$'}
+        liveEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        liveCounterCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        activeLockCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        expiringEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        expiredEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        estimatedStorageBytes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        observedAt: {$ref: '#/components/schemas/UtcInstant'}
+    AdminPageNamespaceStats:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, hasMore]
+      properties:
+        items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/NamespaceStats'}}
+        nextCursor: {type: [string, 'null'], maxLength: 4096}
+        hasMore: {type: boolean}
+    NamespaceExport:
+      type: object
+      additionalProperties: false
+      required: [items, truncated, exportedAt]
+      properties:
+        items: {type: array, maxItems: 10000, items: {$ref: '#/components/schemas/NamespaceStats'}}
+        truncated: {type: boolean}
+        exportedAt: {$ref: '#/components/schemas/UtcInstant'}
+    TtlDistributionBucket:
+      type: object
+      additionalProperties: false
+      required: [range, count]
+      properties:
+        range: {type: string, enum: [PERSISTENT, EXPIRED, LT_1_MINUTE, FROM_1_TO_5_MINUTES, FROM_5_TO_30_MINUTES, FROM_30_TO_60_MINUTES, GTE_60_MINUTES]}
+        count: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+    NamespaceDetails:
+      type: object
+      additionalProperties: false
+      required: [stats, valueTypeCounts, ttlDistribution]
+      properties:
+        stats: {$ref: '#/components/schemas/NamespaceStats'}
+        valueTypeCounts:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+          propertyNames: {enum: [STRING, JSON, LONG, BYTES]}
+        ttlDistribution:
+          type: array
+          maxItems: 7
+          items: {$ref: '#/components/schemas/TtlDistributionBucket'}
+    TtlState:
+      type: object
+      additionalProperties: false
+      required: [state, ttlMillis, expiresAt]
+      properties:
+        state: {type: string, enum: [PERSISTENT, EXPIRING, EXPIRED]}
+        ttlMillis: {type: [integer, 'null'], minimum: 0}
+        expiresAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+    ManagementEntryMetadata:
+      type: object
+      additionalProperties: false
+      required: [namespace, encodedNamespace, key, encodedKey, valueType, sizeBytes, version, createdAt, updatedAt, ttl]
+      properties:
+        namespace: {type: string, minLength: 1}
+        encodedNamespace: {type: string, pattern: '^[A-Za-z0-9_-]+$'}
+        key: {type: string, minLength: 1}
+        encodedKey: {type: string, pattern: '^[A-Za-z0-9_-]+$'}
+        valueType: {type: string, enum: [STRING, JSON, LONG, BYTES]}
+        sizeBytes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        createdAt: {$ref: '#/components/schemas/UtcInstant'}
+        updatedAt: {$ref: '#/components/schemas/UtcInstant'}
+        lastAccessedAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+        ttl: {$ref: '#/components/schemas/TtlState'}
+    AdminPageManagementEntryMetadata:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, hasMore]
+      properties:
+        items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/ManagementEntryMetadata'}}
+        nextCursor: {type: [string, 'null'], maxLength: 4096}
+        hasMore: {type: boolean}
+    CacheStringValue:
+      type: object
+      additionalProperties: false
+      required: [type, text]
+      properties:
+        type: {type: string, const: STRING}
+        text: {type: string}
+    CacheJsonValue:
+      type: object
+      additionalProperties: false
+      required: [type, text]
+      properties:
+        type: {type: string, const: JSON}
+        text: {type: string}
+    CacheLongValue:
+      type: object
+      additionalProperties: false
+      required: [type, decimal]
+      properties:
+        type: {type: string, const: LONG}
+        decimal: {$ref: '#/components/schemas/DecimalString'}
+    CacheBytesValue:
+      type: object
+      additionalProperties: false
+      required: [type, base64]
+      properties:
+        type: {type: string, const: BYTES}
+        base64: {type: string, contentEncoding: base64}
+    CacheValue:
+      oneOf:
+        - $ref: '#/components/schemas/CacheStringValue'
+        - $ref: '#/components/schemas/CacheJsonValue'
+        - $ref: '#/components/schemas/CacheLongValue'
+        - $ref: '#/components/schemas/CacheBytesValue'
+      discriminator:
+        propertyName: type
+    RevealReasonRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: {type: string, minLength: 3, maxLength: 240}
+    RevealedEntryValue:
+      type: object
+      additionalProperties: false
+      required: [key, version, value, revealedAt, autoHideAfterMillis]
+      properties:
+        key: {type: string, minLength: 1}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        value: {$ref: '#/components/schemas/CacheValue'}
+        revealedAt: {$ref: '#/components/schemas/UtcInstant'}
+        autoHideAfterMillis: {type: integer, minimum: 1}
+    ManagementCacheSetBody:
+      type: object
+      additionalProperties: false
+      required: [value, ttlMode, ttlMillis, setMode]
+      properties:
+        value: {$ref: '#/components/schemas/CacheValue'}
+        ttlMode: {type: string, enum: [PRESERVE_EXISTING, USE_DEFAULT, REPLACE, REMOVE]}
+        ttlMillis: {type: [integer, 'null'], minimum: 1}
+        setMode: {type: string, enum: [UPSERT, ONLY_IF_ABSENT, ONLY_IF_PRESENT, ONLY_IF_VERSION_MATCHES]}
+    ManagementSetResult:
+      type: object
+      additionalProperties: false
+      required: [applied, created, version, updatedAt, ttl]
+      properties:
+        applied: {type: boolean, const: true}
+        created: {type: boolean}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        updatedAt: {$ref: '#/components/schemas/UtcInstant'}
+        ttl: {$ref: '#/components/schemas/TtlState'}
+    EntryTtlRequest:
+      type: object
+      additionalProperties: false
+      required: [ttlMillis]
+      properties:
+        ttlMillis: {type: integer, minimum: 1}
+    EntryTouchRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshTtlMillis]
+      properties:
+        refreshTtlMillis: {type: [integer, 'null'], minimum: 1}
+    VersionedKeyTarget:
+      type: object
+      additionalProperties: false
+      required: [key, version]
+      properties:
+        key: {type: string, minLength: 1, maxLength: 1024}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+    ExplicitEntrySelection:
+      type: object
+      additionalProperties: false
+      required: [type, targets]
+      properties:
+        type: {type: string, const: EXPLICIT}
+        targets: {type: array, minItems: 1, maxItems: 1000, uniqueItems: true, items: {$ref: '#/components/schemas/VersionedKeyTarget'}}
+    FilterEntrySelection:
+      type: object
+      additionalProperties: false
+      required: [type, ttlState]
+      properties:
+        type: {type: string, const: FILTER}
+        prefix: {type: string, maxLength: 1024}
+        valueType: {type: string, enum: [STRING, JSON, LONG, BYTES]}
+        ttlState: {type: string, enum: [ALL_LIVE, PERSISTENT, EXPIRING, INCLUDE_EXPIRED]}
+    EntryDeleteSelection:
+      type: object
+      additionalProperties: false
+      required: [selection]
+      properties:
+        selection:
+          oneOf:
+            - $ref: '#/components/schemas/ExplicitEntrySelection'
+            - $ref: '#/components/schemas/FilterEntrySelection'
+          discriminator: {propertyName: type}
+    BulkDeletePreview:
+      type: object
+      additionalProperties: false
+      required: [previewToken, expiresAt, setupId, resolvedCount, totalBytes, sampleKeys, confirmationPhrase]
+      properties:
+        previewToken: {type: string, minLength: 32, maxLength: 512}
+        expiresAt: {$ref: '#/components/schemas/UtcInstant'}
+        setupId: {type: string}
+        namespace: {type: [string, 'null']}
+        resolvedCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        totalBytes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        sampleKeys: {type: array, maxItems: 20, items: {type: string}}
+        confirmationPhrase: {type: string, minLength: 1, maxLength: 512}
+    ConfirmedEntryDelete:
+      type: object
+      additionalProperties: false
+      required: [previewToken, confirmationPhrase]
+      properties:
+        previewToken: {type: string, minLength: 32, maxLength: 512}
+        confirmationPhrase: {type: string, minLength: 1, maxLength: 512}
+    BulkDeleteConflict:
+      type: object
+      additionalProperties: false
+      required: [key, reason]
+      properties:
+        key: {type: string}
+        reason: {type: string, enum: [VERSION_CHANGED, NOT_FOUND, FAILED]}
+    BulkDeleteResult:
+      type: object
+      additionalProperties: false
+      required: [processedCount, deletedCount, conflictCount, missingCount, failedCount, conflicts]
+      properties:
+        processedCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        deletedCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        conflictCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        missingCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        failedCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        conflicts: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/BulkDeleteConflict'}}
+    CounterEntry:
+      type: object
+      additionalProperties: false
+      required: [namespace, encodedNamespace, key, encodedKey, value, version, createdAt, updatedAt, ttl]
+      properties:
+        namespace: {type: string, minLength: 1}
+        encodedNamespace: {type: string, pattern: '^[A-Za-z0-9_-]+$'}
+        key: {type: string, minLength: 1}
+        encodedKey: {type: string, pattern: '^[A-Za-z0-9_-]+$'}
+        value: {$ref: '#/components/schemas/DecimalString'}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        createdAt: {$ref: '#/components/schemas/UtcInstant'}
+        updatedAt: {$ref: '#/components/schemas/UtcInstant'}
+        ttl: {$ref: '#/components/schemas/TtlState'}
+    AdminPageCounterEntry:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, hasMore]
+      properties:
+        items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/CounterEntry'}}
+        nextCursor: {type: [string, 'null'], maxLength: 4096}
+        hasMore: {type: boolean}
+    ManagementCounterSetBody:
+      type: object
+      additionalProperties: false
+      required: [value, ttlMode, ttlMillis]
+      properties:
+        value: {$ref: '#/components/schemas/DecimalString'}
+        ttlMode: {type: string, enum: [PRESERVE_EXISTING, REPLACE, REMOVE]}
+        ttlMillis: {type: [integer, 'null'], minimum: 1}
+    ManagementCounterAdjustBody:
+      type: object
+      additionalProperties: false
+      required: [delta, createIfMissing, ttlMode, ttlMillis]
+      properties:
+        delta:
+          allOf:
+            - $ref: '#/components/schemas/DecimalString'
+            - not: {const: '0'}
+        createIfMissing: {type: boolean, default: false}
+        ttlMode: {type: string, enum: [PRESERVE_EXISTING, REPLACE, REMOVE]}
+        ttlMillis: {type: [integer, 'null'], minimum: 1}
+    CounterTtlRequest:
+      type: object
+      additionalProperties: false
+      required: [ttlMillis]
+      properties:
+        ttlMillis: {type: integer, minimum: 1}
+    VersionedCounterTarget:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, version]
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        key: {type: string, minLength: 1, maxLength: 1024}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+    CounterDeleteSelection:
+      type: object
+      additionalProperties: false
+      required: [targets]
+      properties:
+        targets: {type: array, minItems: 1, maxItems: 1000, uniqueItems: true, items: {$ref: '#/components/schemas/VersionedCounterTarget'}}
+    ConfirmedCounterDelete:
+      type: object
+      additionalProperties: false
+      required: [previewToken, confirmationPhrase]
+      properties:
+        previewToken: {type: string, minLength: 32, maxLength: 512}
+        confirmationPhrase: {type: string, pattern: '^DELETE [1-9][0-9]* COUNTERS$'}
+    MaskedOwner:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: {type: string, const: MASKED}
+    LockState:
+      type: object
+      additionalProperties: false
+      required: [namespace, encodedNamespace, key, encodedKey, fencingToken, version, createdAt, updatedAt, leaseExpiresAt, leaseRemainingMillis, owner]
+      properties:
+        namespace: {type: string, minLength: 1}
+        encodedNamespace: {type: string, pattern: '^[A-Za-z0-9_-]+$'}
+        key: {type: string, minLength: 1}
+        encodedKey: {type: string, pattern: '^[A-Za-z0-9_-]+$'}
+        fencingToken: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        createdAt: {$ref: '#/components/schemas/UtcInstant'}
+        updatedAt: {$ref: '#/components/schemas/UtcInstant'}
+        leaseExpiresAt: {$ref: '#/components/schemas/UtcInstant'}
+        leaseRemainingMillis: {type: integer, minimum: 0}
+        owner: {$ref: '#/components/schemas/MaskedOwner'}
+    AdminPageLockState:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, hasMore]
+      properties:
+        items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/LockState'}}
+        nextCursor: {type: [string, 'null'], maxLength: 4096}
+        hasMore: {type: boolean}
+    RevealedLockOwner:
+      type: object
+      additionalProperties: false
+      required: [key, ownerToken, version, revealedAt, autoHideAfterMillis]
+      properties:
+        key: {type: string, minLength: 1}
+        ownerToken: {type: string, minLength: 1}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        revealedAt: {$ref: '#/components/schemas/UtcInstant'}
+        autoHideAfterMillis: {type: integer, minimum: 1}
+    ForceReleaseLockBody:
+      type: object
+      additionalProperties: false
+      required: [confirmationKey]
+      properties:
+        confirmationKey: {type: string, minLength: 1, maxLength: 1024}
+        reason: {type: string, minLength: 3, maxLength: 240}
+    CreateSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [channel]
+      properties:
+        channel: {type: string, minLength: 1, maxLength: 63}
+        bufferLimit: {type: integer, minimum: 1, maximum: 500, default: 200}
+    SubscriptionSummary:
+      type: object
+      additionalProperties: false
+      required: [subscriptionId, channel, streamPath, bufferLimit, createdAt, expiresAt]
+      properties:
+        subscriptionId: {type: string, minLength: 1, maxLength: 64}
+        channel: {type: string, minLength: 1}
+        streamPath: {type: string, pattern: '^/api/v1/'}
+        bufferLimit: {type: integer, minimum: 1, maximum: 500}
+        createdAt: {$ref: '#/components/schemas/UtcInstant'}
+        expiresAt: {$ref: '#/components/schemas/UtcInstant'}
+    RevealedPubSubPayload:
+      type: object
+      additionalProperties: false
+      required: [messageId, channel, payload, contentType, encoding, receivedAt, revealedAt, autoHideAfterMillis]
+      properties:
+        messageId: {type: string}
+        channel: {type: string}
+        payload: {type: string}
+        contentType: {type: [string, 'null']}
+        encoding: {type: string, const: UTF8}
+        receivedAt: {$ref: '#/components/schemas/UtcInstant'}
+        revealedAt: {$ref: '#/components/schemas/UtcInstant'}
+        autoHideAfterMillis: {type: integer, minimum: 1}
+    PublishRequest:
+      type: object
+      additionalProperties: false
+      required: [channel, payload]
+      properties:
+        channel: {type: string, minLength: 1, maxLength: 63}
+        payload: {type: string}
+    PublishAccepted:
+      type: object
+      additionalProperties: false
+      required: [accepted, publishedAt]
+      properties:
+        accepted: {type: boolean, const: true}
+        publishedAt: {$ref: '#/components/schemas/UtcInstant'}
+    AvailableLongValue:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [availability, reason, value]
+          properties:
+            availability: {type: string, const: AVAILABLE}
+            reason: {type: 'null'}
+            value: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        - type: object
+          additionalProperties: false
+          required: [availability, reason, value]
+          properties:
+            availability: {type: string, const: UNAVAILABLE}
+            reason: {type: string, minLength: 1, maxLength: 256}
+            value: {type: 'null'}
+      discriminator: {propertyName: availability}
+    DatabaseMonitoring:
+      type: object
+      additionalProperties: false
+      required: [scope, observedAt, health, tableBytes, indexBytes, schemaBytes, liveRows, expiredRows, deadTuples, lastVacuumAt, lastAutovacuumAt, databaseConnections, cacheConnections, expiryBacklog, oldestExpiredRowLagMillis]
+      properties:
+        scope: {type: string, const: DATABASE}
+        observedAt: {$ref: '#/components/schemas/UtcInstant'}
+        health: {$ref: '#/components/schemas/SetupHealth'}
+        tableBytes: {$ref: '#/components/schemas/AvailableLongValue'}
+        indexBytes: {$ref: '#/components/schemas/AvailableLongValue'}
+        schemaBytes: {$ref: '#/components/schemas/AvailableLongValue'}
+        liveRows: {$ref: '#/components/schemas/AvailableLongValue'}
+        expiredRows: {$ref: '#/components/schemas/AvailableLongValue'}
+        deadTuples: {$ref: '#/components/schemas/AvailableLongValue'}
+        lastVacuumAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+        lastAutovacuumAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+        databaseConnections: {$ref: '#/components/schemas/AvailableLongValue'}
+        cacheConnections: {$ref: '#/components/schemas/AvailableLongValue'}
+        expiryBacklog: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        oldestExpiredRowLagMillis: {type: [integer, 'null'], minimum: 0}
+    RuntimePoolState:
+      type: object
+      additionalProperties: false
+      required: [active, idle, pending, maximum]
+      properties:
+        active: {$ref: '#/components/schemas/AvailableLongValue'}
+        idle: {$ref: '#/components/schemas/AvailableLongValue'}
+        pending: {$ref: '#/components/schemas/AvailableLongValue'}
+        maximum: {$ref: '#/components/schemas/AvailableLongValue'}
+    AuditQueueState:
+      type: object
+      additionalProperties: false
+      required: [depth, capacity, acceptingMutations]
+      properties:
+        depth: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        capacity: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        acceptingMutations: {type: boolean}
+    ExpirySweeperState:
+      type: object
+      additionalProperties: false
+      required: [ownedByRuntime, running, lastSweepAt]
+      properties:
+        ownedByRuntime: {type: boolean}
+        running: {type: boolean}
+        lastSweepAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+    OperationAggregate:
+      type: object
+      additionalProperties: false
+      required: [operation, status, count, errorCount, latencyMillis]
+      properties:
+        operation: {type: string, minLength: 1, maxLength: 128}
+        status: {type: string, enum: [ACTIVE, COMPLETE, FAILED]}
+        count: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        errorCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        latencyMillis: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+    RuntimeMonitoring:
+      type: object
+      additionalProperties: false
+      required: [scope, observedAt, lifecycleState, pool, activeOperations, pubSubSubscriptions, sseClients, webSocketClients, retainedPayloadBytes, auditQueue, expirySweeper, operations]
+      properties:
+        scope: {type: string, const: MANAGEMENT_RUNTIME}
+        observedAt: {$ref: '#/components/schemas/UtcInstant'}
+        lifecycleState: {type: string, enum: [NEW, STARTING, RUNNING, STOPPING, STOPPED, FAILED]}
+        pool: {$ref: '#/components/schemas/RuntimePoolState'}
+        activeOperations: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        pubSubSubscriptions: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        sseClients: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        webSocketClients: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        retainedPayloadBytes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        auditQueue: {$ref: '#/components/schemas/AuditQueueState'}
+        expirySweeper: {$ref: '#/components/schemas/ExpirySweeperState'}
+        operations: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/OperationAggregate'}}
+    ActivityResource:
+      type: object
+      additionalProperties: false
+      required: [type, identifier]
+      properties:
+        type: {type: string, enum: [SETUP, CACHE_ENTRY, COUNTER, LOCK, SUBSCRIPTION, PUBSUB_MESSAGE]}
+        identifier: {type: [string, 'null'], maxLength: 1024}
+    ActivityEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, occurredAt, actor, action, outcome, setupId, namespace, resource, summary, correlationId]
+      properties:
+        eventId: {type: string, minLength: 1, maxLength: 64}
+        occurredAt: {$ref: '#/components/schemas/UtcInstant'}
+        actor: {type: string, minLength: 1, maxLength: 256}
+        action: {type: string, minLength: 1, maxLength: 128}
+        outcome: {type: string, enum: [SUCCEEDED, REJECTED, FAILED, UNKNOWN]}
+        setupId: {type: string}
+        namespace: {type: [string, 'null'], maxLength: 128}
+        resource: {$ref: '#/components/schemas/ActivityResource'}
+        summary: {type: string, maxLength: 512}
+        correlationId: {type: string, maxLength: 128}
+    ActivityPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextAfter, hasMore]
+      properties:
+        items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/ActivityEvent'}}
+        nextAfter: {type: [string, 'null'], maxLength: 4096}
+        hasMore: {type: boolean}
+    StreamReady:
+      type: object
+      additionalProperties: false
+      required: [connectedAt]
+      properties:
+        connectedAt: {$ref: '#/components/schemas/UtcInstant'}
+    SetupStateChanged:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: {type: string, enum: [CONNECTING, CONNECTED, DETACHING, DETACHED, UNHEALTHY]}
+    ResourceChanged:
+      type: object
+      additionalProperties: false
+      required: [resourceType, namespace, identifier, action, resultingVersion, actor, outcome, correlationId]
+      properties:
+        resourceType: {type: string, enum: [CACHE_ENTRY, COUNTER, LOCK, SUBSCRIPTION, PUBSUB_MESSAGE]}
+        namespace: {type: [string, 'null']}
+        identifier: {type: [string, 'null']}
+        action: {type: string}
+        resultingVersion:
+          oneOf:
+            - $ref: '#/components/schemas/NonNegativeDecimalString'
+            - type: 'null'
+        actor: {type: string}
+        outcome: {type: string, enum: [SUCCEEDED, REJECTED, FAILED, UNKNOWN]}
+        correlationId: {type: string}
+    ServerShuttingDown:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, maxLength: 256}
     PubSubSseEvent:
       type: object
       additionalProperties: false
@@ -480,6 +2380,7 @@ components:
           enum: [ready, pubsub.message, reset]
         data:
           oneOf:
+            - $ref: '#/components/schemas/StreamReady'
             - $ref: '#/components/schemas/PubSubMessageMetadata'
             - $ref: '#/components/schemas/StreamReset'
     PubSubMessageMetadata:
@@ -513,7 +2414,12 @@ components:
           type: string
           enum: [ready, overview.snapshot, runtime.snapshot, health.changed, reset]
         data:
-          type: object
+          oneOf:
+            - $ref: '#/components/schemas/StreamReady'
+            - $ref: '#/components/schemas/Overview'
+            - $ref: '#/components/schemas/RuntimeMonitoring'
+            - $ref: '#/components/schemas/SetupHealth'
+            - $ref: '#/components/schemas/StreamReset'
     MonitoringWebSocketEnvelope:
       type: object
       additionalProperties: false
@@ -530,7 +2436,14 @@ components:
         setupId:
           type: string
         data:
-          type: object
+          oneOf:
+            - $ref: '#/components/schemas/StreamReady'
+            - $ref: '#/components/schemas/SetupStateChanged'
+            - $ref: '#/components/schemas/SetupHealth'
+            - $ref: '#/components/schemas/ActivityEvent'
+            - $ref: '#/components/schemas/ResourceChanged'
+            - $ref: '#/components/schemas/StreamReset'
+            - $ref: '#/components/schemas/ServerShuttingDown'
     StreamReset:
       type: object
       additionalProperties: false
@@ -540,6 +2453,7 @@ components:
           type: [string, 'null']
     ManagementProblem:
       type: object
+      additionalProperties: false
       required: [type, title, status, code, detail, instance, correlationId, fieldErrors]
       properties:
         type:
@@ -561,6 +2475,11 @@ components:
           type: string
         fieldErrors:
           type: array
+          maxItems: 100
           items:
             type: object
             additionalProperties: false
+            required: [field, message]
+            properties:
+              field: {type: string, minLength: 1, maxLength: 256}
+              message: {type: string, minLength: 1, maxLength: 512}

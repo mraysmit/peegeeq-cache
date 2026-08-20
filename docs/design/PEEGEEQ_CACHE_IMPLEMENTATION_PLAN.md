@@ -584,7 +584,7 @@ Explicit non-goal unless strategy changes:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md)
 
-**Status:** **IN PROGRESS (M1)** — M0 is complete with synchronized API/UI contracts, a reviewed 50-operation manifest, an accepted configuration/build decision, two empty management module boundaries, resolved local design links, and an 11-project `mvn validate` success. M1 OpenAPI and protocol primitives are now proceeding through strict TDD; no route implementation exists.
+**Status:** **IN PROGRESS (M3 NEXT)** — M0, M1, and M2 are complete. The reviewed 50-operation OpenAPI 3.1 boundary, pure REST protocol codecs/rules, immutable Java management models, capability-aware service fallback, and keyed audit SPI are implemented and tested. The 11-project clean install is green with 368 tests. M3.1 namespace inspection is next; no management route or PostgreSQL management implementation exists yet.
 
 Scope:
 
@@ -599,7 +599,7 @@ Prerequisites:
 2. approve the REST/UI module and reproducible root-build shape;
 3. follow phases M0–M10 in order, one failing behavior test at a time;
 4. retain Mockito prohibition and real PostgreSQL Testcontainers coverage;
-5. keep Phase 8 implementation deferred until an explicit start decision.
+5. keep Phase 8.3 browser-console implementation deferred until an explicit start decision independent of the active backend work.
 
 ### Phase 8.3: Management browser console
 
@@ -643,7 +643,7 @@ Last reviewed: 2026-08-20
 | Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Overlapping manual sweeps now share the same in-flight result, and `awaitIdle()` observes that result atomically. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, sweep coalescing, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
 | Phase 6: V1 completion features | COMPLETE | Safe/recovering pub/sub, scan, bulk operations, all-operation telemetry contracts, comprehensive readiness, and interleaved telemetry/lock/pub-sub benchmark scenarios are implemented and green. | None |
 | Phase 7: Native SQL contract hardening | COMPLETE | Eight mutation functions have exact documented signatures; three stable read views, migration ledger/runner, compatibility policy, and real baseline idempotence and forward-version rejection tests are present. | None |
-| Phase 8: V2 and later | IN PROGRESS | Phase 8.1 write-behind is complete: bounded last-write-wins buffering, overflow fallback, TTL-adjusted DELETE-before-SET batch flushing, bounded retry/discard telemetry, shutdown admission gating/drain, disabled-by-default configuration, and real PostgreSQL coverage are implemented. | Phase 8.2 management API and Phase 8.3 browser console remain NOT STARTED and require independent explicit start decisions. |
+| Phase 8: V2 and later | IN PROGRESS | Phase 8.1 write-behind is complete. Phase 8.2 has completed M0–M2: the parser-valid 50-operation OpenAPI boundary, 13 focused protocol-rule tests, immutable management API/service models, compatible unsupported fallback, and keyed audit SPI are implemented without premature route or PostgreSQL behavior. | Continue Phase 8.2 from M3.1 through M10; Phase 8.3 browser console remains NOT STARTED and requires its own explicit start decision. |
 
 Tracking update rules:
 
@@ -658,7 +658,8 @@ The current verification record is based on the complete reactor rather than his
 
 Execution evidence:
 
-- `mvn clean install` — BUILD SUCCESS across all 9 reactor projects; the complete reactor was rebuilt, tested, packaged, and installed into the local Maven repository
+- latest `mvn clean install` — BUILD SUCCESS across all 11 reactor projects; 59 Surefire suites and 368 tests passed with zero failures/errors/skips, and the complete reactor was rebuilt, packaged, and installed into the local Maven repository
+- `mvn -pl :peegee-cache-api -Prelease-artifacts package -DskipTests` — BUILD SUCCESS with the M2 public API source and Javadoc artifacts generated
 - `mvn clean verify` — BUILD SUCCESS
 - final `mvn verify` after all code and benchmark changes — BUILD SUCCESS
 - `mvn verify -Pcentral-release '-Dgpg.skip=true'` — BUILD SUCCESS with the Central release profile loaded and signing intentionally skipped
@@ -675,22 +676,28 @@ The 2026-08-19 review of commits `8fdfc31` through `ef3611a` added four correctn
 
 The review also removed `VertxAwait`. PostgreSQL fixtures, repository/service/SQL tests, runtime integration tests, and benchmark orchestration now compose Vert.x `Future` values directly, including asynchronous cleanup and failure preservation. `PgTestSupport.resetDatabaseState(Pool)` centralizes schema-aware truncation and fencing-sequence reset for test isolation; its real-PostgreSQL contract test verifies all three domain tables are cleared and the next fencing token is 1. A source scan found no remaining Java reference to `VertxAwait`.
 
+Management API M1 is complete. `peegee-cache-rest/src/main/openapi/peegeeq-cache-management-v1.yaml` declares the exact reviewed 50-operation inventory, complete path/query/header/precondition parameters, required and optional request bodies, success statuses/schemas/headers, RFC-style problem responses, security profiles, aggregate/query models, typed SSE events, and typed WebSocket frames. Ten `ManagementOpenApiContractTest` tests compare this boundary to the reviewed manifest and validate it with Swagger Parser 2.1.46 with zero parser messages. Thirteen additional tests cover canonical identifier encoding, exact ETags and preconditions, scoped signed cursors, decimal/timestamp representation, strict request handling, safe problems, and literal prefix escaping.
+
+Management API M2 is complete. `peegee-cache-api` now provides immutable management queries, metadata, requests, mutation outcomes, reveal snapshots, capability/limit models, the asynchronous `ManagementService`, and a source-compatible `PeeGeeCache.management()` fallback. The audit SPI uses externally resolved versioned HMAC keys, stores only bounded fingerprints in default intents, guards terminal completion, and keeps mandatory audit failures distinct from optional telemetry failures. Twenty-four focused M2 tests are green, and the release-artifact profile generates API source and Javadoc jars. M3.1 real-PostgreSQL namespace inspection is next; route and database management implementations have not started.
+
 The interleaved local telemetry smoke measured 0.22% Micrometer throughput overhead and 20.67% p99 overhead. Before the pool-layout fix, two of three identical full-duration executions timed out in different scenarios. Diagnosis isolated deterministic client-side pool saturation: eight workers shared an eight-connection pool with two independent sweepers, while PostgreSQL sampling found no one-second SQL or lock wait. The strict-TDD fix reserves connection headroom, removes sweepers from sustained-workload managers, and uses one dedicated expiry-measurement manager. Three identical post-fix runs passed; the worst p99 was 30.628 ms, expiry lag was 16–28 ms, and failover recovery was 13–16 ms. These local-container figures remain regression evidence, not production SLOs.
 
 Observed automated test inventory:
 
 | Module | Tests | Failures | Errors | Skipped |
 |---|---:|---:|---:|---:|
-| `peegee-cache-api` | 34 | 0 | 0 | 0 |
+| `peegee-cache-api` | 58 | 0 | 0 | 0 |
 | `peegee-cache-core` | 20 | 0 | 0 | 0 |
 | `peegee-cache-pg` | 196 | 0 | 0 | 0 |
 | `peegee-cache-runtime` | 48 | 0 | 0 | 0 |
 | `peegee-cache-observability` | 5 | 0 | 0 | 0 |
 | `peegee-cache-test-support` | 4 | 0 | 0 | 0 |
 | `peegee-cache-benchmarks` | 14 | 0 | 0 | 0 |
-| **Total** | **321** | **0** | **0** | **0** |
+| `peegee-cache-management-ui` | 0 | 0 | 0 | 0 |
+| `peegee-cache-rest` | 23 | 0 | 0 | 0 |
+| **Total** | **368** | **0** | **0** | **0** |
 
-The count above is the sum of the 49 Surefire XML suites produced under the seven tested `peegee-cache-*` reactor modules by the clean install. Stale reports under legacy, non-reactor `pg-cache-*` directories are deliberately excluded.
+The count above is the sum of the 59 Surefire XML suites produced under the eight tested `peegee-cache-*` reactor modules by the clean install. Stale reports under legacy, non-reactor `pg-cache-*` directories are deliberately excluded.
 
 Criteria verdicts:
 
@@ -700,6 +707,21 @@ Criteria verdicts:
 - Phase 6: COMPLETE — pub/sub identifier safety, comprehensive readiness, all-operation telemetry coverage, and overhead evidence satisfy the exit criteria
 - Phase 7: COMPLETE — stable reads, exact function signatures, compatibility policy, migration runner, and upgrade tests satisfy the SQL contract
 - Phase 8.1: COMPLETE — opt-in write-behind buffering satisfies coalescing, capacity fallback, TTL accounting, retry/telemetry, PostgreSQL delivery, and manager shutdown-drain criteria
+- Phase 8.2 M0–M2: COMPLETE — synchronized contracts, the exact OpenAPI boundary, protocol primitives, typed management API, compatible fallback, and audit SPI satisfy their phase gates; M3 is not started
+
+## 3.3 Management backend handover after M2
+
+The repository is ready to begin M3.1 and no later management slice. The next change must start with failing Testcontainers tests for namespace inspection against the actual V001 schema, compare results with independent raw SQL, and then add the minimum asynchronous PostgreSQL implementation in `peegee-cache-pg`. It must reuse the M2 contracts rather than introduce transport-specific duplicates.
+
+The next implementation must preserve these boundaries:
+
+- do not add REST routes, authentication, setup lifecycle, reveal behavior, or mutations while completing M3;
+- return metadata only: no cache value, payload, lock-owner token, credential, cursor secret, or audit key may enter an inspection DTO;
+- keep pagination deterministic and use typed cursor positions rather than interpolating cursor data into SQL;
+- compose Vert.x `Future` values directly and retain real PostgreSQL coverage without Mockito or blocking test adapters;
+- complete the focused `peegee-cache-pg` gate and a full 11-project clean install before advancing the M3 status.
+
+The accepted baseline for the next red test is 59 Surefire suites and 368 tests with zero failures, errors, or skips. The authoritative test order and M3 exit criteria remain in `PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md`, beginning at M3.1 namespace inspection.
 
 ## 4. Feature rollout by milestone
 
@@ -1017,4 +1039,5 @@ Current conclusion:
 - Phases 0–5 are complete
 - Phase 6 is complete
 - Phase 7 is complete
-- Phase 8 remains intentionally deferred pending an explicit V2 scope decision
+- Phase 8.1 and management backend M0–M2 are complete; M3.1 is the next backend slice
+- Phase 8.3 remains intentionally deferred pending its own browser-console start decision

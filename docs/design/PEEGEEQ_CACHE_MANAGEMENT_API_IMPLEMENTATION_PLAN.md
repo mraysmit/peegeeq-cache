@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management API Implementation Plan
 
-**Status:** Phase M0 complete; Phase M1 in progress
+**Status:** Phases M0–M2 complete; Phase M3 is next
 
 **Date:** 17 August 2026
 
@@ -175,8 +175,8 @@ Fixtures remain in the lowest reusable module that does not create a production 
 | Phase | Status | Primary deliverable |
 |---|---|---|
 | M0 | COMPLETE | Contract synchronization and build decision record |
-| M1 | IN PROGRESS | Module skeleton, OpenAPI baseline, and protocol primitives |
-| M2 | NOT STARTED | Typed Java management contract |
+| M1 | COMPLETE | Module skeleton, OpenAPI baseline, and protocol primitives |
+| M2 | COMPLETE | Typed Java management contract |
 | M3 | NOT STARTED | PostgreSQL inspection/read model |
 | M4 | NOT STARTED | Atomic PostgreSQL mutation and reveal model |
 | M5 | NOT STARTED | Audit, authentication, CSRF/origin, target policy, and rate-limit primitives |
@@ -186,7 +186,7 @@ Fixtures remain in the lowest reusable module that does not create a production 
 | M9 | NOT STARTED | Pub/sub, SSE, and WebSocket transports |
 | M10 | NOT STARTED | Monitoring, observability, packaging, compatibility, and final acceptance |
 
-Only one phase may be `IN PROGRESS`. A phase remains incomplete if any required test is missing, skipped, flaky, or passing only through a relaxed assertion.
+Only one phase may be `IN PROGRESS`. A phase remains incomplete if any required test is missing, skipped, nondeterministic, or passing only through a relaxed assertion.
 
 ## 8. Phase M0 — Contract and build synchronization
 
@@ -226,6 +226,8 @@ Objective: make the machine-readable boundary and pure protocol rules executable
 
 ### M1.1 OpenAPI skeleton
 
+Status: **COMPLETE** — the reviewed 50-operation manifest is represented by a parser-valid OpenAPI 3.1 contract with complete operation parameters, request bodies, success responses, headers, aggregate/query schemas, security profiles, problem responses, and typed SSE/WebSocket payloads. No handler or database behavior was added.
+
 First red tests:
 
 - `ManagementOpenApiContractTest.loadsOpenApi31Document`;
@@ -237,6 +239,8 @@ Minimum implementation: create `peegee-cache-rest/src/main/openapi/peegeeq-cache
 
 ### M1.2 Identifier codec
 
+Status: **COMPLETE** — canonical unpadded Base64 URL encoding round-trips arbitrary UTF-8 identifier data and rejects malformed, padded, non-UTF-8, empty, NUL-containing, or over-limit values.
+
 First red tests, one at a time:
 
 - arbitrary UTF-8 round trip through canonical unpadded Base64 URL encoding;
@@ -247,6 +251,8 @@ Minimum implementation: one shared codec used later by routes and generated link
 
 ### M1.3 ETag and precondition codec
 
+Status: **COMPLETE** — exact canonical `"v{decimal}"` tags, endpoint-gated wildcard conditions, conflicting-header rejection, and typed `PRECONDITION_REQUIRED` failures are covered by focused tests.
+
 First red tests:
 
 - parse and render exact `"v{decimal}"` tags;
@@ -255,6 +261,8 @@ First red tests:
 - map missing required headers to `PRECONDITION_REQUIRED`.
 
 ### M1.4 Cursor contract
+
+Status: **COMPLETE** — versioned HMAC-SHA-256 cursors use injected server key material and `Clock`, retain typed composite positions, bind every query scope field, and reject tampering, expiry, scope mismatch, unknown versions, and malformed payloads.
 
 First red tests:
 
@@ -266,6 +274,8 @@ First red tests:
 Minimum implementation: versioned cursor codec using authenticated server-held key material and injected `Clock`.
 
 ### M1.5 Common wire rules
+
+Status: **COMPLETE** — decimal-string 64-bit values, UTC `Z` timestamps, safe problem responses, strict request/content/correlation rules, and literal PostgreSQL `LIKE` prefix escaping are centralized and tested.
 
 First red tests:
 
@@ -282,18 +292,28 @@ Phase gate:
 - `peegee-cache-rest` module test suite green;
 - no database or route behavior implemented prematurely.
 
-Current M1.1 evidence (in progress):
+M1.1 completion evidence:
 
 - `loadsOpenApi31Document` red: the packaged OpenAPI resource was absent; green after adding the minimal `3.1.0` document at the required resource path.
 - `matchesReviewedOperationManifest` red: actual operation inventory was empty; green after declaring the exact 50 method/path/operation-ID tuples.
 - `declaresSecurityAndProblemResponsesForEveryProtectedOperation` red first on the missing problem component and then exposed unsupported YAML merge-key inheritance; green only after every operation explicitly declared its effective security profile, OpenAPI security requirement or bootstrap exception, and reusable problem response.
 - `declaresSseAndWebSocketComponentSchemas` red: transport schemas were absent; green after declaring pub/sub SSE, metrics SSE, monitoring WebSocket, nullable pub/sub content type, and reset schemas/extensions.
-- `mvn -pl peegee-cache-rest test` passes 4 tests with zero failures/errors/skips; `mvn validate` passes all 11 reactor projects; no route or management Java implementation exists.
-- M1.1 remains open until every operation has its complete request/parameter/success-response/header schema and a standards-aware OpenAPI validation test. M1.2 identifier-codec work must not begin before that closure.
+- `declaresReviewedSuccessResponsesAndHeaders` red on absent success statuses; green after every operation declared its exact success status/schema and reusable header profile. An intermediate YAML-alias failure led to explicit portable response-header declarations.
+- `declaresEveryPathTemplateParameter` red on the missing `setupId`; green after all template variables were declared as required reusable path parameters with canonical identifier bounds.
+- `declaresReviewedJsonRequestBodies` red on the absent counter-adjust body; green after all required and optional JSON request bodies matched the manifest.
+- `declaresReviewedQueryHeaderAndPreconditionParameters` red on absent counter-adjust preconditions; green after filters, pagination, content negotiation, exact/wildcard conditions, SSE resume, WebSocket query, Origin, and CSRF parameters were attached to their exact operations.
+- `passesStandardsAwareOpenApi31Validation` red with unresolved schema references; green with Swagger Parser 2.1.46 after closing every referenced schema and producing zero parser messages.
+- `closesReviewedAggregateQueryAndMutationSemantics` red on the missing `NamespaceQuery`; green after closing all named query/aggregate schemas and explicitly encoding touch version stability and wildcard-condition outcomes.
+- `mvn -pl peegee-cache-rest test` passes 10 tests with zero failures/errors/skips.
+- The completed REST suite passes 23 tests across 5 suites: the 10 OpenAPI boundary tests plus 13 identifier, ETag/precondition, cursor, and common-wire-rule tests.
+- `mvn clean install` passes all 11 reactor projects, 59 Surefire suites, and 368 tests with zero failures/errors/skips, rebuilding, packaging, and installing every artifact.
+- No route, handler, or database behavior was introduced by M1; PostgreSQL management implementation remains reserved for M3 and M4.
 
 ## 10. Phase M2 — Typed Java management contract
 
 Objective: add a complete API surface capable of representing the HTTP concurrency and audit contract without follow-up inference.
+
+Status: **COMPLETE** — immutable management models, capability-aware service/fallback contracts, and the keyed audit SPI are implemented in `peegee-cache-api` without changing existing consumer requirements.
 
 ### M2.1 Immutable model validation
 
@@ -338,6 +358,17 @@ Phase gate:
 - public API Javadoc describes privileged management use and async failures;
 - existing API consumers compile unchanged;
 - full reactor tests green before PostgreSQL implementation starts.
+
+M2 completion evidence:
+
+- The management model families validate pagination/query bounds, mutation/version combinations, TTL modes, reveal snapshots, bulk confirmations, monitoring availability, capabilities, and effective limits.
+- `PeeGeeCache.management()` is a compatible default method. Its fallback reports unsupported capabilities and returns failed Vert.x futures with `ManagementCapabilityException`; privileged and sensitive operations require `ManagementActionContext`.
+- The audit SPI accepts externally resolved rotation-key references, produces versioned HMAC-SHA-256 fingerprints truncated to a configured 128–256 bits, prevents raw sensitive identifiers from entering the default intent DTO, and distinguishes audit failures from optional telemetry failures.
+- Terminal audit completion is idempotent for the same outcome and rejects a conflicting second terminal outcome.
+- The `peegee-cache-api` suite passes 58 tests across 9 suites, including 24 focused M2 tests, with zero failures/errors/skips.
+- `mvn -pl :peegee-cache-api -Prelease-artifacts package -DskipTests` succeeds and generates both source and Javadoc artifacts.
+- The complete 11-project `mvn clean install` passes 59 Surefire suites and 368 tests with zero failures/errors/skips, proving existing reactor consumers still compile and test unchanged.
+- M3.1 namespace inspection is the next slice and must begin with failing real-PostgreSQL Testcontainers tests against the V001 schema.
 
 ## 11. Phase M3 — PostgreSQL inspection and read model
 
