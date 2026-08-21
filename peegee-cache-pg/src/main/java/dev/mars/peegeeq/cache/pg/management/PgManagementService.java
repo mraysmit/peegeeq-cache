@@ -5,41 +5,88 @@ import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.LockKey;
 import io.vertx.core.Future;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /** PostgreSQL-backed management service, implemented incrementally by management phase. */
 public final class PgManagementService implements ManagementService {
 
-    private static final AdminCapabilities CAPABILITIES = new AdminCapabilities(
-            EnumSet.of(
-                    ManagementCapability.NAMESPACE_INSPECTION,
-                    ManagementCapability.ENTRY_INSPECTION,
-                    ManagementCapability.COUNTER_INSPECTION,
-                    ManagementCapability.LOCK_INSPECTION,
-                    ManagementCapability.DATABASE_MONITORING,
-                    ManagementCapability.EXPIRY_MONITORING),
+    private static final EnumSet<ManagementCapability> INSPECTION_CAPABILITIES = EnumSet.of(
+            ManagementCapability.NAMESPACE_INSPECTION,
+            ManagementCapability.ENTRY_INSPECTION,
+            ManagementCapability.COUNTER_INSPECTION,
+            ManagementCapability.LOCK_INSPECTION,
+            ManagementCapability.DATABASE_MONITORING,
+            ManagementCapability.EXPIRY_MONITORING);
+
+    private static final AdminCapabilities READ_ONLY_CAPABILITIES = new AdminCapabilities(
+            INSPECTION_CAPABILITIES,
             ManagementLimits.defaults());
 
     private final PgManagementReadRepository repository;
+    private final PgManagementMutationRepository mutationRepository;
     private final String setupId;
     private final ManagementCursorCodec cursors;
+    private final AdminCapabilities capabilities;
+    private final ManagementAuditSink auditSink;
+    private final ManagementAuditFingerprinter auditFingerprinter;
+    private final Clock auditClock;
+    private final Supplier<String> auditEventIdSupplier;
+    private final Duration defaultEntryTtl;
 
     public PgManagementService(
             PgManagementReadRepository repository,
             String setupId,
             ManagementCursorCodec cursors) {
         this.repository = Objects.requireNonNull(repository, "repository");
+        this.mutationRepository = null;
         this.setupId = Objects.requireNonNull(setupId, "setupId");
         this.cursors = Objects.requireNonNull(cursors, "cursors");
+        this.capabilities = READ_ONLY_CAPABILITIES;
+        this.auditSink = null;
+        this.auditFingerprinter = null;
+        this.auditClock = null;
+        this.auditEventIdSupplier = null;
+        this.defaultEntryTtl = null;
+    }
+
+    public PgManagementService(
+            PgManagementReadRepository repository,
+            PgManagementMutationRepository mutationRepository,
+            String setupId,
+            ManagementCursorCodec cursors,
+            ManagementAuditSink auditSink,
+            ManagementAuditFingerprinter auditFingerprinter,
+            Clock auditClock,
+            Supplier<String> auditEventIdSupplier,
+            Duration defaultEntryTtl) {
+        this.repository = Objects.requireNonNull(repository, "repository");
+        this.mutationRepository = Objects.requireNonNull(mutationRepository, "mutationRepository");
+        this.setupId = Objects.requireNonNull(setupId, "setupId");
+        this.cursors = Objects.requireNonNull(cursors, "cursors");
+        this.auditSink = Objects.requireNonNull(auditSink, "auditSink");
+        this.auditFingerprinter = Objects.requireNonNull(auditFingerprinter, "auditFingerprinter");
+        this.auditClock = Objects.requireNonNull(auditClock, "auditClock");
+        this.auditEventIdSupplier = Objects.requireNonNull(auditEventIdSupplier, "auditEventIdSupplier");
+        if (defaultEntryTtl != null && (defaultEntryTtl.isZero() || defaultEntryTtl.isNegative())) {
+            throw new IllegalArgumentException("defaultEntryTtl must be positive when configured");
+        }
+        this.defaultEntryTtl = defaultEntryTtl;
+        EnumSet<ManagementCapability> supported = EnumSet.copyOf(INSPECTION_CAPABILITIES);
+        supported.add(ManagementCapability.ENTRY_REVEAL);
+        supported.add(ManagementCapability.ENTRY_MUTATION);
+        this.capabilities = new AdminCapabilities(supported, ManagementLimits.defaults());
     }
 
     @Override
     public AdminCapabilities capabilities() {
-        return CAPABILITIES;
+        return capabilities;
     }
 
     @Override
@@ -143,8 +190,90 @@ public final class PgManagementService implements ManagementService {
                 scope, ManagementCursorPosition.identifier(identifier.apply(items.getLast())));
         return new AdminPage<>(items, next, true);
     }
-    @Override public Future<RevealedEntryValue> revealEntry(RevealEntryRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_REVEAL); }
-    @Override public Future<ManagementSetResult> setEntry(ManagementCacheSetRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_MUTATION); }
+    @Override
+    public Future<RevealedEntryValue> revealEntry(
+            RevealEntryRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.ENTRY_REVEAL);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        ManagementAuditIntent intent = entryIntent(
+                ManagementAuditAction.REVEAL_ENTRY,
+                request.key(),
+                null,
+                request.reason(),
+                context);
+        return reserveAudit(intent).compose(reservation ->
+                mutationRepository.revealEntry(request.key()).transform(result -> {
+                    if (result.failed()) {
+                        return completeAudit(
+                                reservation,
+                                new ManagementAuditOutcome(
+                                        ManagementAuditTerminalOutcome.FAILED,
+                                        "DATABASE_UNAVAILABLE",
+                                        null))
+                                .compose(ignored -> Future.failedFuture(result.cause()));
+                    }
+                    return result.result()
+                            .<Future<RevealedEntryValue>>map(revealed -> completeAudit(
+                                            reservation,
+                                            new ManagementAuditOutcome(
+                                                    ManagementAuditTerminalOutcome.SUCCEEDED,
+                                                    "ENTRY_VALUE_REVEALED",
+                                                    revealed.version()))
+                                    .map(revealed))
+                            .orElseGet(() -> completeAudit(
+                                            reservation,
+                                            new ManagementAuditOutcome(
+                                                    ManagementAuditTerminalOutcome.REJECTED,
+                                                    "ENTRY_NOT_FOUND",
+                                                    null))
+                                    .compose(ignored -> Future.failedFuture(
+                                            new ManagementNotFoundException(
+                                                    ManagementNotFoundException.Resource.ENTRY))));
+                }));
+    }
+    @Override
+    public Future<ManagementSetResult> setEntry(
+            ManagementCacheSetRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.ENTRY_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        ManagementAuditIntent intent = entryIntent(
+                ManagementAuditAction.SET_ENTRY,
+                request.key(),
+                request.expectedVersion(),
+                null,
+                context);
+        return reserveAudit(intent).compose(reservation ->
+                mutationRepository.setEntry(request, defaultEntryTtl).transform(result -> {
+                    if (result.failed()) {
+                        return completeAudit(
+                                reservation,
+                                new ManagementAuditOutcome(
+                                        ManagementAuditTerminalOutcome.FAILED,
+                                        "DATABASE_UNAVAILABLE",
+                                        null))
+                                .compose(ignored -> Future.failedFuture(result.cause()));
+                    }
+                    ManagementSetResult setResult = result.result();
+                    ManagementAuditOutcome auditOutcome = setResult.outcome() == ManagementMutationOutcome.APPLIED
+                            ? new ManagementAuditOutcome(
+                                    ManagementAuditTerminalOutcome.SUCCEEDED,
+                                    "ENTRY_SET",
+                                    setResult.resultingVersion())
+                            : new ManagementAuditOutcome(
+                                    ManagementAuditTerminalOutcome.REJECTED,
+                                    setAuditCode(setResult.outcome()),
+                                    null);
+                    return completeAudit(reservation, auditOutcome).map(setResult);
+                }));
+    }
     @Override public Future<VersionedMutationResult<ManagementEntryMetadata>> expireEntry(VersionedEntryTtlRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_MUTATION); }
     @Override public Future<VersionedMutationResult<ManagementEntryMetadata>> persistEntry(VersionedCacheKeyRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_MUTATION); }
     @Override public Future<VersionedMutationResult<ManagementEntryMetadata>> touchEntry(VersionedEntryTouchRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_MUTATION); }
@@ -211,6 +340,62 @@ public final class PgManagementService implements ManagementService {
 
     private static <T> Future<T> unavailable(ManagementCapability capability) {
         return Future.failedFuture(new ManagementCapabilityException(capability));
+    }
+
+    private ManagementAuditIntent entryIntent(
+            ManagementAuditAction action,
+            CacheKey key,
+            Long expectedVersion,
+            String reason,
+            ManagementActionContext context) {
+        return new ManagementAuditIntent(
+                auditEventIdSupplier.get(),
+                auditClock.instant(),
+                context.actor(),
+                context.roles(),
+                action,
+                setupId,
+                ManagementResourceType.ENTRY,
+                Map.of(
+                        "namespace", auditFingerprinter.fingerprint(key.namespace()),
+                        "key", auditFingerprinter.fingerprint(key.key())),
+                expectedVersion,
+                reason,
+                context.sourceAddress(),
+                context.correlationId());
+    }
+
+    private Future<ManagementAuditReservation> reserveAudit(ManagementAuditIntent intent) {
+        try {
+            return auditSink.reserveIntent(intent).recover(failure ->
+                    Future.failedFuture(new ManagementAuditException(
+                            "Management audit intent reservation failed", failure)));
+        } catch (RuntimeException failure) {
+            return Future.failedFuture(new ManagementAuditException(
+                    "Management audit intent reservation failed", failure));
+        }
+    }
+
+    private Future<Void> completeAudit(
+            ManagementAuditReservation reservation,
+            ManagementAuditOutcome outcome) {
+        try {
+            return auditSink.complete(reservation, outcome).recover(failure ->
+                    Future.failedFuture(new ManagementAuditException(
+                            "Management audit terminal outcome is unavailable", failure)));
+        } catch (RuntimeException failure) {
+            return Future.failedFuture(new ManagementAuditException(
+                    "Management audit terminal outcome is unavailable", failure));
+        }
+    }
+
+    private static String setAuditCode(ManagementMutationOutcome outcome) {
+        return switch (outcome) {
+            case NOT_FOUND -> "ENTRY_NOT_FOUND";
+            case VERSION_MISMATCH -> "VERSION_MISMATCH";
+            case CONDITION_NOT_MET -> "SET_MODE_NOT_APPLIED";
+            case APPLIED -> throw new IllegalArgumentException("Applied sets use a succeeded audit outcome");
+        };
     }
 
     private ManagementCursorScope counterScope(CounterQuery query) {

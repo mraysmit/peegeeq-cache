@@ -1,8 +1,10 @@
 # PeeGeeQ Cache Management API Implementation Plan
 
-**Status:** Phases M0–M2 complete; M3 implementation complete with phase gate in progress
+**Status:** Phases M0–M3 and M4.1 complete; M4.2 entry TTL/persist/touch/delete is next
 
 **Date:** 17 August 2026
+
+**Last updated:** 21 August 2026
 
 **Delivery method:** Strict test-driven development
 
@@ -18,7 +20,7 @@ It covers:
 - backend fixtures in `peegee-cache-test-support`;
 - OpenAPI and browser-facing compatibility gates consumed by `peegee-cache-management-ui`.
 
-Status changes require the evidence defined in this plan. M0–M2 are complete; M3 production code and focused acceptance are implemented, but M3 remains in progress until its module and full-reactor phase gates complete.
+Status changes require the evidence defined in this plan. M0–M3 and M4.1 are complete; M4 remains in progress and continues with the M4.2 red tests in this plan.
 
 ## 2. Authority and prerequisite documents
 
@@ -177,7 +179,7 @@ Fixtures remain in the lowest reusable module that does not create a production 
 | M0 | COMPLETE | Contract synchronization and build decision record |
 | M1 | COMPLETE | Module skeleton, OpenAPI baseline, and protocol primitives |
 | M2 | COMPLETE | Typed Java management contract |
-| M3 | IN PROGRESS | PostgreSQL inspection/read model implemented; complete module/reactor gates pending |
+| M3 | COMPLETE | PostgreSQL inspection/read model, complete module/reactor gates, and safe-output review |
 | M4 | NOT STARTED | Atomic PostgreSQL mutation and reveal model |
 | M5 | NOT STARTED | Audit, authentication, CSRF/origin, target policy, and rate-limit primitives |
 | M6 | NOT STARTED | Setup registry and REST server lifecycle |
@@ -376,7 +378,7 @@ M2 completion evidence:
 
 Objective: implement authoritative metadata reads with deterministic pagination and no sensitive-field leakage.
 
-Status: **IN PROGRESS — implementation and focused acceptance complete; module and reactor phase gates pending.**
+Status: **COMPLETE.**
 
 Every item starts as a failing Testcontainers test and uses the actual V001 schema.
 
@@ -463,7 +465,7 @@ Implemented behavior:
 - `PgPeeGeeCache` retains its existing constructor and adds management-service injection. Without an injected service it preserves the compatible unsupported fallback.
 - Reveals, mutations, and bulk operations remain capability failures. M4 is not started, and no route, handler, authentication, or setup lifecycle was introduced by M3.
 
-Pending change-set inventory:
+M3 change-set inventory:
 
 - API contract corrections: `CounterQuery`, `EntryQuery`, `ManagementEntryMetadata`, and `NamespaceStats`.
 - New API read/cursor types: `ManagementTtlFilter`, `NamespaceDetails`, `ManagementNotFoundException`, `ManagementReadinessException`, `ManagementCursorCodec`, `ManagementCursorException`, `ManagementCursorPosition`, and `ManagementCursorScope`.
@@ -471,13 +473,16 @@ Pending change-set inventory:
 - REST integration: the direct `peegee-cache-api` dependency and the delegating REST `ManagementCursorCodec`.
 - Focused regression coverage: management model tests, `PgManagementReadRepositoryTest`, `PgPeeGeeCacheTest`, and the existing REST cursor contract tests.
 
-Focused evidence:
+Completion evidence:
 
 - `PgManagementReadRepositoryTest`: 14 tests passed on PostgreSQL 18.3, covering the M3.1–M3.4 behavior above, schema readiness, between-page changes, maximum identifiers, and index plans.
 - `ManagementCursorCodecTest` in `peegee-cache-rest`: 2 adapter/contract tests passed after delegation to the shared codec.
 - `PgPeeGeeCacheTest`: the focused management-facade test passed with both constructor paths preserved.
 - Clean build/install slices used by these focused tests passed, and the post-edit banned-pattern scan across touched Java sources was clean.
-- A complete `peegee-cache-pg` suite run reached pre-existing pub/sub tests but exceeded the local three-minute command window without logging a test failure. This is not a passing module gate and is not counted as one. Full reactor verification has likewise not yet been recorded for the pending M3 changes.
+- The complete `mvn -pl :peegee-cache-pg -am test` module/dependency gate passed. Current reports for its dependency slice contain 37 suites and 292 tests across `peegee-cache-api`, `peegee-cache-core`, `peegee-cache-test-support`, and `peegee-cache-pg`, with zero failures/errors/skips.
+- The complete 11-project `mvn clean install` gate passed. The current reactor inventory contains 60 Surefire suites and 382 tests with zero failures/errors/skips; `peegee-cache-pg` accounts for 210 tests across 22 suites.
+- All 60 Surefire XML reports parsed successfully. Captured output contains no asynchronous-failure signature, leakage canary, secret, or raw management identifier, and there are no Surefire dump/dumpstream files. The 16 flagged output lines are expected idempotent-schema notices, deliberate pub/sub connection-loss recovery, and the injected write-behind terminal-failure test.
+- The repository-wide banned-pattern review found no Mockito or substitute framework, in-memory database substitute, disabled or `Thread.sleep()` timing test, empty catch, or test exclusion.
 
 Phase gate:
 
@@ -487,13 +492,17 @@ Phase gate:
 - metadata DTO leakage scan green;
 - `peegee-cache-pg` and full reactor suites green.
 
-Phase-gate verdict: **PENDING**. The focused acceptance, SQL parameterization, query-plan, and metadata-leakage criteria are satisfied; the complete module and reactor suite criteria still require successful recorded runs.
+Phase-gate verdict: **COMPLETE**. Focused acceptance, SQL parameterization, query-plan and metadata-leakage checks, complete module and reactor suites, and the Surefire output/banned-pattern review satisfy every M3 criterion.
 
 ## 12. Phase M4 — Atomic mutation and reveal model
 
 Objective: produce every HTTP-visible mutation outcome and resulting version in the same statement or transaction that observes/applies the change.
 
+Status: **IN PROGRESS — M4.1 is complete; M4.2 is the next strict-TDD slice.**
+
 ### M4.1 Entry reveal and set
+
+Status: **COMPLETE**
 
 Test order:
 
@@ -504,7 +513,24 @@ Test order:
 5. concurrent version updates yield one winner and `VERSION_MISMATCH` for stale requests;
 6. result metadata/ETag version equals the committed row version.
 
+Implemented behavior:
+
+- `PgManagementMutationSql` and `PgManagementMutationRepository` reveal value, version, and database observation time from one live-row statement; missing and expired entries become the typed entry-not-found failure at the service boundary.
+- All four set modes produce `APPLIED`, `CONDITION_NOT_MET`, `NOT_FOUND`, or `VERSION_MISMATCH` from the mutation statement that observes/applies the condition. Applied statements return creation state, committed version, timestamps, size, and TTL metadata without a diagnostic follow-up read.
+- `PRESERVE_EXISTING`, `USE_DEFAULT`, `REPLACE`, and `REMOVE` are applied atomically with the value. `ONLY_IF_ABSENT` can reclaim an expired physical row and resets it to a newly created version-1 entry.
+- Exact-version statements lock the live row before deciding the outcome. A real concurrent PostgreSQL test proves one version-2 winner, one stale mismatch, and agreement between returned metadata and the committed value/version.
+- The mutation-aware `PgManagementService` requires a successful audit reservation before reveal or set work reaches PostgreSQL, completes safe fingerprint-only outcomes, and retains the existing read-only constructor/capability behavior. This is the M4.1 service integration boundary; the durable sink lifecycle, recovery, and readiness work remains in M4.5.
+
+Evidence:
+
+- `PgManagementMutationRepositoryTest` contributes 7 real-PostgreSQL 18.3 tests covering the ordered M4.1 behaviors and audit fail-closed boundary.
+- The complete `peegee-cache-pg` gate passed 217 tests with zero failures/errors/skips.
+- The 11-project `mvn test` reactor passed 61 current Surefire suites and 389 tests with zero failures/errors/skips.
+- All 61 current XML reports parse, no Surefire dump/dumpstream exists, captured output contains no asynchronous-failure signature or M4.1 value/identifier canary, and the prohibited-framework/test-pattern scan is clean.
+
 ### M4.2 Entry TTL, persist, touch, and delete
+
+Status: **NOT STARTED — next strict-TDD slice.**
 
 For each operation first prove:
 

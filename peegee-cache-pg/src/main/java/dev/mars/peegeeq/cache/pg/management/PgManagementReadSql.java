@@ -264,7 +264,7 @@ final class PgManagementReadSql {
                 """.formatted(schema);
     }
 
-    private static String requireSchema(String schemaName) {
+    static String requireSchema(String schemaName) {
         String schema = Objects.requireNonNull(schemaName, "schemaName").trim();
         if (!IDENTIFIER.matcher(schema).matches()) {
             throw new IllegalArgumentException("Invalid PostgreSQL schema name: " + schemaName);
