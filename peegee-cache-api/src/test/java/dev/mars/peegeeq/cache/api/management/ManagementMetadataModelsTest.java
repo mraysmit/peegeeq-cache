@@ -70,7 +70,7 @@ class ManagementMetadataModelsTest {
         Instant now = Instant.parse("2026-08-20T06:00:00Z");
         ManagementEntryMetadata metadata = new ManagementEntryMetadata(
                 new CacheKey("ns", "key"), ValueType.STRING, 12, 3,
-                now, now, now, ManagementTtl.persistent());
+                now, now, ManagementTtl.persistent());
 
         assertEquals(12, metadata.sizeBytes());
         assertEquals(3, metadata.version());

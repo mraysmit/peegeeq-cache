@@ -4,6 +4,8 @@ import dev.mars.peegeeq.cache.api.admin.AdminService;
 import dev.mars.peegeeq.cache.api.cache.CacheService;
 import dev.mars.peegeeq.cache.api.counter.CounterService;
 import dev.mars.peegeeq.cache.api.lock.LockService;
+import dev.mars.peegeeq.cache.api.management.ManagementService;
+import dev.mars.peegeeq.cache.api.management.UnsupportedManagementService;
 import dev.mars.peegeeq.cache.api.model.CacheEntry;
 import dev.mars.peegeeq.cache.api.model.CacheKey;
 import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
@@ -45,10 +47,12 @@ class PgPeeGeeCacheTest {
     private static final ScanService SCAN = new NoopScanService();
     private static final PubSubService PUBSUB = new NoopPubSubService();
     private static final AdminService ADMIN = new NoopAdminService();
+    private static final ManagementService MANAGEMENT = UnsupportedManagementService.instance();
 
     @Test
     void facadeReturnsTheServicesItWasConstructedWith() {
-        PgPeeGeeCache cache = new PgPeeGeeCache(CACHE, COUNTERS, LOCKS, SCAN, PUBSUB, ADMIN);
+        PgPeeGeeCache cache = new PgPeeGeeCache(
+                CACHE, COUNTERS, LOCKS, SCAN, PUBSUB, ADMIN, MANAGEMENT);
 
         assertSame(CACHE, cache.cache());
         assertSame(COUNTERS, cache.counters());
@@ -56,6 +60,7 @@ class PgPeeGeeCacheTest {
         assertSame(SCAN, cache.scan());
         assertSame(PUBSUB, cache.pubSub());
         assertSame(ADMIN, cache.admin());
+        assertSame(MANAGEMENT, cache.management());
     }
 
     private static final class NoopScanService implements ScanService {

@@ -1,7 +1,7 @@
 # Consolidated Guidelines
 
-**Author**: Mark A Ray-Smith Cityline Ltd.
-**Date**: March 2026
+**Author**: Mark A Ray-Smith Cityline Ltd.  
+**Date**: March 2026  
 **Version**: 0.1
 
 This document consolidates all markdown files currently in docs/guidelines in source-file order.

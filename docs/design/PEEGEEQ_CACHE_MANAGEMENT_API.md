@@ -18,7 +18,7 @@ It is the implementation contract for:
 - the PostgreSQL implementation of management inspection and guarded administration;
 - integration and browser tests.
 
-Phase 8.2 completed its non-executable M0 contract/build gate and is now in M1. No management runtime behavior or route implementation exists yet. The browser console remains separately tracked as Phase 8.3. Section 19 defines module ownership and evidence gates; executable work begins with red OpenAPI contract tests.
+Phase 8.2 has completed M0–M2. The M3 PostgreSQL inspection/read model and shared cursor primitive are implemented with focused PostgreSQL 18.3 acceptance evidence; the M3 phase gate remains in progress until the complete `peegee-cache-pg` and reactor suites finish successfully. No management HTTP route, authentication/setup lifecycle, reveal, or mutation behavior is implemented, so M4 and later phases have not started. The browser console remains separately tracked as Phase 8.3. Section 19 records the current implementation boundary and remaining evidence gates.
 
 The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The interactive screen designs are in [UI mockups/peegeeq-cache-management-ui-mockups.html](UI%20mockups/peegeeq-cache-management-ui-mockups.html).
 
@@ -147,7 +147,9 @@ Response envelope:
 
 Cursors are scoped to the endpoint, setup, namespace, sort, and complete normalized filter set. Reusing a cursor with different parameters returns `400 CURSOR_SCOPE_MISMATCH`. Cursors are not bookmarks and do not promise a historical snapshot.
 
-A cursor is either a cryptographically random reference to server-held state or a tamper-evident value authenticated with a server-held key. Client-provided cursor contents are never trusted as SQL fragments or unchecked query parameters. Cursors expire after 15 minutes; an expired cursor returns `400 INVALID_CURSOR`.
+The implemented management cursor is a versioned binary value containing its issue time, complete query scope, and a typed keyset position. The payload and its HMAC-SHA-256 signature are separately encoded with canonical unpadded Base64URL and joined by a period. The shared API codec requires an authentication key of at least 256 bits, applies its configured lifetime, bounds and validates the decoded structure, and compares signatures without timing-sensitive byte comparison. The REST configuration must supply the contract's 15-minute lifetime. Key rotation intentionally invalidates cursors issued under the previous key.
+
+Cursors are authenticated but not encrypted. They contain no values, credentials, owner tokens, SQL, or other secret material. After authentication, decoded positions remain data only and are passed to PostgreSQL as prepared-query parameters; the only interpolated SQL identifiers are separately validated schema names. The REST adapter maps malformed, expired, or unauthenticated values to `400 INVALID_CURSOR`, and exact endpoint/setup/namespace/filter/sort mismatches to `400 CURSOR_SCOPE_MISMATCH`.
 
 ### 3.7 Sorting
 
@@ -861,7 +863,7 @@ No body.
 { "refreshTtlMillis": 1800000 }
 ```
 
-`refreshTtlMillis` may be null to retain the current expiry. Each operation requires exact `If-Match`. Expire and persist increment the entry version and return the resulting metadata and ETag. Touch updates `lastAccessedAt`, `updatedAt`, and optionally the expiry without changing the entry version; a successful touch therefore returns updated metadata with the same ETag. Each version check and update is atomic.
+`refreshTtlMillis` may be null to retain the current expiry. Each operation requires exact `If-Match`. Expire and persist increment the entry version and return the resulting metadata and ETag. Touch updates the backing row's internal last-access timestamp, `updatedAt`, and optionally the expiry without changing the entry version; the internal last-access timestamp is deliberately absent from `ManagementEntryMetadata`, so a successful touch returns the observable updated/expiry metadata with the same ETag. Each version check and update is atomic.
 
 ### 9.7 Bulk entry deletion preview
 
@@ -1421,6 +1423,8 @@ AdminCapabilities capabilities();
 
 Future<AdminPage<NamespaceStats>> namespaces(NamespaceQuery query);
 
+Future<AdminPage<ManagementEntryMetadata>> entries(EntryQuery query);
+
 Future<ManagementEntryMetadata> entry(CacheKey key, boolean includeExpired);
 
 Future<RevealedEntryValue> revealEntry(
@@ -1460,7 +1464,9 @@ Future<VersionedMutationResult<CounterEntry>> persistCounter(
 Future<VersionedMutationResult<Void>> deleteCounter(
     VersionedCounterDeleteRequest request, ManagementActionContext context);
 
-Future<AdminPage<LockState>> locks(LockQuery query);
+Future<AdminPage<ManagementLockMetadata>> locks(LockQuery query);
+
+Future<ManagementLockMetadata> lock(LockKey key);
 
 Future<RevealedLockOwner> revealLockOwner(
     RevealLockOwnerRequest request, ManagementActionContext context);
@@ -1493,9 +1499,15 @@ Future<BulkDeleteResult> executeCounterDelete(
 
 `ManagementActionContext` contains the authenticated actor, bounded effective roles, correlation identifier, and sanitized source address. Reveal request types also carry the optional bounded reason. REST authentication middleware constructs the context; callers cannot populate it from request JSON. Embedded non-REST callers must provide an authenticated system or user identity. Sensitive reveals, mutations, and actor-bound bulk operations cannot be invoked without this context.
 
-The `PeeGeeCache` interface gains a backward-compatible default `management()` accessor returning an unsupported service. PostgreSQL returns the complete implementation. `capabilities()` reports support before invocation, and unsupported methods return a failed `Future` with a typed unsupported-capability exception.
+The `PeeGeeCache` interface gains a backward-compatible default `management()` accessor returning an unsupported service. A PostgreSQL facade may receive a supported management implementation. `capabilities()` reports support before invocation, and unsupported methods return a failed `Future` with a typed unsupported-capability exception.
 
-The PostgreSQL management implementation receives a required `ManagementAuditSink` and enforces durable audit reservation before every context-requiring operation, including calls made without REST:
+The M3 implementation currently exposes the inspection capabilities only: namespace, entry, counter, and lock metadata plus database and expiry monitoring. `ManagementTtlFilter` is the query vocabulary for `ALL_LIVE`, `PERSISTENT`, `EXPIRING`, and `INCLUDE_EXPIRED`; it is intentionally separate from the observed `ManagementTtl.State` returned in metadata. `NamespaceStats` carries the OpenAPI aggregate fields, while the repository-level `NamespaceDetails` combines those statistics with value-type and TTL-state distributions. Missing entry, counter, and lock detail reads fail with typed `ManagementNotFoundException` resource kinds. Missing or partially installed schemas fail with typed `ManagementReadinessException(SCHEMA_UNAVAILABLE)`.
+
+`PgManagementReadRepository` and `PgManagementReadSql` implement the current read model. Namespace ordering is deterministic for both `namespace:asc` and `entryCount:desc,namespace:asc`; entry pages use key ordering within a namespace; counter and lock pages use qualified namespace/key ordering. Prefixes are literal, expiry comparisons use database time, expired rows are hidden unless the query explicitly includes them, active-lock metadata excludes owner tokens, and entry metadata selects size but never payload content or the internal `last_accessed_at` column. The `EXPIRING_SOON` lock view is the active-lock subset whose lease ends within 60 seconds.
+
+Permission-sensitive database/schema sizes use availability-bearing fields: a PostgreSQL privilege failure is reported as `UNAVAILABLE` with a null value, never as a misleading zero. `PgManagementService` creates query-bound cursor pages and advertises only these M3 inspection capabilities; reveal, mutation, and bulk methods still fail through the typed capability boundary reserved for M4. `PgPeeGeeCache` can receive this service through its management-aware constructor while retaining its existing constructor and unsupported fallback.
+
+The completed PostgreSQL management implementation will receive a required `ManagementAuditSink` and enforce durable audit reservation before every context-requiring operation, including calls made without REST. The current M3 read-only service does not yet implement these M4 operations:
 
 ```java
 interface ManagementAuditSink {
@@ -1609,13 +1621,13 @@ Phase 8.3 owns the production React console and its full-browser journeys for se
 
 ## 19. Implementation state and module ownership
 
-Status: **IN PROGRESS AT M1**. This document defines the reviewed contract; it does not claim that the management system is implemented or override the authoritative implementation plan. `PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md` registers the backend as Phase 8.2 and the browser console as separate Phase 8.3 work. M0 closed the contract and build topology without production classes; M1 starts the machine-readable OpenAPI and pure protocol boundary through strict red/green tests.
+Status: **M3 IMPLEMENTATION COMPLETE; PHASE GATE IN PROGRESS**. M0 closed the contract/build topology, M1 delivered the validated 50-operation OpenAPI and pure REST protocol rules, and M2 delivered the immutable Java management contract and audit SPI. M3 now has the PostgreSQL inspection repository, SQL catalogue, management read service, shared signed-cursor codec, typed not-found/readiness failures, and facade injection described in section 16. Focused PostgreSQL 18.3 acceptance, cursor-adapter, and facade tests are green. The complete `peegee-cache-pg` suite and full reactor verification remain required before M3 may be marked complete. M4 has not started, and no REST route or production UI behavior is claimed.
 
-Planned ownership is:
+Ownership is:
 
-- `peegee-cache-api`: management service, immutable request/result models, typed mutation outcomes, action context, capabilities, and audit-sink contract;
-- `peegee-cache-pg`: PostgreSQL management queries and atomic version-checked mutations, with no REST dependency;
-- `peegee-cache-rest`: Vert.x HTTP/SSE/WebSocket server, setup registry, authentication, authorization, CSRF/origin enforcement, target policy, rate limits, OpenAPI integration, and safe serialization;
+- `peegee-cache-api`: management service, immutable request/result models, query TTL vocabulary, shared cursor codec/scope/position types, typed not-found/readiness/mutation outcomes, action context, capabilities, and audit-sink contract;
+- `peegee-cache-pg`: implemented parameterized inspection SQL/read service and planned atomic version-checked mutations, with no REST dependency;
+- `peegee-cache-rest`: implemented OpenAPI/protocol rules and thin shared-cursor adapter; the Vert.x HTTP/SSE/WebSocket server, setup registry, authentication, authorization, CSRF/origin enforcement, target policy, rate limits, and route serialization remain later work;
 - `peegee-cache-management-ui`: React client, generated/validated DTOs, local-only display preferences, sensitive-state isolation, and accessible operator workflows;
 - `peegee-cache-observability`: reuse of the existing telemetry and logging standards; management lifecycle, HTTP, stream, audit-queue, and resource-saturation signals are mandatory production scope, not optional extras;
 - `peegee-cache-test-support`: reusable real-PostgreSQL, server, authentication, SSE, and WebSocket fixtures where they avoid duplication without replacing end-to-end coverage.

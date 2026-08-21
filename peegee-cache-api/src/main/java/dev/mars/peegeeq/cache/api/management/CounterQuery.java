@@ -1,14 +1,12 @@
 package dev.mars.peegeeq.cache.api.management;
 
-import dev.mars.peegeeq.cache.api.model.TtlState;
-
 import java.util.Objects;
 
 /** Bounded metadata query for counters. */
 public record CounterQuery(
         String namespace,
         String prefix,
-        TtlState ttlState,
+        ManagementTtlFilter ttlState,
         Sort sort,
         String cursor,
         int limit) {

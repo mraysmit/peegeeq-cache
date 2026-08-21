@@ -5,6 +5,8 @@ import dev.mars.peegeeq.cache.api.admin.AdminService;
 import dev.mars.peegeeq.cache.api.cache.CacheService;
 import dev.mars.peegeeq.cache.api.counter.CounterService;
 import dev.mars.peegeeq.cache.api.lock.LockService;
+import dev.mars.peegeeq.cache.api.management.ManagementService;
+import dev.mars.peegeeq.cache.api.management.UnsupportedManagementService;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import dev.mars.peegeeq.cache.api.scan.ScanService;
 
@@ -21,6 +23,7 @@ public final class PgPeeGeeCache implements PeeGeeCache {
     private final ScanService scanService;
     private final PubSubService pubSubService;
     private final AdminService adminService;
+    private final ManagementService managementService;
 
     public PgPeeGeeCache(
             CacheService cacheService,
@@ -30,12 +33,26 @@ public final class PgPeeGeeCache implements PeeGeeCache {
             PubSubService pubSubService,
             AdminService adminService
     ) {
+        this(cacheService, counterService, lockService, scanService, pubSubService, adminService,
+                UnsupportedManagementService.instance());
+    }
+
+    public PgPeeGeeCache(
+            CacheService cacheService,
+            CounterService counterService,
+            LockService lockService,
+            ScanService scanService,
+            PubSubService pubSubService,
+            AdminService adminService,
+            ManagementService managementService
+    ) {
         this.cacheService = Objects.requireNonNull(cacheService, "cacheService");
         this.counterService = Objects.requireNonNull(counterService, "counterService");
         this.lockService = Objects.requireNonNull(lockService, "lockService");
         this.scanService = Objects.requireNonNull(scanService, "scanService");
         this.pubSubService = Objects.requireNonNull(pubSubService, "pubSubService");
         this.adminService = Objects.requireNonNull(adminService, "adminService");
+        this.managementService = Objects.requireNonNull(managementService, "managementService");
     }
 
     @Override
@@ -66,5 +83,10 @@ public final class PgPeeGeeCache implements PeeGeeCache {
     @Override
     public AdminService admin() {
         return adminService;
+    }
+
+    @Override
+    public ManagementService management() {
+        return managementService;
     }
 }

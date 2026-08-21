@@ -1,11 +1,10 @@
 # PeeGeeQ Cache Management UI
 
-**Status:** Approved design
-
-**Date:** August 2026
-
+**Author:** Mark A Ray-Smith Cityline Ltd  
+**Status:** Approved design  
+**Date:** August 2026  
 **Version:** 0.1
-**Audience:** PeeGeeQ Cache maintainers, UI developers, backend developers, operators, and test engineers
+
 
 ## 1. Purpose
 

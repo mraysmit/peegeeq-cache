@@ -87,6 +87,6 @@ class ManagementCoreModelsTest {
     private static ManagementEntryMetadata metadata(long version) {
         Instant now = Instant.parse("2026-08-20T06:00:00Z");
         return new ManagementEntryMetadata(new CacheKey("ns", "key"), ValueType.STRING,
-                1, version, now, now, now, ManagementTtl.persistent());
+                1, version, now, now, ManagementTtl.persistent());
     }
 }

@@ -1,6 +1,5 @@
 package dev.mars.peegeeq.cache.api.management;
 
-import dev.mars.peegeeq.cache.api.model.TtlState;
 import dev.mars.peegeeq.cache.api.model.ValueType;
 
 import java.util.Objects;
@@ -10,7 +9,7 @@ public record EntryQuery(
         String namespace,
         String prefix,
         ValueType valueType,
-        TtlState ttlState,
+        ManagementTtlFilter ttlState,
         Sort sort,
         String cursor,
         int limit) {

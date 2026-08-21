@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management API Implementation Plan
 
-**Status:** Phases M0–M2 complete; Phase M3 is next
+**Status:** Phases M0–M2 complete; M3 implementation complete with phase gate in progress
 
 **Date:** 17 August 2026
 
@@ -18,7 +18,7 @@ It covers:
 - backend fixtures in `peegee-cache-test-support`;
 - OpenAPI and browser-facing compatibility gates consumed by `peegee-cache-management-ui`.
 
-It does not mark any management feature as implemented. Status changes require the evidence defined in this plan.
+Status changes require the evidence defined in this plan. M0–M2 are complete; M3 production code and focused acceptance are implemented, but M3 remains in progress until its module and full-reactor phase gates complete.
 
 ## 2. Authority and prerequisite documents
 
@@ -88,7 +88,7 @@ No dependency points from the cache library modules into REST or UI code.
 | `peegee-cache-api` | `ManagementService`, immutable queries/results, typed mutation outcomes, reveal DTOs, action context, capabilities, and audit-sink SPI |
 | `peegee-cache-core` | Pure management validation or safe transformation helpers only when shared below the PostgreSQL/REST boundary |
 | `peegee-cache-pg` | Parameterized inspection SQL, atomic outcome-producing mutations, row mapping, and PostgreSQL management service |
-| `peegee-cache-runtime` | Expose the PostgreSQL management service through `PeeGeeCache`; no HTTP/security ownership |
+| `peegee-cache-runtime` | Later lifecycle/configuration wiring of the PostgreSQL management service; no HTTP/security ownership |
 | `peegee-cache-observability` | Management metrics/tracing adapters and readiness integration where they extend the existing production contract |
 | `peegee-cache-test-support` | Reusable real-server, PostgreSQL, proxy-auth, SSE, and WebSocket fixtures without application behavior |
 | `peegee-cache-rest` | OpenAPI, server lifecycle, setup registry, authentication/authorization, CSRF/origin and target policy, rate limits, audit queue, routes, streams, serialization, and static UI hosting |
@@ -177,7 +177,7 @@ Fixtures remain in the lowest reusable module that does not create a production 
 | M0 | COMPLETE | Contract synchronization and build decision record |
 | M1 | COMPLETE | Module skeleton, OpenAPI baseline, and protocol primitives |
 | M2 | COMPLETE | Typed Java management contract |
-| M3 | NOT STARTED | PostgreSQL inspection/read model |
+| M3 | IN PROGRESS | PostgreSQL inspection/read model implemented; complete module/reactor gates pending |
 | M4 | NOT STARTED | Atomic PostgreSQL mutation and reveal model |
 | M5 | NOT STARTED | Audit, authentication, CSRF/origin, target policy, and rate-limit primitives |
 | M6 | NOT STARTED | Setup registry and REST server lifecycle |
@@ -368,11 +368,15 @@ M2 completion evidence:
 - The `peegee-cache-api` suite passes 58 tests across 9 suites, including 24 focused M2 tests, with zero failures/errors/skips.
 - `mvn -pl :peegee-cache-api -Prelease-artifacts package -DskipTests` succeeds and generates both source and Javadoc artifacts.
 - The complete 11-project `mvn clean install` passes 59 Surefire suites and 368 tests with zero failures/errors/skips, proving existing reactor consumers still compile and test unchanged.
-- M3.1 namespace inspection is the next slice and must begin with failing real-PostgreSQL Testcontainers tests against the V001 schema.
+- The M2-to-M3 contract correction aligned `NamespaceStats` with the OpenAPI aggregate, added repository-level `NamespaceDetails`, separated query intent into `ManagementTtlFilter`, removed the forbidden `lastAccessedAt` field from management entry metadata, and added typed resource-not-found and schema-readiness failures.
+- The shared `ManagementCursorCodec`, scope, position, and exception types now live in `peegee-cache-api`; the REST cursor codec is a protocol-error adapter over that primitive rather than a second implementation.
+- M3 then began with failing real-PostgreSQL Testcontainers tests against the V001 schema, as required below.
 
 ## 11. Phase M3 — PostgreSQL inspection and read model
 
 Objective: implement authoritative metadata reads with deterministic pagination and no sensitive-field leakage.
+
+Status: **IN PROGRESS — implementation and focused acceptance complete; module and reactor phase gates pending.**
 
 Every item starts as a failing Testcontainers test and uses the actual V001 schema.
 
@@ -389,6 +393,13 @@ Test order:
 7. a scoped cursor is rejected after filters/sort/setup change;
 8. concurrent inserts/deletes do not violate documented non-snapshot keyset behavior.
 
+Implemented behavior:
+
+- `PgManagementReadSql` builds schema-qualified statements only after schema-identifier validation; every prefix, filter, namespace, and cursor position is a prepared-query parameter.
+- Namespace aggregates distinguish live entries, live counters, active locks, expiring entries, and expired entries; the detail primitive also returns value-type and TTL-state distributions.
+- Namespace list filters treat `%`, `_`, and `\` literally, and both supported sorts have deterministic keyset positions, including the namespace tie-break for equal entry counts.
+- The zero-row model returns an explicitly requested logical namespace with zero aggregates rather than conflating it with a missing resource.
+
 ### M3.2 Entry metadata
 
 Test order:
@@ -400,6 +411,13 @@ Test order:
 5. multi-byte identifiers and maximum management lengths round trip;
 6. serializers and logs remain value-free under adversarial payloads.
 
+Implemented behavior:
+
+- Entry lists and detail reads map identifiers, value type, byte size, version, creation/update/expiry data, and observed TTL state without selecting or mapping the stored value.
+- `ManagementTtlFilter` separates query intent (`ALL_LIVE`, `PERSISTENT`, `EXPIRING`, `INCLUDE_EXPIRED`) from the `ManagementTtl.State` observed in a result.
+- Expired entries are hidden by default and available as metadata only when explicitly included. The management DTO deliberately omits the backing table's `last_accessed_at` field.
+- Missing entry details fail as `ManagementNotFoundException(ENTRY)`; multibyte and maximum-length identifiers are covered by the focused PostgreSQL tests.
+
 ### M3.3 Counter and lock metadata
 
 Test order:
@@ -409,6 +427,13 @@ Test order:
 3. lock metadata never exposes owner token;
 4. fencing token and version serialize without precision loss;
 5. pagination and literal prefixes follow M1 rules.
+
+Implemented behavior:
+
+- Counter values and versions remain Java `long` values for lossless decimal wire serialization, and counter queries apply the same live/persistent/expiring/include-expired TTL vocabulary as entry queries.
+- Lock queries select active leases only. `EXPIRING_SOON` is defined as an active lease ending within 60 seconds, and owner tokens are never selected by the metadata SQL.
+- Counter and lock keysets use a length-delimited qualified namespace/key position, preventing duplicate or omitted keys when one service instance pages across namespaces.
+- Missing counter and lock details use the typed `COUNTER` and `LOCK` not-found variants. A nullable database fencing value maps to the API's required decimal default without leaking ownership state.
 
 ### M3.4 Database and expiry statistics
 
@@ -420,6 +445,40 @@ Test order:
 4. custom schema identifiers are safely rendered through existing schema validation;
 5. partial/missing schema produces typed capability/readiness failures.
 
+Implemented behavior:
+
+- Database size, schema size, connection counts, and expiry backlog/oldest-lag reads use PostgreSQL as the time and state authority.
+- Permission-dependent size values carry `AVAILABLE` or `UNAVAILABLE`; insufficient privilege produces a null unavailable value and never masquerades as zero.
+- Missing/partial-schema SQL states map to `ManagementReadinessException(SCHEMA_UNAVAILABLE)`.
+- Bounded-list `EXPLAIN` coverage verifies use of the intended V001 indexes on PostgreSQL 18.3.
+
+### M3.5 Service, facade, and shared cursor integration
+
+Implemented behavior:
+
+- `PgManagementService` advertises namespace, entry, counter, lock, database-monitoring, and expiry-monitoring capabilities and turns repository rows into bounded `AdminPage` results.
+- Cursor scope binds endpoint, setup, namespace, normalized filters, and sort. The versioned binary HMAC-SHA-256 payload also carries issue time and a typed keyset position; authentication keys are at least 256 bits, the payload is bounded/canonical, and decoded values remain prepared-query data rather than SQL.
+- The REST `ManagementCursorCodec` delegates to the shared API codec and maps its typed failures to `INVALID_CURSOR` or `CURSOR_SCOPE_MISMATCH`.
+- `peegee-cache-rest` now declares the API dependency required by that adapter and excludes the API's transitive `vertx-core`; the REST module's existing aligned Vert.x/Jackson dependency set remains authoritative for dependency-convergence checks.
+- `PgPeeGeeCache` retains its existing constructor and adds management-service injection. Without an injected service it preserves the compatible unsupported fallback.
+- Reveals, mutations, and bulk operations remain capability failures. M4 is not started, and no route, handler, authentication, or setup lifecycle was introduced by M3.
+
+Pending change-set inventory:
+
+- API contract corrections: `CounterQuery`, `EntryQuery`, `ManagementEntryMetadata`, and `NamespaceStats`.
+- New API read/cursor types: `ManagementTtlFilter`, `NamespaceDetails`, `ManagementNotFoundException`, `ManagementReadinessException`, `ManagementCursorCodec`, `ManagementCursorException`, `ManagementCursorPosition`, and `ManagementCursorScope`.
+- PostgreSQL implementation: `PgManagementReadSql`, `PgManagementReadRepository`, `PgManagementService`, and management-service injection in `PgPeeGeeCache`.
+- REST integration: the direct `peegee-cache-api` dependency and the delegating REST `ManagementCursorCodec`.
+- Focused regression coverage: management model tests, `PgManagementReadRepositoryTest`, `PgPeeGeeCacheTest`, and the existing REST cursor contract tests.
+
+Focused evidence:
+
+- `PgManagementReadRepositoryTest`: 14 tests passed on PostgreSQL 18.3, covering the M3.1–M3.4 behavior above, schema readiness, between-page changes, maximum identifiers, and index plans.
+- `ManagementCursorCodecTest` in `peegee-cache-rest`: 2 adapter/contract tests passed after delegation to the shared codec.
+- `PgPeeGeeCacheTest`: the focused management-facade test passed with both constructor paths preserved.
+- Clean build/install slices used by these focused tests passed, and the post-edit banned-pattern scan across touched Java sources was clean.
+- A complete `peegee-cache-pg` suite run reached pre-existing pub/sub tests but exceeded the local three-minute command window without logging a test failure. This is not a passing module gate and is not counted as one. Full reactor verification has likewise not yet been recorded for the pending M3 changes.
+
 Phase gate:
 
 - all read tests green on PostgreSQL 18.3;
@@ -427,6 +486,8 @@ Phase gate:
 - query plans for bounded lists use intended indexes;
 - metadata DTO leakage scan green;
 - `peegee-cache-pg` and full reactor suites green.
+
+Phase-gate verdict: **PENDING**. The focused acceptance, SQL parameterization, query-plan, and metadata-leakage criteria are satisfied; the complete module and reactor suite criteria still require successful recorded runs.
 
 ## 12. Phase M4 — Atomic mutation and reveal model
 

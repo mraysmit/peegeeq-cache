@@ -14,7 +14,6 @@ public record ManagementEntryMetadata(
         long version,
         Instant createdAt,
         Instant updatedAt,
-        Instant lastAccessedAt,
         ManagementTtl ttl) {
     public ManagementEntryMetadata {
         Objects.requireNonNull(key, "key");
