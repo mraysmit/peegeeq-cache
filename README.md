@@ -9,6 +9,8 @@
 
 **PostgreSQL-backed caching and coordination for Java/Vert.x systems.**
 
+Management-server deployment, security, audit, Prometheus, and recovery procedures are in [docs/PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md](docs/PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md).
+
 peegee-cache is a library-first cache and coordination library that runs on PostgreSQL. It provides key/value storage, TTL expiry, atomic counters, distributed locks, conditional writes, namespaces, scanning, and lightweight pub/sub inside the same transactional envelope as your business data.
 
 ## Why PostgreSQL instead of a dedicated cache?

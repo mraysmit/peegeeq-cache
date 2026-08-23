@@ -1,5 +1,10 @@
 package dev.mars.peegeeq.cache.rest.protocol;
 
+import dev.mars.peegeeq.cache.api.management.ManagementCounterException;
+import dev.mars.peegeeq.cache.rest.security.ManagementAuthenticationException;
+import dev.mars.peegeeq.cache.rest.security.ManagementRateLimitException;
+import dev.mars.peegeeq.cache.rest.security.ManagementSecurityException;
+import dev.mars.peegeeq.cache.rest.server.SetupRegistryException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -48,6 +53,25 @@ class ManagementWireRulesTest {
     }
 
     @Test
+    void mapsSecurityRateAndRegistryFailuresToTypedSafeProblems() {
+        assertProblem(
+                new ManagementAuthenticationException(401, "AUTHENTICATION_REQUIRED", "Authentication required"),
+                401, "AUTHENTICATION_REQUIRED");
+        assertProblem(
+                new ManagementSecurityException(403, "CSRF_VALIDATION_FAILED", "CSRF validation failed"),
+                403, "CSRF_VALIDATION_FAILED");
+        assertProblem(new ManagementRateLimitException(), 429, "RATE_LIMITED");
+        assertProblem(
+                new SetupRegistryException(404, "SETUP_NOT_FOUND", "Setup not found"),
+                404, "SETUP_NOT_FOUND");
+        assertProblem(
+                new ManagementCounterException(
+                        ManagementCounterException.Code.OVERFLOW,
+                        new ArithmeticException("secret database expression")),
+                409, "COUNTER_OVERFLOW");
+    }
+
+    @Test
     void escapesEveryPostgresqlLikeMetacharacterForLiteralPrefixes() {
         assertEquals("customer\\%\\_\\\\active", ManagementWireRules.escapeLikePrefix("customer%_\\active"));
     }
@@ -55,5 +79,11 @@ class ManagementWireRulesTest {
     private static void assertCode(String code, org.junit.jupiter.api.function.Executable executable) {
         ManagementProtocolException exception = assertThrows(ManagementProtocolException.class, executable);
         assertEquals(code, exception.code());
+    }
+
+    private static void assertProblem(Throwable failure, int status, String code) {
+        ManagementProblem problem = ManagementProblem.from(failure, "/safe/template", "correlation-2");
+        assertEquals(status, problem.status());
+        assertEquals(code, problem.code());
     }
 }

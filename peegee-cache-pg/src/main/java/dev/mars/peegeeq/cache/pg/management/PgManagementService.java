@@ -39,6 +39,7 @@ public final class PgManagementService implements ManagementService {
     private final Clock auditClock;
     private final Supplier<String> auditEventIdSupplier;
     private final Duration defaultEntryTtl;
+    private final PgManagementBulkDeleteCoordinator bulkDeletes;
 
     public PgManagementService(
             PgManagementReadRepository repository,
@@ -54,6 +55,7 @@ public final class PgManagementService implements ManagementService {
         this.auditClock = null;
         this.auditEventIdSupplier = null;
         this.defaultEntryTtl = null;
+        this.bulkDeletes = null;
     }
 
     public PgManagementService(
@@ -78,9 +80,15 @@ public final class PgManagementService implements ManagementService {
             throw new IllegalArgumentException("defaultEntryTtl must be positive when configured");
         }
         this.defaultEntryTtl = defaultEntryTtl;
+        this.bulkDeletes = new PgManagementBulkDeleteCoordinator(
+                mutationRepository, setupId, auditClock);
         EnumSet<ManagementCapability> supported = EnumSet.copyOf(INSPECTION_CAPABILITIES);
         supported.add(ManagementCapability.ENTRY_REVEAL);
         supported.add(ManagementCapability.ENTRY_MUTATION);
+        supported.add(ManagementCapability.COUNTER_MUTATION);
+        supported.add(ManagementCapability.LOCK_REVEAL);
+        supported.add(ManagementCapability.FORCE_LOCK_RELEASE);
+        supported.add(ManagementCapability.BULK_DELETE);
         this.capabilities = new AdminCapabilities(supported, ManagementLimits.defaults());
     }
 
@@ -96,6 +104,11 @@ public final class PgManagementService implements ManagementService {
         ManagementCursorPosition position = query.cursor() == null ? null : cursors.decode(query.cursor(), scope);
         validateNamespacePosition(query.sort(), position);
         return repository.namespaces(query, position).map(rows -> namespacePage(query, scope, rows));
+    }
+
+    @Override
+    public Future<NamespaceDetails> namespace(String namespace) {
+        return repository.namespaceDetails(Objects.requireNonNull(namespace, "namespace"));
     }
 
     private AdminPage<NamespaceStats> namespacePage(
@@ -274,10 +287,74 @@ public final class PgManagementService implements ManagementService {
                     return completeAudit(reservation, auditOutcome).map(setResult);
                 }));
     }
-    @Override public Future<VersionedMutationResult<ManagementEntryMetadata>> expireEntry(VersionedEntryTtlRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_MUTATION); }
-    @Override public Future<VersionedMutationResult<ManagementEntryMetadata>> persistEntry(VersionedCacheKeyRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_MUTATION); }
-    @Override public Future<VersionedMutationResult<ManagementEntryMetadata>> touchEntry(VersionedEntryTouchRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_MUTATION); }
-    @Override public Future<VersionedMutationResult<Void>> deleteEntry(VersionedEntryDeleteRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_MUTATION); }
+    @Override
+    public Future<VersionedMutationResult<ManagementEntryMetadata>> expireEntry(
+            VersionedEntryTtlRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.ENTRY_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedEntryMutation(
+                ManagementAuditAction.EXPIRE_ENTRY,
+                request.key(),
+                request.expectedVersion(),
+                context,
+                "ENTRY_TTL_SET",
+                () -> mutationRepository.expireEntry(request));
+    }
+    @Override
+    public Future<VersionedMutationResult<ManagementEntryMetadata>> persistEntry(
+            VersionedCacheKeyRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.ENTRY_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedEntryMutation(
+                ManagementAuditAction.PERSIST_ENTRY,
+                request.key(),
+                request.expectedVersion(),
+                context,
+                "ENTRY_PERSISTED",
+                () -> mutationRepository.persistEntry(request));
+    }
+    @Override
+    public Future<VersionedMutationResult<ManagementEntryMetadata>> touchEntry(
+            VersionedEntryTouchRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.ENTRY_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedEntryMutation(
+                ManagementAuditAction.TOUCH_ENTRY,
+                request.key(),
+                request.expectedVersion(),
+                context,
+                "ENTRY_TOUCHED",
+                () -> mutationRepository.touchEntry(request));
+    }
+    @Override
+    public Future<VersionedMutationResult<Void>> deleteEntry(
+            VersionedEntryDeleteRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.ENTRY_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedEntryMutation(
+                ManagementAuditAction.DELETE_ENTRY,
+                request.key(),
+                request.expectedVersion(),
+                context,
+                "ENTRY_DELETED",
+                () -> mutationRepository.deleteEntry(request));
+    }
     @Override
     public Future<AdminPage<CounterEntry>> counters(CounterQuery query) {
         Objects.requireNonNull(query, "query");
@@ -301,11 +378,84 @@ public final class PgManagementService implements ManagementService {
                 .orElseGet(() -> Future.failedFuture(
                         new ManagementNotFoundException(ManagementNotFoundException.Resource.COUNTER))));
     }
-    @Override public Future<VersionedMutationResult<CounterEntry>> setCounter(ManagementCounterSetRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.COUNTER_MUTATION); }
-    @Override public Future<VersionedMutationResult<CounterEntry>> adjustCounter(ManagementCounterAdjustRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.COUNTER_MUTATION); }
-    @Override public Future<VersionedMutationResult<CounterEntry>> expireCounter(VersionedCounterTtlRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.COUNTER_MUTATION); }
-    @Override public Future<VersionedMutationResult<CounterEntry>> persistCounter(VersionedCacheKeyRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.COUNTER_MUTATION); }
-    @Override public Future<VersionedMutationResult<Void>> deleteCounter(VersionedCounterDeleteRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.COUNTER_MUTATION); }
+    @Override
+    public Future<VersionedMutationResult<CounterEntry>> setCounter(
+            ManagementCounterSetRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.COUNTER_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedCounterMutation(
+                ManagementAuditAction.SET_COUNTER,
+                request.key(),
+                request.expectedVersion(),
+                context,
+                "COUNTER_SET",
+                () -> mutationRepository.setCounter(request));
+    }
+    @Override
+    public Future<VersionedMutationResult<CounterEntry>> adjustCounter(
+            ManagementCounterAdjustRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.COUNTER_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedCounterMutation(
+                ManagementAuditAction.ADJUST_COUNTER,
+                request.key(),
+                request.expectedVersion(),
+                context,
+                "COUNTER_ADJUSTED",
+                () -> mutationRepository.adjustCounter(request));
+    }
+    @Override
+    public Future<VersionedMutationResult<CounterEntry>> expireCounter(
+            VersionedCounterTtlRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.COUNTER_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedCounterMutation(
+                ManagementAuditAction.EXPIRE_COUNTER,
+                request.key(), request.expectedVersion(), context,
+                "COUNTER_TTL_SET", () -> mutationRepository.expireCounter(request));
+    }
+
+    @Override
+    public Future<VersionedMutationResult<CounterEntry>> persistCounter(
+            VersionedCacheKeyRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.COUNTER_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedCounterMutation(
+                ManagementAuditAction.PERSIST_COUNTER,
+                request.key(), request.expectedVersion(), context,
+                "COUNTER_PERSISTED", () -> mutationRepository.persistCounter(request));
+    }
+
+    @Override
+    public Future<VersionedMutationResult<Void>> deleteCounter(
+            VersionedCounterDeleteRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.COUNTER_MUTATION);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedCounterMutation(
+                ManagementAuditAction.DELETE_COUNTER,
+                request.key(), request.expectedVersion(), context,
+                "COUNTER_DELETED", () -> mutationRepository.deleteCounter(request));
+    }
     @Override
     public Future<AdminPage<ManagementLockMetadata>> locks(LockQuery query) {
         Objects.requireNonNull(query, "query");
@@ -329,14 +479,136 @@ public final class PgManagementService implements ManagementService {
                 .orElseGet(() -> Future.failedFuture(
                         new ManagementNotFoundException(ManagementNotFoundException.Resource.LOCK))));
     }
-    @Override public Future<RevealedLockOwner> revealLockOwner(RevealLockOwnerRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.LOCK_REVEAL); }
-    @Override public Future<VersionedMutationResult<Void>> forceReleaseLock(ForceReleaseLockRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.FORCE_LOCK_RELEASE); }
+    @Override
+    public Future<RevealedLockOwner> revealLockOwner(
+            RevealLockOwnerRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.LOCK_REVEAL);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        ManagementAuditIntent intent = lockIntent(
+                ManagementAuditAction.REVEAL_LOCK_OWNER,
+                request.key(), null, request.reason(), context);
+        return reserveAudit(intent).compose(reservation ->
+                mutationRepository.revealLockOwner(request.key()).transform(result -> {
+                    if (result.failed()) {
+                        return completeAudit(reservation, new ManagementAuditOutcome(
+                                ManagementAuditTerminalOutcome.FAILED,
+                                "DATABASE_UNAVAILABLE", null))
+                                .compose(ignored -> Future.failedFuture(result.cause()));
+                    }
+                    if (result.result().isEmpty()) {
+                        return completeAudit(reservation, new ManagementAuditOutcome(
+                                ManagementAuditTerminalOutcome.REJECTED,
+                                "LOCK_NOT_FOUND", null))
+                                .compose(ignored -> Future.failedFuture(
+                                        new ManagementNotFoundException(
+                                                ManagementNotFoundException.Resource.LOCK)));
+                    }
+                    RevealedLockOwner revealed = result.result().orElseThrow();
+                    return completeAudit(reservation, new ManagementAuditOutcome(
+                            ManagementAuditTerminalOutcome.SUCCEEDED,
+                            "LOCK_OWNER_REVEALED", revealed.version())).map(revealed);
+                }));
+    }
+    @Override
+    public Future<VersionedMutationResult<Void>> forceReleaseLock(
+            ForceReleaseLockRequest request,
+            ManagementActionContext context) {
+        if (mutationRepository == null) {
+            return unavailable(ManagementCapability.FORCE_LOCK_RELEASE);
+        }
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        ManagementAuditIntent intent = lockIntent(
+                ManagementAuditAction.FORCE_RELEASE_LOCK,
+                request.key(), request.expectedVersion(), request.reason(), context);
+        return reserveAudit(intent).compose(reservation ->
+                mutationRepository.forceReleaseLock(request).transform(result -> {
+                    if (result.failed()) {
+                        return completeAudit(reservation, new ManagementAuditOutcome(
+                                ManagementAuditTerminalOutcome.FAILED,
+                                "DATABASE_UNAVAILABLE", null))
+                                .compose(ignored -> Future.failedFuture(result.cause()));
+                    }
+                    VersionedMutationResult<Void> mutation = result.result();
+                    ManagementAuditOutcome outcome = mutation.outcome() == ManagementMutationOutcome.APPLIED
+                            ? new ManagementAuditOutcome(
+                                    ManagementAuditTerminalOutcome.SUCCEEDED,
+                                    "LOCK_RELEASED", mutation.resultingVersion())
+                            : new ManagementAuditOutcome(
+                                    ManagementAuditTerminalOutcome.REJECTED,
+                                    mutation.outcome() == ManagementMutationOutcome.NOT_FOUND
+                                            ? "LOCK_NOT_FOUND" : "VERSION_MISMATCH",
+                                    null);
+                    return completeAudit(reservation, outcome).map(mutation);
+                }));
+    }
     @Override public Future<DatabaseStats> databaseStats() { return repository.databaseStats(); }
     @Override public Future<ExpiryStats> expiryStats() { return repository.expiryStats(); }
-    @Override public Future<BulkDeletePreview> previewEntryDelete(EntryDeleteFilter filter, ManagementActionContext context) { return unavailable(ManagementCapability.BULK_DELETE); }
-    @Override public Future<BulkDeleteResult> executeEntryDelete(ConfirmedEntryDelete request, ManagementActionContext context) { return unavailable(ManagementCapability.BULK_DELETE); }
-    @Override public Future<BulkDeletePreview> previewCounterDelete(CounterDeleteSelection selection, ManagementActionContext context) { return unavailable(ManagementCapability.BULK_DELETE); }
-    @Override public Future<BulkDeleteResult> executeCounterDelete(ConfirmedCounterDelete request, ManagementActionContext context) { return unavailable(ManagementCapability.BULK_DELETE); }
+    @Override public Future<ManagementOverview> overview() { return repository.overview(); }
+    @Override public Future<ManagementDatabaseMonitoring> databaseMonitoring() { return repository.databaseMonitoring(); }
+    @Override
+    public Future<BulkDeletePreview> previewEntryDelete(
+            EntryDeleteFilter filter,
+            ManagementActionContext context) {
+        if (bulkDeletes == null) return unavailable(ManagementCapability.BULK_DELETE);
+        Objects.requireNonNull(filter, "filter");
+        Objects.requireNonNull(context, "context");
+        return auditedBulk(
+                ManagementAuditAction.PREVIEW_ENTRY_DELETE,
+                Map.of("namespace", auditFingerprinter.fingerprint(filter.namespace())),
+                context,
+                "ENTRY_DELETE_PREVIEWED",
+                () -> bulkDeletes.previewEntry(filter, context));
+    }
+
+    @Override
+    public Future<BulkDeleteResult> executeEntryDelete(
+            ConfirmedEntryDelete request,
+            ManagementActionContext context) {
+        if (bulkDeletes == null) return unavailable(ManagementCapability.BULK_DELETE);
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedBulk(
+                ManagementAuditAction.EXECUTE_ENTRY_DELETE,
+                Map.of(),
+                context,
+                "ENTRY_DELETE_EXECUTED",
+                () -> bulkDeletes.executeEntry(request, context));
+    }
+
+    @Override
+    public Future<BulkDeletePreview> previewCounterDelete(
+            CounterDeleteSelection selection,
+            ManagementActionContext context) {
+        if (bulkDeletes == null) return unavailable(ManagementCapability.BULK_DELETE);
+        Objects.requireNonNull(selection, "selection");
+        Objects.requireNonNull(context, "context");
+        return auditedBulk(
+                ManagementAuditAction.PREVIEW_COUNTER_DELETE,
+                Map.of(),
+                context,
+                "COUNTER_DELETE_PREVIEWED",
+                () -> bulkDeletes.previewCounter(selection, context));
+    }
+
+    @Override
+    public Future<BulkDeleteResult> executeCounterDelete(
+            ConfirmedCounterDelete request,
+            ManagementActionContext context) {
+        if (bulkDeletes == null) return unavailable(ManagementCapability.BULK_DELETE);
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(context, "context");
+        return auditedBulk(
+                ManagementAuditAction.EXECUTE_COUNTER_DELETE,
+                Map.of(),
+                context,
+                "COUNTER_DELETE_EXECUTED",
+                () -> bulkDeletes.executeCounter(request, context));
+    }
 
     private static <T> Future<T> unavailable(ManagementCapability capability) {
         return Future.failedFuture(new ManagementCapabilityException(capability));
@@ -365,6 +637,155 @@ public final class PgManagementService implements ManagementService {
                 context.correlationId());
     }
 
+    private ManagementAuditIntent lockIntent(
+            ManagementAuditAction action,
+            LockKey key,
+            Long expectedVersion,
+            String reason,
+            ManagementActionContext context) {
+        return new ManagementAuditIntent(
+                auditEventIdSupplier.get(),
+                auditClock.instant(),
+                context.actor(),
+                context.roles(),
+                action,
+                setupId,
+                ManagementResourceType.LOCK,
+                Map.of(
+                        "namespace", auditFingerprinter.fingerprint(key.namespace()),
+                        "key", auditFingerprinter.fingerprint(key.key())),
+                expectedVersion,
+                reason,
+                context.sourceAddress(),
+                context.correlationId());
+    }
+
+    private <T> Future<VersionedMutationResult<T>> auditedEntryMutation(
+            ManagementAuditAction action,
+            CacheKey key,
+            long expectedVersion,
+            ManagementActionContext context,
+            String successCode,
+            Supplier<Future<VersionedMutationResult<T>>> operation) {
+        ManagementAuditIntent intent = entryIntent(
+                action, key, expectedVersion, null, context);
+        return reserveAudit(intent).compose(reservation -> operation.get().transform(result -> {
+            if (result.failed()) {
+                return completeAudit(
+                        reservation,
+                        new ManagementAuditOutcome(
+                                ManagementAuditTerminalOutcome.FAILED,
+                                "DATABASE_UNAVAILABLE",
+                                null))
+                        .compose(ignored -> Future.failedFuture(result.cause()));
+            }
+            VersionedMutationResult<T> mutation = result.result();
+            ManagementAuditOutcome auditOutcome = mutation.outcome() == ManagementMutationOutcome.APPLIED
+                    ? new ManagementAuditOutcome(
+                            ManagementAuditTerminalOutcome.SUCCEEDED,
+                            successCode,
+                            mutation.resultingVersion())
+                    : new ManagementAuditOutcome(
+                            ManagementAuditTerminalOutcome.REJECTED,
+                            entryVersionedAuditCode(mutation.outcome()),
+                            null);
+            return completeAudit(reservation, auditOutcome).map(mutation);
+        }));
+    }
+
+    private <T> Future<VersionedMutationResult<T>> auditedCounterMutation(
+            ManagementAuditAction action,
+            CacheKey key,
+            Long expectedVersion,
+            ManagementActionContext context,
+            String successCode,
+            Supplier<Future<VersionedMutationResult<T>>> operation) {
+        ManagementAuditIntent intent = new ManagementAuditIntent(
+                auditEventIdSupplier.get(),
+                auditClock.instant(),
+                context.actor(),
+                context.roles(),
+                action,
+                setupId,
+                ManagementResourceType.COUNTER,
+                Map.of(
+                        "namespace", auditFingerprinter.fingerprint(key.namespace()),
+                        "key", auditFingerprinter.fingerprint(key.key())),
+                expectedVersion,
+                null,
+                context.sourceAddress(),
+                context.correlationId());
+        return reserveAudit(intent).compose(reservation -> operation.get().transform(result -> {
+            if (result.failed()) {
+                boolean rejected = result.cause() instanceof ManagementCounterException;
+                return completeAudit(
+                        reservation,
+                        new ManagementAuditOutcome(
+                                rejected
+                                        ? ManagementAuditTerminalOutcome.REJECTED
+                                        : ManagementAuditTerminalOutcome.FAILED,
+                                rejected ? "VALIDATION_FAILED" : "DATABASE_UNAVAILABLE",
+                                null))
+                        .compose(ignored -> Future.failedFuture(result.cause()));
+            }
+            VersionedMutationResult<T> mutation = result.result();
+            ManagementAuditOutcome auditOutcome = mutation.outcome() == ManagementMutationOutcome.APPLIED
+                    ? new ManagementAuditOutcome(
+                            ManagementAuditTerminalOutcome.SUCCEEDED,
+                            successCode,
+                            mutation.resultingVersion())
+                    : new ManagementAuditOutcome(
+                            ManagementAuditTerminalOutcome.REJECTED,
+                            counterAuditCode(mutation.outcome()),
+                            null);
+            return completeAudit(reservation, auditOutcome).map(mutation);
+        }));
+    }
+
+    private <T> Future<T> auditedBulk(
+            ManagementAuditAction action,
+            Map<String, ManagementAuditFingerprint> identifiers,
+            ManagementActionContext context,
+            String successCode,
+            Supplier<Future<T>> operation) {
+        ManagementAuditIntent intent = new ManagementAuditIntent(
+                auditEventIdSupplier.get(),
+                auditClock.instant(),
+                context.actor(),
+                context.roles(),
+                action,
+                setupId,
+                ManagementResourceType.BULK_SELECTION,
+                identifiers,
+                null,
+                null,
+                context.sourceAddress(),
+                context.correlationId());
+        return reserveAudit(intent).compose(reservation -> operation.get().transform(result -> {
+            if (result.succeeded()) {
+                return completeAudit(
+                        reservation,
+                        new ManagementAuditOutcome(
+                                ManagementAuditTerminalOutcome.SUCCEEDED,
+                                successCode,
+                                null)).map(result.result());
+            }
+            boolean rejected = result.cause() instanceof ManagementBulkDeleteException;
+            String code = rejected
+                    ? ((ManagementBulkDeleteException) result.cause()).code().name()
+                    : "DATABASE_UNAVAILABLE";
+            return completeAudit(
+                    reservation,
+                    new ManagementAuditOutcome(
+                            rejected
+                                    ? ManagementAuditTerminalOutcome.REJECTED
+                                    : ManagementAuditTerminalOutcome.FAILED,
+                            code,
+                            null))
+                    .compose(ignored -> Future.failedFuture(result.cause()));
+        }));
+    }
+
     private Future<ManagementAuditReservation> reserveAudit(ManagementAuditIntent intent) {
         try {
             return auditSink.reserveIntent(intent).recover(failure ->
@@ -381,10 +802,10 @@ public final class PgManagementService implements ManagementService {
             ManagementAuditOutcome outcome) {
         try {
             return auditSink.complete(reservation, outcome).recover(failure ->
-                    Future.failedFuture(new ManagementAuditException(
+                    Future.failedFuture(new ManagementAuditOutcomeException(
                             "Management audit terminal outcome is unavailable", failure)));
         } catch (RuntimeException failure) {
-            return Future.failedFuture(new ManagementAuditException(
+            return Future.failedFuture(new ManagementAuditOutcomeException(
                     "Management audit terminal outcome is unavailable", failure));
         }
     }
@@ -395,6 +816,26 @@ public final class PgManagementService implements ManagementService {
             case VERSION_MISMATCH -> "VERSION_MISMATCH";
             case CONDITION_NOT_MET -> "SET_MODE_NOT_APPLIED";
             case APPLIED -> throw new IllegalArgumentException("Applied sets use a succeeded audit outcome");
+        };
+    }
+
+    private static String entryVersionedAuditCode(ManagementMutationOutcome outcome) {
+        return switch (outcome) {
+            case NOT_FOUND -> "ENTRY_NOT_FOUND";
+            case VERSION_MISMATCH -> "VERSION_MISMATCH";
+            case CONDITION_NOT_MET -> "SET_MODE_NOT_APPLIED";
+            case APPLIED -> throw new IllegalArgumentException(
+                    "Applied mutations use a succeeded audit outcome");
+        };
+    }
+
+    private static String counterAuditCode(ManagementMutationOutcome outcome) {
+        return switch (outcome) {
+            case NOT_FOUND -> "COUNTER_NOT_FOUND";
+            case VERSION_MISMATCH -> "VERSION_MISMATCH";
+            case CONDITION_NOT_MET -> "COUNTER_ALREADY_EXISTS";
+            case APPLIED -> throw new IllegalArgumentException(
+                    "Applied counter mutations use a succeeded audit outcome");
         };
     }
 

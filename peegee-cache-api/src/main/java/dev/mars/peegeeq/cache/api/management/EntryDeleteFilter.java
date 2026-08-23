@@ -1,28 +1,40 @@
 package dev.mars.peegeeq.cache.api.management;
 
-import dev.mars.peegeeq.cache.api.model.CacheKey;
+import dev.mars.peegeeq.cache.api.model.ValueType;
 
+import java.util.HashSet;
 import java.util.List;
 
-/** Actor-bound entry bulk-delete selection using either a literal prefix or exact keys. */
-public record EntryDeleteFilter(String namespace, String prefix, List<CacheKey> keys) {
+/** Actor-bound entry bulk-delete selection using either a filter or exact versioned targets. */
+public record EntryDeleteFilter(
+        String namespace,
+        String prefix,
+        ValueType valueType,
+        ManagementTtlFilter ttlFilter,
+        List<VersionedCacheKeyTarget> targets) {
     public EntryDeleteFilter {
         namespace = ManagementModelValidation.boundedText(namespace, "namespace", 1, 128, false);
         String selectedNamespace = namespace;
-        keys = List.copyOf(java.util.Objects.requireNonNull(keys, "keys"));
-        boolean hasPrefix = prefix != null;
-        boolean hasKeys = !keys.isEmpty();
-        if (hasPrefix == hasKeys) {
-            throw new IllegalArgumentException("exactly one of prefix or keys is required");
+        targets = List.copyOf(java.util.Objects.requireNonNull(targets, "targets"));
+        boolean explicit = !targets.isEmpty();
+        boolean filtered = ttlFilter != null;
+        if (explicit == filtered) {
+            throw new IllegalArgumentException("exactly one of filter or targets is required");
         }
-        if (prefix != null && prefix.isEmpty()) {
-            throw new IllegalArgumentException("prefix must not be empty");
+        if (prefix != null) {
+            prefix = ManagementModelValidation.boundedText(prefix, "prefix", 1, 1_024, false);
         }
-        if (keys.size() > 1_000) {
-            throw new IllegalArgumentException("keys must contain at most 1000 entries");
+        if (explicit && (prefix != null || valueType != null)) {
+            throw new IllegalArgumentException("explicit selection cannot include filter fields");
         }
-        if (keys.stream().anyMatch(key -> !selectedNamespace.equals(key.namespace()))) {
-            throw new IllegalArgumentException("every selected key must belong to namespace");
+        if (targets.size() > 1_000) {
+            throw new IllegalArgumentException("targets must contain at most 1000 entries");
+        }
+        if (targets.stream().anyMatch(target -> !selectedNamespace.equals(target.key().namespace()))) {
+            throw new IllegalArgumentException("every selected target must belong to namespace");
+        }
+        if (new HashSet<>(targets).size() != targets.size()) {
+            throw new IllegalArgumentException("targets must be unique");
         }
     }
 }

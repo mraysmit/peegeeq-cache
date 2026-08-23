@@ -115,7 +115,9 @@ public final class PgTestSupport {
                 "TRUNCATE TABLE %s.cache_entries, %s.cache_counters, %s.cache_locks"
                         .formatted(schemaName, schemaName, schemaName))
                 .compose(ignored -> execute(pool, "reset.lock_fencing_sequence",
-                        "ALTER SEQUENCE %s.lock_fencing_seq RESTART WITH 1".formatted(schemaName)));
+                        "ALTER SEQUENCE %s.lock_fencing_seq RESTART WITH 1".formatted(schemaName)))
+                .compose(ignored -> execute(pool, "reset.lock_version_sequence",
+                        "ALTER SEQUENCE %s.lock_version_seq RESTART WITH 1".formatted(schemaName)));
     }
 
     private Future<Void> execute(Pool pool, String phase, String sql) {

@@ -67,16 +67,34 @@ class ManagementRequestModelsTest {
 
     @Test
     void bulkSelectionsAreBoundedAndUseExactlyOneSelectionMode() {
-        EntryDeleteFilter filter = new EntryDeleteFilter("customers", "inactive:%", List.of());
+        EntryDeleteFilter filter = new EntryDeleteFilter(
+                "customers", "inactive:%", null,
+                ManagementTtlFilter.INCLUDE_EXPIRED, List.of());
         assertEquals("inactive:%", filter.prefix());
-        assertTrue(filter.keys().isEmpty());
+        assertTrue(filter.targets().isEmpty());
+
+        VersionedCacheKeyTarget target = new VersionedCacheKeyTarget(KEY, 7);
+        EntryDeleteFilter explicit = new EntryDeleteFilter(
+                "customers", null, null, null, List.of(target));
+        assertEquals(7, explicit.targets().getFirst().version());
+        CounterDeleteSelection counters = new CounterDeleteSelection(List.of(target));
+        assertEquals(KEY, counters.targets().getFirst().key());
 
         assertThrows(IllegalArgumentException.class,
-                () -> new EntryDeleteFilter("customers", "prefix", List.of(KEY)));
+                () -> new EntryDeleteFilter(
+                        "customers", "prefix", null,
+                        ManagementTtlFilter.ALL_LIVE, List.of(target)));
         assertThrows(IllegalArgumentException.class,
-                () -> new EntryDeleteFilter("customers", null, List.of()));
+                () -> new EntryDeleteFilter("customers", null, null, null, List.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new ConfirmedEntryDelete("t".repeat(32), ""));
+                () -> new CounterDeleteSelection(List.of()));
+        ConfirmedEntryDelete confirmation = new ConfirmedEntryDelete(
+                "t".repeat(32), "DELETE customers", "customers");
+        assertEquals("customers", confirmation.namespace());
+        assertThrows(IllegalArgumentException.class,
+                () -> new ConfirmedEntryDelete("t".repeat(32), "", "customers"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ConfirmedEntryDelete("t".repeat(32), "DELETE customers", ""));
     }
 
     @Test

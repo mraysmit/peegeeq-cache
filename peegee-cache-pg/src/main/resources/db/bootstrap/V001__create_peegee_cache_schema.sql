@@ -57,6 +57,10 @@ CREATE TABLE IF NOT EXISTS peegee_cache.cache_counters (
     PRIMARY KEY (namespace, counter_key)
 );
 
+-- lock_version_seq: monotonic lock generations prevent stale management releases
+-- from matching a lease that was deleted and later reacquired under the same key.
+CREATE SEQUENCE IF NOT EXISTS peegee_cache.lock_version_seq;
+
 -- cache_locks: distributed lease-based locks with owner tokens and optional fencing tokens.
 -- Always logged (never UNLOGGED) because lock state is safety-critical.
 CREATE TABLE IF NOT EXISTS peegee_cache.cache_locks (
@@ -64,7 +68,8 @@ CREATE TABLE IF NOT EXISTS peegee_cache.cache_locks (
     lock_key            TEXT                        NOT NULL,
     owner_token         TEXT                        NOT NULL,
     fencing_token       BIGINT,
-    version             BIGINT                      NOT NULL DEFAULT 1,
+    version             BIGINT                      NOT NULL
+                                                    DEFAULT nextval('peegee_cache.lock_version_seq'),
     created_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
     lease_expires_at    TIMESTAMPTZ                 NOT NULL,
@@ -164,7 +169,8 @@ BEGIN
         VALUES (
             p_namespace, p_lock_key, p_owner_token,
             nextval('peegee_cache.lock_fencing_seq'),
-            1, NOW(), NOW(), NOW() + v_lease_interval
+            nextval('peegee_cache.lock_version_seq'),
+            NOW(), NOW(), NOW() + v_lease_interval
         )
         ON CONFLICT (namespace, lock_key) DO NOTHING
         RETURNING cache_locks.owner_token, cache_locks.fencing_token, cache_locks.lease_expires_at
@@ -176,7 +182,8 @@ BEGIN
         )
         VALUES (
             p_namespace, p_lock_key, p_owner_token, NULL,
-            1, NOW(), NOW(), NOW() + v_lease_interval
+            nextval('peegee_cache.lock_version_seq'),
+            NOW(), NOW(), NOW() + v_lease_interval
         )
         ON CONFLICT (namespace, lock_key) DO NOTHING
         RETURNING cache_locks.owner_token, cache_locks.fencing_token, cache_locks.lease_expires_at
@@ -194,7 +201,7 @@ BEGIN
         -- Attempt reentrant renew by same owner
         UPDATE peegee_cache.cache_locks cl
         SET lease_expires_at = NOW() + v_lease_interval,
-            version = cl.version + 1,
+            version = nextval('peegee_cache.lock_version_seq'),
             updated_at = NOW()
         WHERE cl.namespace = p_namespace
           AND cl.lock_key = p_lock_key
@@ -243,7 +250,7 @@ DECLARE
 BEGIN
     UPDATE peegee_cache.cache_locks cl
     SET lease_expires_at = NOW() + (p_lease_ttl_millis * INTERVAL '1 millisecond'),
-        version = cl.version + 1,
+        version = nextval('peegee_cache.lock_version_seq'),
         updated_at = NOW()
     WHERE cl.namespace = p_namespace
       AND cl.lock_key = p_lock_key

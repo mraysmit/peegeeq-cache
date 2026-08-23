@@ -10,4 +10,9 @@ import io.vertx.core.Future;
 public interface ManagementAuditSink {
     Future<ManagementAuditReservation> reserveIntent(ManagementAuditIntent intent);
     Future<Void> complete(ManagementAuditReservation reservation, ManagementAuditOutcome outcome);
+
+    /** Whether new privileged work may currently reserve an authoritative audit intent. */
+    default boolean isMutationReady() {
+        return true;
+    }
 }

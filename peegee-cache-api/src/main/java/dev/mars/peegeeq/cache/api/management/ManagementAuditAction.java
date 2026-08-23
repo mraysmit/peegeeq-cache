@@ -2,6 +2,11 @@ package dev.mars.peegeeq.cache.api.management;
 
 /** Bounded management operation name for authoritative security auditing. */
 public enum ManagementAuditAction {
+    TEST_SETUP,
+    REGISTER_SETUP,
+    CONNECT_SETUP,
+    DETACH_SETUP,
+    FORGET_SETUP,
     REVEAL_ENTRY,
     SET_ENTRY,
     EXPIRE_ENTRY,
@@ -18,5 +23,9 @@ public enum ManagementAuditAction {
     PREVIEW_ENTRY_DELETE,
     EXECUTE_ENTRY_DELETE,
     PREVIEW_COUNTER_DELETE,
-    EXECUTE_COUNTER_DELETE
+    EXECUTE_COUNTER_DELETE,
+    PUBLISH_PUBSUB,
+    CREATE_PUBSUB_SUBSCRIPTION,
+    REVEAL_PUBSUB_PAYLOAD,
+    DELETE_PUBSUB_SUBSCRIPTION
 }

@@ -7,6 +7,9 @@ import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.ParseOptions;
 import io.swagger.v3.parser.core.models.SwaggerParseResult;
 import org.junit.jupiter.api.Test;
+import dev.mars.peegeeq.cache.rest.server.ManagementM7RouteInventory;
+import dev.mars.peegeeq.cache.rest.server.ManagementM8RouteInventory;
+import dev.mars.peegeeq.cache.rest.server.ManagementM9RouteInventory;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +28,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ManagementOpenApiContractTest {
 
     private static final String OPENAPI_RESOURCE = "/openapi/peegeeq-cache-management-v1.yaml";
+
+    @Test
+    void declaredM7InventoryMatchesImplementedRouteInventory() throws Exception {
+        JsonNode declared = loadDocument().path("x-m7-operation-ids");
+        assertTrue(declared.isArray(), "OpenAPI must declare its reviewed M7 operation inventory");
+        Set<String> declaredIds = new java.util.TreeSet<>();
+        declared.forEach(value -> declaredIds.add(value.asText()));
+
+        assertEquals(declared.size(), declaredIds.size(), "M7 OpenAPI inventory must not contain duplicates");
+        assertEquals(declaredIds, ManagementM7RouteInventory.operationIds());
+    }
+
+    @Test
+    void declaredM8InventoryMatchesImplementedRouteInventory() throws Exception {
+        JsonNode declared = loadDocument().path("x-m8-operation-ids");
+        assertTrue(declared.isArray(), "OpenAPI must declare its reviewed M8 operation inventory");
+        Set<String> declaredIds = new java.util.TreeSet<>();
+        declared.forEach(value -> declaredIds.add(value.asText()));
+
+        assertEquals(declared.size(), declaredIds.size(), "M8 OpenAPI inventory must not contain duplicates");
+        assertEquals(declaredIds, ManagementM8RouteInventory.operationIds());
+    }
+
+    @Test
+    void declaredM9InventoryMatchesImplementedRouteInventory() throws Exception {
+        JsonNode declared = loadDocument().path("x-m9-operation-ids");
+        assertTrue(declared.isArray(), "OpenAPI must declare its reviewed M9 operation inventory");
+        Set<String> declaredIds = new java.util.TreeSet<>();
+        declared.forEach(value -> declaredIds.add(value.asText()));
+
+        assertEquals(declared.size(), declaredIds.size(), "M9 OpenAPI inventory must not contain duplicates");
+        assertEquals(declaredIds, ManagementM9RouteInventory.operationIds());
+    }
 
     @Test
     void loadsOpenApi31Document() throws Exception {
@@ -232,6 +268,38 @@ class ManagementOpenApiContractTest {
                 .path("x-wildcard-condition-not-met").asText());
     }
 
+    @Test
+    void requiresHostnameVerifiedTlsAndCanonicalSetupIdentifiers() throws Exception {
+        JsonNode document = loadDocument();
+        JsonNode schemas = document.path("components").path("schemas");
+
+        for (String schemaName : Set.of("SetupConnectionRequest", "SetupRegistrationRequest")) {
+            JsonNode schema = schemas.path(schemaName);
+            Set<String> required = new java.util.TreeSet<>();
+            schema.path("required").forEach(value -> required.add(value.asText()));
+            assertTrue(required.contains("trustProfileId"),
+                    () -> schemaName + " must require a server-configured trust profile");
+            assertEquals(Set.of("VERIFY_FULL"), enumValues(schema.path("properties").path("sslMode")),
+                    () -> schemaName + " must not permit weaker TLS modes");
+            assertEquals("string", schema.path("properties").path("trustProfileId").path("type").asText(),
+                    () -> schemaName + " trustProfileId must not be nullable");
+            assertEquals(1, schema.path("properties").path("trustProfileId").path("minLength").asInt(),
+                    () -> schemaName + " trustProfileId must not be empty");
+        }
+
+        String setupIdPattern = "^[a-z][a-z0-9-]{0,62}$";
+        assertEquals(setupIdPattern, document.path("components").path("parameters")
+                .path("SetupId").path("schema").path("pattern").asText());
+        assertEquals(setupIdPattern, document.path("components").path("parameters")
+                .path("MonitoringSetupId").path("schema").path("pattern").asText());
+        assertEquals(setupIdPattern, schemas.path("SetupRegistrationRequest").path("properties")
+                .path("setupId").path("pattern").asText());
+        assertEquals(setupIdPattern, schemas.path("SetupSummary").path("properties")
+                .path("setupId").path("pattern").asText());
+        assertEquals(Set.of("VERIFY_FULL"), enumValues(schemas.path("SetupSummary")
+                .path("properties").path("sslMode")));
+    }
+
     private static JsonNode loadDocument() throws Exception {
         try (InputStream input = ManagementOpenApiContractTest.class.getResourceAsStream(OPENAPI_RESOURCE)) {
             assertNotNull(input, "packaged management OpenAPI document");
@@ -309,6 +377,12 @@ class ManagementOpenApiContractTest {
         schemas.path(schemaName).path("required").forEach(value -> actual.add(value.asText()));
         assertTrue(actual.containsAll(Set.of(properties)),
                 () -> schemaName + " required properties: " + actual);
+    }
+
+    private static Set<String> enumValues(JsonNode schema) {
+        Set<String> values = new java.util.TreeSet<>();
+        schema.path("enum").forEach(value -> values.add(value.asText()));
+        return values;
     }
 
     private static String expectedSecurityProfile(String operationId) {

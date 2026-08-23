@@ -21,6 +21,10 @@ final class PgManagementReadSql {
     final String lock;
     final String databaseStats;
     final String expiryStats;
+    final String overview;
+    final String databaseMonitoringCore;
+    final String databaseMonitoringPhysical;
+    final String databaseMonitoringActivity;
 
     PgManagementReadSql(String schemaName) {
         String schema = requireSchema(schemaName);
@@ -61,10 +65,19 @@ final class PgManagementReadSql {
                          WHEN expires_at > statement_timestamp() THEN 'EXPIRING'
                          ELSE 'EXPIRED'
                        END AS ttl_state,
+                       CASE
+                         WHEN expires_at IS NULL THEN 'PERSISTENT'
+                         WHEN expires_at <= statement_timestamp() THEN 'EXPIRED'
+                         WHEN expires_at < statement_timestamp() + INTERVAL '1 minute' THEN 'LT_1_MINUTE'
+                         WHEN expires_at < statement_timestamp() + INTERVAL '5 minutes' THEN 'FROM_1_TO_5_MINUTES'
+                         WHEN expires_at < statement_timestamp() + INTERVAL '30 minutes' THEN 'FROM_5_TO_30_MINUTES'
+                         WHEN expires_at < statement_timestamp() + INTERVAL '60 minutes' THEN 'FROM_30_TO_60_MINUTES'
+                         ELSE 'GTE_60_MINUTES'
+                       END AS ttl_bucket,
                        COUNT(*)::BIGINT AS item_count
                   FROM %1$s.cache_entries
                  WHERE namespace = $1
-                 GROUP BY value_type, ttl_state
+                 GROUP BY value_type, ttl_state, ttl_bucket
                 """.formatted(schema);
 
         String namespaceAggregate = """
@@ -115,11 +128,10 @@ final class PgManagementReadSql {
                 """.formatted(schema);
         String filters = """
                  WHERE ($1::TEXT IS NULL OR namespace LIKE $1 ESCAPE '\\')
-                   AND ($2::TEXT IS NULL
-                        OR ($2 = 'READY' AND expired_entry_count = 0
-                            AND live_entry_count + live_counter_count + active_lock_count > 0)
-                        OR ($2 = 'EMPTY' AND live_entry_count + live_counter_count + active_lock_count = 0)
-                        OR ($2 = 'EXPIRY_BACKLOG' AND expired_entry_count > 0))
+                   AND ($2::TEXT IS NULL OR $2 = 'ALL'
+                        OR ($2 = 'HEALTHY' AND expired_entry_count = 0)
+                        OR ($2 = 'EXPIRED_BACKLOG' AND expired_entry_count > 0)
+                        OR ($2 = 'ACTIVE_LOCKS' AND active_lock_count > 0))
                 """;
         namespacesAscending = namespaceAggregate + """
                 SELECT * FROM stats
@@ -261,6 +273,107 @@ final class PgManagementReadSql {
                            (statement_timestamp() - MIN(expires_at))) * 1000)::BIGINT, 0)
                            AS oldest_lag_millis
                   FROM expired
+                """.formatted(schema);
+        databaseMonitoringCore = """
+                WITH expired AS (
+                    SELECT expires_at FROM %1$s.cache_entries
+                     WHERE expires_at IS NOT NULL AND expires_at <= statement_timestamp()
+                    UNION ALL
+                    SELECT expires_at FROM %1$s.cache_counters
+                     WHERE expires_at IS NOT NULL AND expires_at <= statement_timestamp()
+                )
+                SELECT statement_timestamp() AS observed_at,
+                       ((SELECT COUNT(*) FROM %1$s.cache_entries
+                          WHERE expires_at IS NULL OR expires_at > statement_timestamp())
+                      + (SELECT COUNT(*) FROM %1$s.cache_counters
+                          WHERE expires_at IS NULL OR expires_at > statement_timestamp())
+                      + (SELECT COUNT(*) FROM %1$s.cache_locks
+                          WHERE lease_expires_at > statement_timestamp()))::BIGINT AS live_rows,
+                       ((SELECT COUNT(*) FROM %1$s.cache_entries
+                          WHERE expires_at IS NOT NULL AND expires_at <= statement_timestamp())
+                      + (SELECT COUNT(*) FROM %1$s.cache_counters
+                          WHERE expires_at IS NOT NULL AND expires_at <= statement_timestamp())
+                      + (SELECT COUNT(*) FROM %1$s.cache_locks
+                          WHERE lease_expires_at <= statement_timestamp()))::BIGINT AS expired_rows,
+                       (SELECT COUNT(*)::BIGINT FROM expired) AS expiry_backlog,
+                       FLOOR(EXTRACT(EPOCH FROM
+                           (statement_timestamp() - (SELECT MIN(expires_at) FROM expired)))
+                           * 1000)::BIGINT AS oldest_expired_row_lag_millis
+                """.formatted(schema);
+        databaseMonitoringPhysical = """
+                SELECT statement_timestamp() AS observed_at,
+                       COALESCE(SUM(pg_table_size(c.oid)) FILTER (
+                           WHERE c.relname IN ('cache_entries', 'cache_counters', 'cache_locks')
+                             AND c.relkind IN ('r', 'p')), 0)::BIGINT AS table_bytes,
+                       COALESCE(SUM(pg_indexes_size(c.oid)) FILTER (
+                           WHERE c.relname IN ('cache_entries', 'cache_counters', 'cache_locks')
+                             AND c.relkind IN ('r', 'p')), 0)::BIGINT AS index_bytes,
+                       COALESCE(SUM(pg_total_relation_size(c.oid)) FILTER (
+                           WHERE c.relkind IN ('r', 'm', 'S')), 0)::BIGINT AS schema_bytes
+                  FROM pg_class c
+                  JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = $1
+                """;
+        databaseMonitoringActivity = """
+                SELECT statement_timestamp() AS observed_at,
+                       COALESCE(SUM(s.n_dead_tup), 0)::BIGINT AS dead_tuples,
+                       MAX(s.last_vacuum) AS last_vacuum_at,
+                       MAX(s.last_autovacuum) AS last_autovacuum_at,
+                       (SELECT COUNT(*)::BIGINT FROM pg_stat_activity
+                         WHERE datname = current_database()) AS database_connections,
+                       (SELECT COUNT(*)::BIGINT FROM pg_stat_activity
+                         WHERE datname = current_database()
+                           AND $2 <> ''
+                           AND application_name = $2) AS cache_connections
+                  FROM pg_stat_all_tables s
+                 WHERE s.schemaname = $1
+                   AND s.relname IN ('cache_entries', 'cache_counters', 'cache_locks')
+                """;
+        overview = """
+                WITH namespaces AS (
+                    SELECT namespace FROM %1$s.cache_entries
+                    UNION
+                    SELECT namespace FROM %1$s.cache_counters
+                    UNION
+                    SELECT namespace FROM %1$s.cache_locks
+                ), expired AS (
+                    SELECT expires_at FROM %1$s.cache_entries
+                     WHERE expires_at IS NOT NULL AND expires_at <= statement_timestamp()
+                    UNION ALL
+                    SELECT expires_at FROM %1$s.cache_counters
+                     WHERE expires_at IS NOT NULL AND expires_at <= statement_timestamp()
+                )
+                SELECT statement_timestamp() AS observed_at,
+                       (SELECT COUNT(*)::BIGINT FROM namespaces) AS namespace_count,
+                       (SELECT COUNT(*)::BIGINT FROM %1$s.cache_entries
+                         WHERE expires_at IS NULL OR expires_at > statement_timestamp())
+                           AS live_entry_count,
+                       (SELECT COUNT(*)::BIGINT FROM %1$s.cache_counters
+                         WHERE expires_at IS NULL OR expires_at > statement_timestamp())
+                           AS live_counter_count,
+                       (SELECT COUNT(*)::BIGINT FROM %1$s.cache_locks
+                         WHERE lease_expires_at > statement_timestamp()) AS active_lock_count,
+                       (SELECT COUNT(*)::BIGINT FROM %1$s.cache_entries
+                         WHERE expires_at IS NOT NULL AND expires_at <= statement_timestamp())
+                           AS expired_entry_count,
+                       (SELECT COUNT(*)::BIGINT FROM %1$s.cache_counters
+                         WHERE expires_at IS NOT NULL AND expires_at <= statement_timestamp())
+                           AS expired_counter_count,
+                       (SELECT COUNT(*) FILTER (WHERE value_type = 'STRING')::BIGINT
+                          FROM %1$s.cache_entries
+                         WHERE expires_at IS NULL OR expires_at > statement_timestamp()) AS string_count,
+                       (SELECT COUNT(*) FILTER (WHERE value_type = 'JSON')::BIGINT
+                          FROM %1$s.cache_entries
+                         WHERE expires_at IS NULL OR expires_at > statement_timestamp()) AS json_count,
+                       (SELECT COUNT(*) FILTER (WHERE value_type = 'LONG')::BIGINT
+                          FROM %1$s.cache_entries
+                         WHERE expires_at IS NULL OR expires_at > statement_timestamp()) AS long_count,
+                       (SELECT COUNT(*) FILTER (WHERE value_type = 'BYTES')::BIGINT
+                          FROM %1$s.cache_entries
+                         WHERE expires_at IS NULL OR expires_at > statement_timestamp()) AS bytes_count,
+                       COALESCE(FLOOR(EXTRACT(EPOCH FROM
+                           (statement_timestamp() - (SELECT MIN(expires_at) FROM expired)))
+                           * 1000)::BIGINT, 0) AS oldest_lag_millis
                 """.formatted(schema);
     }
 

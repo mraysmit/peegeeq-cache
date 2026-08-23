@@ -1,8 +1,7 @@
 # PeeGeeQ Cache Management API
 
-**Author:** Mark A Ray-Smith Cityline Ltd
-
-**Date:** 17 August 2026
+**Author:** Mark A Ray-Smith Cityline Ltd<br>
+**Date:** 17 August 2026<br>
 **Version:** 1.0 draft
 
 **Base path:** `/api/v1`
@@ -18,7 +17,7 @@ It is the implementation contract for:
 - the PostgreSQL implementation of management inspection and guarded administration;
 - integration and browser tests.
 
-Phase 8.2 has completed M0–M2. The M3 PostgreSQL inspection/read model and shared cursor primitive are implemented with focused PostgreSQL 18.3 acceptance evidence; the M3 phase gate remains in progress until the complete `peegee-cache-pg` and reactor suites finish successfully. No management HTTP route, authentication/setup lifecycle, reveal, or mutation behavior is implemented, so M4 and later phases have not started. The browser console remains separately tracked as Phase 8.3. Section 19 records the current implementation boundary and remaining evidence gates.
+Phase 8.2 backend phases M0–M10 are complete. The implementation includes the synchronized OpenAPI/typed contract, PostgreSQL inspection and atomic administration, durable fail-closed audit, both authentication modes, setup lifecycle, the complete REST/SSE/WebSocket surface, mandatory observability, runnable packaging, operational guidance, real-browser local-session acceptance, and complete-reactor PostgreSQL 15–18 evidence. The production React console remains separately tracked as Phase 8.3 and is not claimed by this backend status. Section 19 records the implementation boundary and evidence.
 
 The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The interactive screen designs are in [UI mockups/peegeeq-cache-management-ui-mockups.html](UI%20mockups/peegeeq-cache-management-ui-mockups.html).
 
@@ -444,14 +443,14 @@ Request:
 
 ```json
 {
-  "host": "127.0.0.1",
+  "host": "db.internal.example",
   "port": 5432,
   "database": "dev",
   "schema": "peegee_cache",
   "username": "cache_admin",
   "password": "secret",
-  "sslMode": "DISABLE",
-  "trustProfileId": null,
+  "sslMode": "VERIFY_FULL",
+  "trustProfileId": "corp-ca",
   "poolMaxSize": 10
 }
 ```
@@ -498,14 +497,14 @@ Request includes the connection fields above plus:
 {
   "setupId": "local-dev",
   "displayName": "Local development",
-  "host": "127.0.0.1",
+  "host": "db.internal.example",
   "port": 5432,
   "database": "dev",
   "schema": "peegee_cache",
   "username": "cache_admin",
   "password": "secret",
-  "sslMode": "DISABLE",
-  "trustProfileId": null,
+  "sslMode": "VERIFY_FULL",
+  "trustProfileId": "corp-ca",
   "poolMaxSize": 10
 }
 ```
@@ -625,7 +624,10 @@ Response:
     "liveCounterCount": "324",
     "activeLockCount": "7",
     "expiredEntryCount": "93",
-    "schemaBytes": "40475034"
+    "schemaBytes": {
+      "availability": "AVAILABLE",
+      "value": "40475034"
+    }
   },
   "expiry": {
     "oldestExpiredRowLagMillis": 38000,
@@ -1241,6 +1243,8 @@ Permission-dependent field:
 
 Unavailable information is never represented as zero.
 
+The implementation counts live and expired rows across entries, counters, and locks. `expiryBacklog` and `oldestExpiredRowLagMillis` cover the sweepable entry/counter backlog. Physical sizes and PostgreSQL statistics retain explicit availability state, while `cacheConnections` matches the setup-specific `application_name` rather than counting unrelated clients.
+
 ### 13.2 Management runtime monitoring
 
 `GET /api/v1/setups/{setupId}/monitoring/runtime`
@@ -1281,6 +1285,8 @@ Response `200`:
 
 `operations` contains bounded operation-name/status/count/error-count/latency aggregates for this management process only. It contains no actor, setup, namespace, key, channel, cursor, value, payload, owner, credential, or other unbounded telemetry dimension. Pool fields use an availability wrapper when the selected Vert.x client cannot expose a value; unavailable values are never encoded as zero.
 
+Operation counts, error counts, and latency are cumulative for the lifetime of the management process; an aggregate is `ACTIVE` while any matching operation is in flight and otherwise reflects its most recent terminal status. Completion is idempotent across response-end, close, and exception signals. The current Vert.x pool exposes its configured maximum but not authoritative active, idle, or pending counts, so those fields are explicitly `UNAVAILABLE`.
+
 ### 13.3 Metrics SSE
 
 `GET /api/v1/setups/{setupId}/sse/metrics`
@@ -1304,6 +1310,8 @@ The server sends comment heartbeat every 15 seconds and supports `Last-Event-ID`
 Role: viewer
 
 Query: `after`, `limit` default 50/max 200, optional `namespace`, `action`, and `outcome`.
+
+Results are newest-first. `after` is the last event ID returned by the preceding page and is exclusive; the server resumes with older matching events. An event ID that is unknown, belongs to another setup, or has aged out of the bounded process-local buffer returns `400 VALIDATION_FAILED` rather than silently restarting and duplicating a page. Activity remains readable for a registered setup while its database runtime is detached.
 
 Activity event:
 
@@ -1505,9 +1513,9 @@ The completed M3 inspection implementation exposes namespace, entry, counter, an
 
 `PgManagementReadRepository` and `PgManagementReadSql` implement the current read model. Namespace ordering is deterministic for both `namespace:asc` and `entryCount:desc,namespace:asc`; entry pages use key ordering within a namespace; counter and lock pages use qualified namespace/key ordering. Prefixes are literal, expiry comparisons use database time, expired rows are hidden unless the query explicitly includes them, active-lock metadata excludes owner tokens, and entry metadata selects size but never payload content or the internal `last_accessed_at` column. The `EXPIRING_SOON` lock view is the active-lock subset whose lease ends within 60 seconds.
 
-Permission-sensitive database/schema sizes use availability-bearing fields: a PostgreSQL privilege failure is reported as `UNAVAILABLE` with a null value, never as a misleading zero. The original `PgManagementService` constructor creates query-bound cursor pages and advertises the M3 inspection capabilities only. The M4.1 mutation-aware constructor additionally advertises entry reveal/mutation and delegates to `PgManagementMutationRepository`; entry TTL/persist/touch/delete, counter, lock, and bulk mutation methods remain behind their typed capability boundaries. `PgPeeGeeCache` can receive either supported service through its management-aware constructor while retaining its existing constructor and unsupported fallback.
+Permission-sensitive database/schema sizes use availability-bearing fields: a PostgreSQL privilege failure is reported as `UNAVAILABLE` with a null value, never as a misleading zero. The original `PgManagementService` constructor creates query-bound cursor pages and advertises the M3 inspection capabilities only. The mutation-aware constructor additionally advertises entry reveal/mutation and delegates to `PgManagementMutationRepository`; reveal, set, expire, persist, touch, and delete are implemented, while counter, lock, and bulk mutation methods remain behind their typed capability boundaries. `PgPeeGeeCache` can receive either supported service through its management-aware constructor while retaining its existing constructor and unsupported fallback.
 
-The M4.1 mutation-aware PostgreSQL service receives a required `ManagementAuditSink` and enforces audit reservation before entry reveal/set reaches PostgreSQL, including calls made without REST. Its bounded default intent fingerprints namespace/key identifiers and never carries the entry value. Full durable sink lifecycle, recovery, uncertain-outcome readiness, and the remaining context-requiring operations are completed incrementally through M4.2–M4.5:
+The mutation-aware PostgreSQL service receives a required `ManagementAuditSink` and enforces audit reservation before implemented entry, counter, and lock reveal/mutation work reaches PostgreSQL, including calls made without REST. Its bounded default intents fingerprint namespace/key identifiers and never carry entry values, counter payloads, or lock owner tokens. The REST/server boundary provides an fsync-backed bounded journal with idempotent completion, restart recovery to `UNKNOWN`, uncertain-outcome readiness blocking, clean shutdown, and failure-isolated optional telemetry:
 
 ```java
 interface ManagementAuditSink {
@@ -1615,19 +1623,19 @@ Tests cover:
 
 ### 18.3 End-to-end acceptance
 
-The backend plan owns a minimal non-production browser harness served only from test resources. Playwright runs that harness against the real REST server and PostgreSQL container to prove both authentication modes, session-cookie attributes/expiry, the local-bootstrap exception, CSRF/origin enforcement, no-store behavior, browser storage exclusion, and static-route isolation. The harness is not packaged in the runnable artifact and is not presented as the production console.
+The backend plan owns a minimal non-production browser harness served only from test resources. Playwright runs that harness against the real REST server to prove the local bootstrap/session flow, cookie attributes, CSRF/Fetch-Metadata rejection, no-store behavior, browser storage exclusion, and static-route isolation. Trusted-proxy identity/session behavior is verified through running-server protocol tests; end-to-end browser-to-proxy TLS termination belongs to production deployment acceptance. The harness is not packaged in the runnable artifact and is not presented as the production console.
 
 Phase 8.3 owns the production React console and its full-browser journeys for setup lifecycle and target policy, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, quotas, accessibility, and cleanup. Both suites inspect browser storage, URLs, responses, structured audit output, and ordinary logs for forbidden sensitive data and raw user-controlled identifiers.
 
 ## 19. Implementation state and module ownership
 
-Status: **M0–M3 AND M4.1 IMPLEMENTATION COMPLETE; M4 IN PROGRESS**. M0 closed the contract/build topology, M1 delivered the validated 50-operation OpenAPI and pure REST protocol rules, and M2 delivered the immutable Java management contract and audit SPI. M3 delivered the PostgreSQL inspection repository, SQL catalogue, management read service, shared signed-cursor codec, typed not-found/readiness failures, and facade injection described in section 16. M4.1 adds snapshot-consistent entry reveal, atomic set/TTL mode outcomes with committed metadata, exact-version concurrency, and fail-closed audit reservation. Focused PostgreSQL 18.3 acceptance, the complete 217-test PostgreSQL module, the 61-suite/389-test reactor, and the output/leakage gate are green. M4.2 is next; no REST route or production UI behavior is claimed.
+Status: **M0–M10 BACKEND COMPLETE**. M0–M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared metrics sampler per setup, a Prometheus scrape, a Java 21 shaded artifact verified under OpenJDK 26.0.2, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. The final 11-module reactor passes 524 tests (521 Surefire and 3 Failsafe) with zero failures, errors, or skips. Complete-reactor verification also passes PostgreSQL 15.17, 16.13, 17.11, and 18.3. No production UI behavior is claimed.
 
 Ownership is:
 
 - `peegee-cache-api`: management service, immutable request/result models, query TTL vocabulary, shared cursor codec/scope/position types, typed not-found/readiness/mutation outcomes, action context, capabilities, and audit-sink contract;
-- `peegee-cache-pg`: implemented parameterized inspection SQL/read service plus M4.1 entry reveal and atomic version-checked set/TTL mutations, with no REST dependency;
-- `peegee-cache-rest`: implemented OpenAPI/protocol rules and thin shared-cursor adapter; the Vert.x HTTP/SSE/WebSocket server, setup registry, authentication, authorization, CSRF/origin enforcement, target policy, rate limits, and route serialization remain later work;
+- `peegee-cache-pg`: implemented parameterized inspection SQL/read service plus M4 entry/counter/lock reveal and atomic version-checked mutation behavior, with no REST dependency;
+- `peegee-cache-rest`: implemented OpenAPI/protocol rules, shared cursors, durable authoritative audit, security, setup/server lifecycle, all read/reveal/administration/pub-sub/live routes, mandatory telemetry, runnable composition, and final acceptance;
 - `peegee-cache-management-ui`: React client, generated/validated DTOs, local-only display preferences, sensitive-state isolation, and accessible operator workflows;
 - `peegee-cache-observability`: reuse of the existing telemetry and logging standards; management lifecycle, HTTP, stream, audit-queue, and resource-saturation signals are mandatory production scope, not optional extras;
 - `peegee-cache-test-support`: reusable real-PostgreSQL, server, authentication, SSE, and WebSocket fixtures where they avoid duplication without replacing end-to-end coverage.

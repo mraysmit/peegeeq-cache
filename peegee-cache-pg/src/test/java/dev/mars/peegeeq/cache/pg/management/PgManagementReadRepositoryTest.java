@@ -112,6 +112,12 @@ class PgManagementReadRepositoryTest {
                     assertEquals(1L, details.ttlStateCounts().get(ManagementTtl.State.PERSISTENT));
                     assertEquals(1L, details.ttlStateCounts().get(ManagementTtl.State.EXPIRING));
                     assertEquals(1L, details.ttlStateCounts().get(ManagementTtl.State.EXPIRED));
+                    assertEquals(1L, details.ttlDistribution().get(
+                            dev.mars.peegeeq.cache.api.management.ManagementTtlBucket.PERSISTENT));
+                    assertEquals(1L, details.ttlDistribution().get(
+                            dev.mars.peegeeq.cache.api.management.ManagementTtlBucket.GTE_60_MINUTES));
+                    assertEquals(1L, details.ttlDistribution().get(
+                            dev.mars.peegeeq.cache.api.management.ManagementTtlBucket.EXPIRED));
                     assertTrue(details.stats().estimatedStorageBytes() > 0);
                     context.completeNow();
                 }))
@@ -292,6 +298,42 @@ class PgManagementReadRepositoryTest {
                     assertEquals(1, expiry.expiredCounterCount());
                     assertEquals(Availability.AVAILABLE, expiry.oldestLagMillis().availability());
                     assertTrue(expiry.oldestLagMillis().value() >= Duration.ofMinutes(59).toMillis());
+                }))
+                .compose(ignored -> service.overview())
+                .onSuccess(overview -> context.verify(() -> {
+                    assertEquals(1, overview.namespaceCount());
+                    assertEquals(2, overview.liveEntryCount());
+                    assertEquals(1, overview.liveCounterCount());
+                    assertEquals(1, overview.activeLockCount());
+                    assertEquals(1, overview.expiredEntryCount());
+                    assertEquals(1, overview.expiredCounterCount());
+                    assertEquals(1, overview.valueTypeCounts().get(ValueType.STRING));
+                    assertEquals(1, overview.valueTypeCounts().get(ValueType.LONG));
+                    assertEquals(Availability.AVAILABLE, overview.schemaBytes().availability());
+                    assertEquals("stats", overview.topNamespaces().getFirst().namespace());
+                    context.completeNow();
+                }))
+                .onFailure(context::failNow);
+    }
+
+    @Test
+    void databaseMonitoringCombinesExactRowsPhysicalStatsAndConnectionActivity(
+            VertxTestContext context) {
+        seedMixedNamespace("monitoring")
+                .compose(ignored -> service.databaseMonitoring())
+                .onSuccess(monitoring -> context.verify(() -> {
+                    assertEquals(Availability.AVAILABLE, monitoring.tableBytes().availability());
+                    assertTrue(monitoring.tableBytes().value() > 0);
+                    assertEquals(Availability.AVAILABLE, monitoring.indexBytes().availability());
+                    assertTrue(monitoring.indexBytes().value() > 0);
+                    assertEquals(Availability.AVAILABLE, monitoring.schemaBytes().availability());
+                    assertEquals(4L, monitoring.liveRows().value());
+                    assertEquals(3L, monitoring.expiredRows().value());
+                    assertEquals(Availability.AVAILABLE, monitoring.deadTuples().availability());
+                    assertTrue(monitoring.databaseConnections().value() >= 1);
+                    assertEquals(2L, monitoring.expiryBacklog());
+                    assertTrue(monitoring.oldestExpiredRowLagMillis()
+                            >= Duration.ofMinutes(59).toMillis());
                     context.completeNow();
                 }))
                 .onFailure(context::failNow);
@@ -461,7 +503,7 @@ class PgManagementReadRepositoryTest {
                         INSERT INTO management_read.cache_entries
                             (namespace, cache_key, value_type, value_bytes, numeric_value, expires_at)
                         VALUES ($1, 'persistent', 'STRING', convert_to('value', 'UTF8'), NULL, NULL),
-                               ($1, 'expiring', 'LONG', NULL, 42, NOW() + INTERVAL '1 hour'),
+                               ($1, 'expiring', 'LONG', NULL, 42, NOW() + INTERVAL '2 hours'),
                                ($1, 'expired', 'JSON', convert_to('{}', 'UTF8'), NULL, NOW() - INTERVAL '1 hour')
                         """).execute(Tuple.of(namespace))
                 .compose(ignored -> connection.preparedQuery("""

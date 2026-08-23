@@ -3,6 +3,59 @@ info:
   title: PeeGeeQ Cache Management API
   version: 1.0.0-draft
   description: Management API contract for PeeGeeQ Cache.
+x-m7-operation-ids:
+  - getSession
+  - exchangeLocalToken
+  - deleteLocalSession
+  - listSetups
+  - testUnregisteredSetup
+  - registerSetup
+  - getSetup
+  - connectSetup
+  - testRegisteredSetup
+  - detachSetup
+  - forgetSetup
+  - getSetupHealth
+  - getSetupCapabilities
+  - getOverview
+  - listNamespaces
+  - exportNamespaces
+  - getNamespace
+  - listEntries
+  - getEntry
+  - listCounters
+  - getCounter
+  - listLocks
+  - getLock
+  - getDatabaseMonitoring
+  - getRuntimeMonitoring
+  - listActivity
+x-m8-operation-ids:
+  - revealEntryValue
+  - setEntry
+  - deleteEntry
+  - expireEntry
+  - persistEntry
+  - touchEntry
+  - previewEntryBulkDelete
+  - executeEntryBulkDelete
+  - setCounter
+  - adjustCounter
+  - expireCounter
+  - persistCounter
+  - deleteCounter
+  - previewCounterBulkDelete
+  - executeCounterBulkDelete
+  - revealLockOwner
+  - forceReleaseLock
+x-m9-operation-ids:
+  - createPubSubSubscription
+  - streamPubSubMessages
+  - revealPubSubPayload
+  - deletePubSubSubscription
+  - publishPubSubMessage
+  - streamMetrics
+  - monitoringWebSocket
 paths:
   /api/v1/session:
     get:
@@ -874,8 +927,8 @@ components:
       schema:
         type: string
         minLength: 1
-        maxLength: 64
-        pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'
+        maxLength: 63
+        pattern: '^[a-z][a-z0-9-]{0,62}$'
     EncodedNamespace:
       name: encodedNamespace
       in: path
@@ -1031,7 +1084,7 @@ components:
       name: setupId
       in: query
       required: true
-      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}
+      schema: {type: string, pattern: '^[a-z][a-z0-9-]{0,62}$'}
     AfterEventId:
       name: afterEventId
       in: query
@@ -1627,7 +1680,7 @@ components:
     SetupConnectionRequest:
       type: object
       additionalProperties: false
-      required: [host, port, database, schema, username, password, sslMode, poolMaxSize]
+      required: [host, port, database, schema, username, password, sslMode, trustProfileId, poolMaxSize]
       properties:
         host: {type: string, minLength: 1, maxLength: 253}
         port: {type: integer, minimum: 1, maximum: 65535}
@@ -1635,15 +1688,15 @@ components:
         schema: {type: string, minLength: 1, maxLength: 63}
         username: {type: string, minLength: 1, maxLength: 128}
         password: {type: string, minLength: 1, maxLength: 4096, writeOnly: true}
-        sslMode: {type: string, enum: [DISABLE, REQUIRE, VERIFY_CA, VERIFY_FULL]}
-        trustProfileId: {type: [string, 'null'], maxLength: 128}
+        sslMode: {type: string, enum: [VERIFY_FULL]}
+        trustProfileId: {type: string, minLength: 1, maxLength: 128}
         poolMaxSize: {type: integer, minimum: 1, maximum: 100}
     SetupRegistrationRequest:
       type: object
       additionalProperties: false
-      required: [setupId, displayName, host, port, database, schema, username, password, sslMode, poolMaxSize]
+      required: [setupId, displayName, host, port, database, schema, username, password, sslMode, trustProfileId, poolMaxSize]
       properties:
-        setupId: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}
+        setupId: {type: string, pattern: '^[a-z][a-z0-9-]{0,62}$'}
         displayName: {type: string, minLength: 1, maxLength: 128}
         host: {type: string, minLength: 1, maxLength: 253}
         port: {type: integer, minimum: 1, maximum: 65535}
@@ -1651,8 +1704,8 @@ components:
         schema: {type: string, minLength: 1, maxLength: 63}
         username: {type: string, minLength: 1, maxLength: 128}
         password: {type: string, minLength: 1, maxLength: 4096, writeOnly: true}
-        sslMode: {type: string, enum: [DISABLE, REQUIRE, VERIFY_CA, VERIFY_FULL]}
-        trustProfileId: {type: [string, 'null'], maxLength: 128}
+        sslMode: {type: string, enum: [VERIFY_FULL]}
+        trustProfileId: {type: string, minLength: 1, maxLength: 128}
         poolMaxSize: {type: integer, minimum: 1, maximum: 100}
     SetupHealthSummary:
       type: object
@@ -1667,13 +1720,13 @@ components:
       additionalProperties: false
       required: [setupId, displayName, host, port, database, schema, sslMode, source, state, schemaState, lastHealth]
       properties:
-        setupId: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}
+        setupId: {type: string, pattern: '^[a-z][a-z0-9-]{0,62}$'}
         displayName: {type: string, minLength: 1, maxLength: 128}
         host: {type: string}
         port: {type: integer, minimum: 1, maximum: 65535}
         database: {type: string}
         schema: {type: string}
-        sslMode: {type: string, enum: [DISABLE, REQUIRE, VERIFY_CA, VERIFY_FULL]}
+        sslMode: {type: string, enum: [VERIFY_FULL]}
         source: {type: string, enum: [CONFIGURED, UI_SESSION]}
         state: {type: string, enum: [CONNECTING, CONNECTED, DETACHING, DETACHED, UNHEALTHY]}
         schemaState: {type: string, enum: [READY, MISSING, OUTDATED, UNKNOWN]}
@@ -1772,7 +1825,7 @@ components:
         liveCounterCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         activeLockCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         expiredEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
-        schemaBytes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        schemaBytes: {$ref: '#/components/schemas/AvailableLongValue'}
     ExpiryOverview:
       type: object
       additionalProperties: false
@@ -2332,7 +2385,7 @@ components:
       required: [items, nextAfter, hasMore]
       properties:
         items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/ActivityEvent'}}
-        nextAfter: {type: [string, 'null'], maxLength: 4096}
+        nextAfter: {type: [string, 'null'], maxLength: 128}
         hasMore: {type: boolean}
     StreamReady:
       type: object

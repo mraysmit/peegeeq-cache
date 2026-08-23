@@ -31,11 +31,14 @@ class ManagementCoreModelsTest {
 
     @Test
     void queriesEnforceBoundsAndUseBoundedSorts() {
-        NamespaceQuery query = new NamespaceQuery("customer%", NamespaceQuery.Status.READY,
+        NamespaceQuery query = new NamespaceQuery("customer%", NamespaceQuery.Status.HEALTHY,
                 NamespaceQuery.Sort.ENTRY_COUNT_DESC, null, 200);
 
         assertEquals("customer%", query.prefix());
         assertEquals(NamespaceQuery.Sort.ENTRY_COUNT_DESC, query.sort());
+        assertEquals(Set.of("ALL", "HEALTHY", "EXPIRED_BACKLOG", "ACTIVE_LOCKS"),
+                java.util.Arrays.stream(NamespaceQuery.Status.values())
+                        .map(Enum::name).collect(java.util.stream.Collectors.toSet()));
         assertThrows(IllegalArgumentException.class,
                 () -> new NamespaceQuery(null, null, NamespaceQuery.Sort.NAMESPACE_ASC, null, 0));
         assertThrows(IllegalArgumentException.class,

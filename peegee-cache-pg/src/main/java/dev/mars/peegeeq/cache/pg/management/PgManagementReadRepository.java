@@ -4,6 +4,7 @@ import dev.mars.peegeeq.cache.api.management.ManagementTtl;
 import dev.mars.peegeeq.cache.api.management.ManagementCursorPosition;
 import dev.mars.peegeeq.cache.api.management.ManagementEntryMetadata;
 import dev.mars.peegeeq.cache.api.management.ManagementTtlFilter;
+import dev.mars.peegeeq.cache.api.management.ManagementTtlBucket;
 import dev.mars.peegeeq.cache.api.management.CounterEntry;
 import dev.mars.peegeeq.cache.api.management.CounterQuery;
 import dev.mars.peegeeq.cache.api.management.AvailableValue;
@@ -11,7 +12,9 @@ import dev.mars.peegeeq.cache.api.management.DatabaseStats;
 import dev.mars.peegeeq.cache.api.management.EntryQuery;
 import dev.mars.peegeeq.cache.api.management.ExpiryStats;
 import dev.mars.peegeeq.cache.api.management.LockQuery;
+import dev.mars.peegeeq.cache.api.management.ManagementDatabaseMonitoring;
 import dev.mars.peegeeq.cache.api.management.ManagementLockMetadata;
+import dev.mars.peegeeq.cache.api.management.ManagementOverview;
 import dev.mars.peegeeq.cache.api.management.ManagementReadinessException;
 import dev.mars.peegeeq.cache.api.management.NamespaceDetails;
 import dev.mars.peegeeq.cache.api.management.NamespaceQuery;
@@ -38,10 +41,16 @@ public final class PgManagementReadRepository {
 
     private final Pool pool;
     private final PgManagementReadSql sql;
+    private final String applicationName;
 
     public PgManagementReadRepository(Pool pool, String schemaName) {
+        this(pool, schemaName, "");
+    }
+
+    public PgManagementReadRepository(Pool pool, String schemaName, String applicationName) {
         this.pool = Objects.requireNonNull(pool, "pool");
         this.sql = new PgManagementReadSql(schemaName);
+        this.applicationName = Objects.requireNonNull(applicationName, "applicationName");
     }
 
     /** Returns a zero-valued model for a logical namespace with no rows. */
@@ -62,13 +71,17 @@ public final class PgManagementReadRepository {
                             EnumMap<ValueType, Long> valueTypes = new EnumMap<>(ValueType.class);
                             EnumMap<ManagementTtl.State, Long> ttlStates =
                                     new EnumMap<>(ManagementTtl.State.class);
+                            EnumMap<ManagementTtlBucket, Long> ttlBuckets =
+                                    new EnumMap<>(ManagementTtlBucket.class);
                             for (Row row : rows) {
                                 long count = row.getLong("item_count");
                                 valueTypes.merge(ValueType.valueOf(row.getString("value_type")), count, Long::sum);
                                 ttlStates.merge(
                                         ManagementTtl.State.valueOf(row.getString("ttl_state")), count, Long::sum);
+                                ttlBuckets.merge(
+                                        ManagementTtlBucket.valueOf(row.getString("ttl_bucket")), count, Long::sum);
                             }
-                            return new NamespaceDetails(stats, valueTypes, ttlStates);
+                            return new NamespaceDetails(stats, valueTypes, ttlStates, ttlBuckets);
                         })));
     }
 
@@ -237,6 +250,114 @@ public final class PgManagementReadRepository {
                     row.getLong("expired_counter_count"),
                     AvailableValue.available(row.getLong("oldest_lag_millis")));
         }));
+    }
+
+    /** Returns accurate database-wide totals plus a separately bounded top-namespace view. */
+    public Future<ManagementOverview> overview() {
+        return withReadinessFailure(pool.query(sql.overview).execute().map(rows ->
+                        rows.iterator().next()))
+                .compose(row -> databaseStats().compose(database -> namespaces(
+                                new NamespaceQuery(
+                                        null,
+                                        NamespaceQuery.Status.ALL,
+                                        NamespaceQuery.Sort.ENTRY_COUNT_DESC,
+                                        null,
+                                        20),
+                                null)
+                        .map(topNamespaces -> {
+                            EnumMap<ValueType, Long> valueTypes = new EnumMap<>(ValueType.class);
+                            valueTypes.put(ValueType.STRING, row.getLong("string_count"));
+                            valueTypes.put(ValueType.JSON, row.getLong("json_count"));
+                            valueTypes.put(ValueType.LONG, row.getLong("long_count"));
+                            valueTypes.put(ValueType.BYTES, row.getLong("bytes_count"));
+                            return new ManagementOverview(
+                                    row.getOffsetDateTime("observed_at").toInstant(),
+                                    row.getLong("namespace_count"),
+                                    row.getLong("live_entry_count"),
+                                    row.getLong("live_counter_count"),
+                                    row.getLong("active_lock_count"),
+                                    row.getLong("expired_entry_count"),
+                                    row.getLong("expired_counter_count"),
+                                    database.schemaBytes(),
+                                    AvailableValue.available(row.getLong("oldest_lag_millis")),
+                                    valueTypes,
+                                    topNamespaces);
+                        })));
+    }
+
+    /** Returns exact cache-row counts plus permission-aware physical and activity statistics. */
+    public Future<ManagementDatabaseMonitoring> databaseMonitoring() {
+        return withReadinessFailure(pool.query(sql.databaseMonitoringCore).execute().map(rows ->
+                        rows.iterator().next()))
+                .compose(core -> physicalMonitoring().compose(physical -> activityMonitoring()
+                        .map(activity -> new ManagementDatabaseMonitoring(
+                                core.getOffsetDateTime("observed_at").toInstant(),
+                                physical.tableBytes(),
+                                physical.indexBytes(),
+                                physical.schemaBytes(),
+                                AvailableValue.available(core.getLong("live_rows")),
+                                AvailableValue.available(core.getLong("expired_rows")),
+                                activity.deadTuples(),
+                                activity.lastVacuumAt(),
+                                activity.lastAutovacuumAt(),
+                                activity.databaseConnections(),
+                                activity.cacheConnections(),
+                                core.getLong("expiry_backlog"),
+                                core.getLong("oldest_expired_row_lag_millis")))));
+    }
+
+    private Future<PhysicalMonitoring> physicalMonitoring() {
+        String reason = "PostgreSQL physical size statistics are unavailable to the current role";
+        return pool.preparedQuery(sql.databaseMonitoringPhysical)
+                .execute(Tuple.of(sql.schemaName))
+                .transform(outcome -> {
+                    if (outcome.failed()) {
+                        AvailableValue<Long> unavailable = AvailableValue.unavailable(reason);
+                        return Future.succeededFuture(new PhysicalMonitoring(
+                                unavailable, unavailable, unavailable));
+                    }
+                    Row row = outcome.result().iterator().next();
+                    return Future.succeededFuture(new PhysicalMonitoring(
+                            AvailableValue.available(row.getLong("table_bytes")),
+                            AvailableValue.available(row.getLong("index_bytes")),
+                            AvailableValue.available(row.getLong("schema_bytes"))));
+                });
+    }
+
+    private Future<ActivityMonitoring> activityMonitoring() {
+        String reason = "PostgreSQL activity statistics are unavailable to the current role";
+        return pool.preparedQuery(sql.databaseMonitoringActivity)
+                .execute(Tuple.of(sql.schemaName, applicationName))
+                .transform(outcome -> {
+                    if (outcome.failed()) {
+                        AvailableValue<Long> unavailable = AvailableValue.unavailable(reason);
+                        return Future.succeededFuture(new ActivityMonitoring(
+                                unavailable, null, null, unavailable, unavailable));
+                    }
+                    Row row = outcome.result().iterator().next();
+                    OffsetDateTime lastVacuumAt = row.getOffsetDateTime("last_vacuum_at");
+                    OffsetDateTime lastAutovacuumAt = row.getOffsetDateTime("last_autovacuum_at");
+                    return Future.succeededFuture(new ActivityMonitoring(
+                            AvailableValue.available(row.getLong("dead_tuples")),
+                            lastVacuumAt == null ? null : lastVacuumAt.toInstant(),
+                            lastAutovacuumAt == null ? null : lastAutovacuumAt.toInstant(),
+                            AvailableValue.available(row.getLong("database_connections")),
+                            AvailableValue.available(row.getLong("cache_connections"))));
+                });
+    }
+
+    private record PhysicalMonitoring(
+            AvailableValue<Long> tableBytes,
+            AvailableValue<Long> indexBytes,
+            AvailableValue<Long> schemaBytes) {
+    }
+
+    private record ActivityMonitoring(
+            AvailableValue<Long> deadTuples,
+            Instant lastVacuumAt,
+            Instant lastAutovacuumAt,
+            AvailableValue<Long> databaseConnections,
+            AvailableValue<Long> cacheConnections) {
     }
 
     private static <T> Future<T> withReadinessFailure(Future<T> operation) {

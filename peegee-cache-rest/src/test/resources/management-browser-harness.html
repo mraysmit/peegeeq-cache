@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Management backend browser harness</title></head>
+<body>
+  <label>One-time token <input id="token" type="password" autocomplete="off"></label>
+  <button id="exchange" type="button">Exchange and inspect</button>
+  <output id="result"></output>
+  <script>
+    let csrfToken = null;
+    document.querySelector('#exchange').addEventListener('click', async () => {
+      const input = document.querySelector('#token');
+      const token = input.value;
+      input.value = '';
+      try {
+        const session = await fetch('/api/v1/session/local', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {'content-type': 'application/json'},
+          body: JSON.stringify({token})
+        });
+        const sessionBody = await session.json();
+        csrfToken = sessionBody.csrfToken || null;
+        const setups = session.ok
+          ? await fetch('/api/v1/setups', {credentials: 'include'})
+          : null;
+        const setupsBody = setups ? await setups.json() : null;
+        window.harnessResult = {
+          sessionStatus: session.status,
+          sessionCacheControl: session.headers.get('cache-control'),
+          sessionHeaders: Object.fromEntries(session.headers.entries()),
+          authenticationMode: sessionBody.authenticationMode || null,
+          setupsStatus: setups ? setups.status : null,
+          setupsCacheControl: setups ? setups.headers.get('cache-control') : null,
+          setupsHeaders: setups ? Object.fromEntries(setups.headers.entries()) : null,
+          setupCount: setupsBody && setupsBody.items ? setupsBody.items.length : null,
+          errorCode: sessionBody.code || null
+        };
+      } catch (error) {
+        window.harnessResult = {fetchRejected: true, message: String(error)};
+      } finally {
+        document.querySelector('#result').textContent = JSON.stringify(window.harnessResult);
+      }
+    });
+  </script>
+</body>
+</html>

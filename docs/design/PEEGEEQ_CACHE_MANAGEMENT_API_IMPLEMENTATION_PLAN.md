@@ -1,10 +1,10 @@
 # PeeGeeQ Cache Management API Implementation Plan
 
-**Status:** Phases M0–M3 and M4.1 complete; M4.2 entry TTL/persist/touch/delete is next
+**Status:** Phases M0–M10 complete
 
 **Date:** 17 August 2026
 
-**Last updated:** 21 August 2026
+**Last updated:** 23 August 2026
 
 **Delivery method:** Strict test-driven development
 
@@ -20,7 +20,7 @@ It covers:
 - backend fixtures in `peegee-cache-test-support`;
 - OpenAPI and browser-facing compatibility gates consumed by `peegee-cache-management-ui`.
 
-Status changes require the evidence defined in this plan. M0–M3 and M4.1 are complete; M4 remains in progress and continues with the M4.2 red tests in this plan.
+Status changes require the evidence defined in this plan. M0–M10 are complete. M5 closed with real PostgreSQL/TLS chain, hostname, address-pinning, and reconnect evidence. M6 closed with deterministic registry/server lifecycle evidence against real PostgreSQL. M7 closed both session modes and the complete read surface. M8 closed all reveal, atomic administration, and scoped bulk operations. M9 closed audited publication/subscription/reveal, bounded retained payloads, resumable metadata-only pub/sub and metrics SSE, the monitoring WebSocket, durable-audit-to-live-event projection, health transitions, deterministic cleanup, and runtime gauges. M10 closed mandatory telemetry, shared sampling, runnable packaging, both executable authentication configurations, operational guidance, real-browser local-session security, the PostgreSQL 15–18 matrix, and the final verification ladder.
 
 ## 2. Authority and prerequisite documents
 
@@ -180,15 +180,15 @@ Fixtures remain in the lowest reusable module that does not create a production 
 | M1 | COMPLETE | Module skeleton, OpenAPI baseline, and protocol primitives |
 | M2 | COMPLETE | Typed Java management contract |
 | M3 | COMPLETE | PostgreSQL inspection/read model, complete module/reactor gates, and safe-output review |
-| M4 | NOT STARTED | Atomic PostgreSQL mutation and reveal model |
-| M5 | NOT STARTED | Audit, authentication, CSRF/origin, target policy, and rate-limit primitives |
-| M6 | NOT STARTED | Setup registry and REST server lifecycle |
-| M7 | NOT STARTED | Session, setup, health, capability, and read-only REST endpoints |
-| M8 | NOT STARTED | Reveal, mutation, and bulk REST endpoints |
-| M9 | NOT STARTED | Pub/sub, SSE, and WebSocket transports |
-| M10 | NOT STARTED | Monitoring, observability, packaging, compatibility, and final acceptance |
+| M4 | COMPLETE | Atomic PostgreSQL mutation and reveal model |
+| M5 | COMPLETE | Audit, authentication, CSRF/origin, target policy, and rate-limit primitives |
+| M6 | COMPLETE | Setup registry and REST server lifecycle |
+| M7 | COMPLETE | Session, setup, health, capability, and read-only REST endpoints |
+| M8 | COMPLETE | Reveal, mutation, and bulk REST endpoints |
+| M9 | COMPLETE | Pub/sub, SSE, and WebSocket transports |
+| M10 | COMPLETE | Monitoring, observability, packaging, compatibility, and final acceptance |
 
-Only one phase may be `IN PROGRESS`. A phase remains incomplete if any required test is missing, skipped, nondeterministic, or passing only through a relaxed assertion.
+Only one phase may be `IN PROGRESS`. No backend phase is currently active. A phase remains incomplete if any required test is missing, skipped, nondeterministic, or passing only through a relaxed assertion.
 
 ## 8. Phase M0 — Contract and build synchronization
 
@@ -498,7 +498,7 @@ Phase-gate verdict: **COMPLETE**. Focused acceptance, SQL parameterization, quer
 
 Objective: produce every HTTP-visible mutation outcome and resulting version in the same statement or transaction that observes/applies the change.
 
-Status: **IN PROGRESS — M4.1 is complete; M4.2 is the next strict-TDD slice.**
+Status: **COMPLETE**
 
 ### M4.1 Entry reveal and set
 
@@ -530,7 +530,7 @@ Evidence:
 
 ### M4.2 Entry TTL, persist, touch, and delete
 
-Status: **NOT STARTED — next strict-TDD slice.**
+Status: **COMPLETE**
 
 For each operation first prove:
 
@@ -540,7 +540,25 @@ For each operation first prove:
 - delete reports the version-checked outcome atomically;
 - expire and persist increment the version, while touch atomically checks but preserves the version and returns the same ETag with updated access/expiry metadata.
 
+Implemented behavior:
+
+- `PgManagementMutationSql` and `PgManagementMutationRepository` implement expire, persist, touch, and delete as schema-qualified atomic statements. Each statement locks and observes the live row once, distinguishes `NOT_FOUND` from `VERSION_MISMATCH`, and returns the authoritative outcome without a diagnostic follow-up read.
+- Expire and persist increment the committed version and return the resulting entry metadata. Touch validates the exact version while preserving it, updates access/update timestamps, and optionally refreshes expiry. Delete returns the matched/deleted version from the deleting statement.
+- Real-PostgreSQL stale-version assertions prove that rejected expire, persist, touch, and delete requests leave value, version, expiry, and access timestamps unchanged.
+- The mutation-aware `PgManagementService` reserves its bounded fingerprint-only audit intent before every M4.2 database operation and completes safe terminal outcome codes. A shared fail-closed test proves reservation failure prevents all four mutations from reaching PostgreSQL.
+
+Evidence:
+
+- Four independent red/green behavior cycles added expire, persist, touch, and delete; `PgManagementMutationRepositoryTest` now contributes 12 real-PostgreSQL 18.3 tests across M4.1 and M4.2.
+- The complete `peegee-cache-pg` gate passed 222 tests with zero failures/errors/skips.
+- The 11-project `mvn test` reactor passed 61 active Surefire suites and 394 tests with zero failures/errors/skips.
+- All 61 active XML reports parse, no Surefire dump/dumpstream exists, captured output contains no asynchronous-failure signature or M4.1/M4.2 value/identifier canary, and the prohibited-framework/test-pattern scan is clean. Seven stale reports under `peegee-cache-benchmarks/bin/target` are excluded from the active-reactor count.
+
+Slice verdict: **COMPLETE**. The atomic outcomes, version/ETag rules, unchanged-state guarantees, mandatory audit boundary, and focused/module/reactor/leakage gates satisfy the M4.2 criteria.
+
 ### M4.3 Counter operations
+
+Status: **COMPLETE**
 
 Test order:
 
@@ -551,7 +569,16 @@ Test order:
 5. expire, persist, and delete distinguish missing from stale versions;
 6. overflow/failure behavior is typed and leaves state unchanged.
 
+Implemented behavior and evidence:
+
+- create, exact-version set, signed adjustment, TTL changes, persist, and delete return statement-produced atomic outcomes and committed counter representations;
+- stale concurrent adjustment has one winner and one unchanged `VERSION_MISMATCH`; numeric overflow maps to a typed counter error and preserves state;
+- every counter operation reserves a fingerprint-only audit intent before PostgreSQL work;
+- the combined M4.1–M4.3 focused mutation suite passed 19 real-PostgreSQL tests.
+
 ### M4.4 Lock reveal and forced release
+
+Status: **COMPLETE**
 
 Test order:
 
@@ -561,7 +588,16 @@ Test order:
 4. stale release cannot delete a renewed/reacquired lock;
 5. missing and stale outcomes remain distinguishable.
 
+Implemented behavior and evidence:
+
+- owner reveal returns owner, version, and database reveal time from one active-lock snapshot while metadata DTOs remain structurally owner-free;
+- forced release requires exact version and decoded-key confirmation and returns atomic `APPLIED`, `NOT_FOUND`, or `VERSION_MISMATCH` outcomes;
+- V001 now uses a dedicated monotonic lock-generation sequence for acquisition and renewal, preventing a delayed release from matching a deleted-and-reacquired lease;
+- missing/expired reveal, audit fail-closed, exact-version, renewed/reacquired ABA, and owner-leakage assertions pass against real PostgreSQL.
+
 ### M4.5 Audit gate integration
+
+Status: **COMPLETE**
 
 Use a small purpose-built audit sink boundary to prove before route work:
 
@@ -575,6 +611,15 @@ Use a small purpose-built audit sink boundary to prove before route work:
 8. an injected post-commit persistence fault yields uncertain `AUDIT_OUTCOME_UNAVAILABLE`, makes mutation readiness down, and prevents further mutations until recovery;
 9. telemetry exporter failure does not replace the security audit policy.
 
+Implemented behavior and evidence:
+
+- `DurableManagementAuditSink` is an append-only JSONL journal that fsyncs each accepted intent and terminal outcome on a private worker, bounds outstanding reservations, and rejects saturation before protected work;
+- equal duplicate completion is idempotent, conflicting completion is typed, clean close drains preceding writes and rejects later reservations, and restart converts incomplete durable intents to `UNKNOWN` before readiness;
+- an injected terminal-write fault drops mutation readiness, blocks later reservations, and requires durable `UNKNOWN` recovery before readiness returns;
+- a real-PostgreSQL service test proves the uncertain post-commit boundary and proves later mutation attempts do not reach the database;
+- optional telemetry callbacks are failure-isolated and cannot substitute for or invalidate the security journal;
+- the focused durable-audit suite passed 5 tests and the complete REST module passed 28 tests, all with zero failures/errors/skips.
+
 Phase gate:
 
 - mutation race tests repeat reliably;
@@ -582,11 +627,19 @@ Phase gate:
 - database and logs contain no leaked secret in failure paths;
 - PostgreSQL 15–18 matrix passes for `peegee-cache-pg` before REST mutations begin.
 
+Phase-gate verdict: **COMPLETE**. The current 235-test `peegee-cache-pg -am` reactor passed with zero failures/errors/skips on PostgreSQL 15.17, 16.13, 17.11, and 18.3. Atomic race, fail-closed audit, uncertainty recovery, and sensitive-data boundaries are covered before authentication or route implementation begins.
+
+The final M4 full-reactor gate passed 62 active Surefire suites and 412 tests across all 11 projects with zero failures/errors/skips.
+
+The current post-M5/M6-foundation/M7-session-slice reactor gate passed 78 active Surefire suites and 467 tests across all 11 projects under OpenJDK 26.0.2, with zero failures, errors, or skips. This newer count is regression evidence only and does not close M5–M7 while their explicitly listed protocol and route gates remain incomplete.
+
 ## 13. Phase M5 — Security and policy primitives
 
 Objective: complete independently testable security components before protected routes exist.
 
 ### M5.1 Trusted proxy authentication
+
+Implementation evidence (22 August 2026): `TrustedProxyAuthenticatorTest` runs seven tests covering trusted IPv4/IPv6 CIDRs, normalization, untrusted sources, missing/duplicate/malformed/oversized identity, unknown roles, and ignored non-authoritative role inputs. All seven pass without a mocking framework.
 
 First red tests:
 
@@ -596,6 +649,8 @@ First red tests:
 - sanitize actor/source data in logs.
 
 ### M5.2 Local token authentication
+
+Implementation evidence (22 August 2026): `LocalTokenSessionManagerTest` runs five tests covering the single-use 256-bit token, digest-only retention, loopback enforcement, cookie flags, idle/absolute expiry, replay, regeneration/rotation, logout, shutdown, and lifetime bounds. The RED cycle exposed and corrected a client-value encoding/digest mismatch.
 
 First red tests:
 
@@ -607,6 +662,8 @@ First red tests:
 - prove token/session identifiers never enter logs or browser persistence fixtures.
 
 ### M5.3 Origin, CORS, and CSRF
+
+Implementation evidence (22 August 2026): `BrowserRequestSecurityTest` runs six tests covering same-origin local mode, exact HTTPS trusted-proxy allowlists, wildcard/reflection rejection, the narrow local bootstrap exception, cookie/CSRF validation, and trusted session binding/rotation.
 
 First red tests:
 
@@ -620,6 +677,8 @@ First red tests:
 
 ### M5.4 Setup target and TLS policy
 
+Completion evidence (23 August 2026): `SetupTargetPolicyTest` runs five green policy tests, while `VertxPinnedDatabaseConnectorTest` and `PostgresSetupRuntimeFactoryTest` use real PostgreSQL TLS endpoints to prove trusted-chain and hostname verification, exact validated-address pinning, configured-hostname preservation, reconnect revalidation, and deterministic pool cleanup. The OpenAPI and request models permit only `VERIFY_FULL` with a server-known trust profile.
+
 First red tests:
 
 - reject host, port, or any resolved address outside policy;
@@ -631,6 +690,8 @@ First red tests:
 - verify `VERIFY_FULL` hostname and chain behavior through a real TLS PostgreSQL fixture.
 
 ### M5.5 Rate and resource limits
+
+Implementation evidence (22 August 2026): `ManagementRateLimiterTest` runs three tests across every guarded action, proving independent actor/source limits, hard-bounded identity maps, expiry eviction, typed `429`, fingerprinted internal keys, and bounded telemetry dimensions.
 
 First red tests:
 
@@ -649,6 +710,8 @@ Phase gate:
 ## 14. Phase M6 — Setup registry and server lifecycle
 
 Objective: own pools, managers, credentials, and server resources deterministically.
+
+Completion evidence (23 August 2026): three configuration tests, seven setup-registry lifecycle/race tests, four real-socket server lifecycle tests, and the real-TLS `PostgresSetupRuntimeFactoryTest` are green. RED cycles found and corrected detach/reconnect overlap and a shutdown/late-reconnect resource leak. The real runtime proves publish-after-readiness, fresh health checks, secret ownership, reconnect DNS/TLS revalidation, application-connection cleanup after detach/shutdown, and unchanged database objects.
 
 ### M6.1 Configuration
 
@@ -692,6 +755,8 @@ Phase gate:
 ## 15. Phase M7 — Session, setup lifecycle, health, capability, and read routes
 
 Objective: implement safe reads and the separately guarded setup-lifecycle mutations as vertical HTTP slices using the running server.
+
+Completion evidence (23 August 2026): real-socket tests cover local-token and trusted-proxy sessions, per-request trusted identity revalidation, setup reads, health/capabilities, and every setup lifecycle action. Real TLS PostgreSQL coverage exercises an accurate bounded database overview, database and runtime monitoring, namespace list/detail/export, entry/counter/lock metadata list/detail, ETags, decimal-string wire values, exact TTL buckets, canonical identifiers, filtering/sorting, and owner/value/credential exclusion. Database monitoring combines exact live/expired/backlog counts with permission-aware physical and PostgreSQL activity statistics, and counts setup connections by the setup-specific `application_name`; unavailable observations never become zero. Runtime monitoring uses bounded OpenAPI operation names, idempotent request completion, cumulative error/latency aggregates, explicit unavailable pool counters, configured pool capacity, durable-audit readiness input, and runtime-owned sweeper state. Activity uses a bounded, thread-safe, newest-first process-local store with setup scoping, exclusive event-ID pagination, exact namespace/action/outcome filters, detached-setup reads, and lifecycle events emitted only after a durable terminal audit outcome. Audit-outcome failure returns `AUDIT_OUTCOME_UNAVAILABLE` and blocks later privileged setup work until readiness recovers. The reviewed 26-operation M7 inventory exactly matches OpenAPI. Protocol and real-socket tests cover fixed-path precedence, canonical/NUL/size identifier rejection, media negotiation and request-size failures, decimal-string 64-bit fields, metadata redaction, and explicit monitoring unavailability. Central HTTP completion logging and telemetry expose only method, bounded surface, status, and latency, are idempotent, and isolate exporter failure. The complete API/PostgreSQL/REST gate passes 379 tests (62 API, 236 PostgreSQL, 81 REST) with zero failures, errors, or skips under OpenJDK 26.0.2.
 
 For each route, follow this order:
 
@@ -803,6 +868,8 @@ Phase gate:
 
 Objective: implement bounded live transports without implying delivery or database-wide change capture.
 
+Status: **COMPLETE** — all seven M9 route IDs are implemented and contract-checked. Actor/setup ownership, quotas, five-minute disconnected resume, one-hour hard lifetime, global arrival-order byte eviction, retained-payload reveal, metadata-only SSE, bounded five-minute live-event history, reset/replay, heartbeat and ping/pong behavior, durable-audit-derived `activity.created`/`resource.changed`, health transitions, setup/shutdown terminal events, exact cleanup, and active-resource gauges are covered by focused tests plus a real PostgreSQL/TLS HTTP/SSE/WebSocket integration test. The API-through-REST reactor passes 474 tests (62 API, 20 core, 4 test support, 241 PostgreSQL, 48 runtime, and 99 REST) with zero failures, errors, or skips under OpenJDK 26.0.2.
+
 ### M9.1 Publication
 
 First red tests:
@@ -872,6 +939,8 @@ Phase gate:
 
 Objective: finish the backend as an operable product component rather than a collection of routes.
 
+Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts under OpenJDK 26.0.2 with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chrome verifies local bootstrap/session cookies, storage exclusion, no-store responses, cross-site rejection, and static-route isolation; trusted-proxy identity/session behavior remains covered at the running-server protocol boundary because browser-to-proxy TLS termination belongs to deployment. The final reactor passes 524 tests (521 Surefire and 3 Failsafe) with zero failures, errors, or skips, and the complete reactor passes PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+
 ### M10.1 Mandatory observability
 
 First red contract tests require bounded signals for:
@@ -914,6 +983,22 @@ Run in this order and inspect every result:
 10. final `git diff --check` and generated-artifact inventory.
 
 Phase gate: every command succeeds with zero failures, errors, unexpected skips, secret leaks, raw logged identifiers, or unresolved high-severity threat-model findings.
+
+Final evidence under OpenJDK 26.0.2:
+
+| Gate | Result |
+|---|---|
+| PostgreSQL 15.17 complete reactor | Green, 2:03 |
+| PostgreSQL 16.13 complete reactor | Green, 1:52 |
+| PostgreSQL 17.11 complete reactor | Green, 1:52 |
+| PostgreSQL 18.3 clean complete reactor | Green, 2:05 |
+| Final post-hardening complete reactor | 524 tests: 521 Surefire + 3 Failsafe; 0 failures/errors/skips |
+| Real-browser and runnable-artifact Failsafe gate | 3 tests; 0 failures/errors/skips |
+| Dependency/build contract | Maven Enforcer dependency convergence and duplicate-version rules green in every row |
+| Release artifacts | `-P release-artifacts -DskipTests package` green for all 11 modules; source and Javadoc jars generated |
+| Repository hygiene | `git diff --check` green; no generated targets, jars, classes, logs, or benchmark results in the change inventory |
+
+The final TDD pass recorded expected red failures for missing no-store setup-read headers, benchmark default parsing polluted by the matrix property, two REST PostgreSQL fixtures bypassing the matrix property, missing trusted-proxy executable configuration, and shutdown stopping after its first close failure. Each corresponding focused regression test is green. No Mockito or substitute mocking framework was introduced.
 
 ## 19. Cross-cutting behavior matrix
 

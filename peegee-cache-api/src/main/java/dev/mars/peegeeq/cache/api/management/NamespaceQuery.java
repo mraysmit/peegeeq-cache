@@ -6,9 +6,10 @@ import java.util.Objects;
 public record NamespaceQuery(String prefix, Status status, Sort sort, String cursor, int limit) {
 
     public enum Status {
-        READY,
-        EMPTY,
-        EXPIRY_BACKLOG
+        ALL,
+        HEALTHY,
+        EXPIRED_BACKLOG,
+        ACTIVE_LOCKS
     }
 
     public enum Sort {

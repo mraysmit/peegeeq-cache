@@ -13,7 +13,19 @@ import io.vertx.core.Future;
  */
 public interface ManagementService {
     AdminCapabilities capabilities();
+    default Future<ManagementOverview> overview() {
+        return Future.failedFuture(new ManagementCapabilityException(
+                ManagementCapability.DATABASE_MONITORING));
+    }
+    default Future<ManagementDatabaseMonitoring> databaseMonitoring() {
+        return Future.failedFuture(new ManagementCapabilityException(
+                ManagementCapability.DATABASE_MONITORING));
+    }
     Future<AdminPage<NamespaceStats>> namespaces(NamespaceQuery query);
+    default Future<NamespaceDetails> namespace(String namespace) {
+        return Future.failedFuture(new ManagementCapabilityException(
+                ManagementCapability.NAMESPACE_INSPECTION));
+    }
     Future<AdminPage<ManagementEntryMetadata>> entries(EntryQuery query);
     Future<ManagementEntryMetadata> entry(CacheKey key, boolean includeExpired);
     Future<RevealedEntryValue> revealEntry(RevealEntryRequest request, ManagementActionContext context);

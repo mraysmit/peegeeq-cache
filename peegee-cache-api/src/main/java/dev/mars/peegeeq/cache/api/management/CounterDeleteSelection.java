@@ -1,15 +1,18 @@
 package dev.mars.peegeeq.cache.api.management;
 
-import dev.mars.peegeeq.cache.api.model.CacheKey;
-
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 
-/** Counter bulk-delete selection using either a literal prefix or exact keys. */
-public record CounterDeleteSelection(String namespace, String prefix, List<CacheKey> keys) {
+/** Explicit versioned counter targets for a setup-scoped bulk-delete preview. */
+public record CounterDeleteSelection(List<VersionedCacheKeyTarget> targets) {
     public CounterDeleteSelection {
-        EntryDeleteFilter validated = new EntryDeleteFilter(namespace, prefix, keys);
-        namespace = validated.namespace();
-        prefix = validated.prefix();
-        keys = validated.keys();
+        targets = List.copyOf(Objects.requireNonNull(targets, "targets"));
+        if (targets.isEmpty() || targets.size() > 1_000) {
+            throw new IllegalArgumentException("targets must contain 1 to 1000 entries");
+        }
+        if (new HashSet<>(targets).size() != targets.size()) {
+            throw new IllegalArgumentException("targets must be unique");
+        }
     }
 }
