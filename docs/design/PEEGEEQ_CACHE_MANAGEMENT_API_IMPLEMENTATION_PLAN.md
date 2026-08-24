@@ -61,7 +61,7 @@ The management UI design predates the latest API review. Phase M0 must synchroni
 - durable pub/sub history or cross-process resource-change capture;
 - production deployment and external identity-provider configuration.
 
-Production frontend implementation is tracked separately as authoritative Phase 8.3 and requires its own detailed TDD plan after the API reaches a stable OpenAPI milestone. This backend plan owns a minimal non-production browser harness under test sources solely to verify cookies, CSRF/origin behavior, cache directives, storage exclusion, and static-resource routing without depending on the production UI.
+Production frontend implementation is tracked separately as authoritative Phase 8.3 under [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md), approved after the API reached its stable OpenAPI milestone. This backend plan owns a minimal non-production browser harness under test sources solely to verify cookies, CSRF/origin behavior, cache directives, storage exclusion, and static-resource routing without depending on the production UI.
 
 ## 4. Module and dependency design
 
@@ -208,7 +208,7 @@ Tasks:
 5. document REST runtime configuration records and secret-reference shapes without embedding environment defaults in library code;
 6. produce a complete reviewed operation manifest containing the exact method/path, security rules, schemas, statuses, headers, errors, capabilities, limits, audit behavior, and retry semantics for every route;
 7. replace prose-only aggregate models and ambiguous mutation behavior, including touch version stability and wildcard-precondition outcomes, before OpenAPI generation;
-8. verify that the authoritative project plan continues to track backend Phase 8.2 and separate browser-console Phase 8.3 as deferred/not started.
+8. verify that the authoritative project plan continues to track backend Phase 8.2 separately from browser-console Phase 8.3; the backend closed before Phase 8.3 was independently authorized.
 
 Verification:
 

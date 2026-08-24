@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management Build and Configuration Decision
 
-**Status:** Accepted for Phase 8.2 M0
+**Status:** Accepted for Phase 8.2 M0; Phase 8.3 execution authorized 24 August 2026
 
 **Date:** 20 August 2026
 
@@ -11,7 +11,7 @@ The root Maven reactor remains the only release build entry point. Phase M1 adds
 1. `peegee-cache-management-ui`
 2. `peegee-cache-rest`
 
-`peegee-cache-management-ui` owns Node, npm, TypeScript, Vite, generated-client validation, and the compiled webroot. It publishes the webroot as a Maven artifact. `peegee-cache-rest` consumes that artifact during `package`; it never writes generated files into the UI module or copies output into another module's `src` tree. Until the separately authorized Phase 8.3 implementation begins, the UI module produces a deterministic empty webroot artifact and contract-validation metadata only.
+`peegee-cache-management-ui` owns Node, npm, TypeScript, Vite, generated-client validation, and the compiled webroot. It publishes the webroot as a Maven artifact. `peegee-cache-rest` consumes that artifact during `package`; it never writes generated files into the UI module or copies output into another module's `src` tree. Before Phase 8.3 authorization, the UI module produced a deterministic empty webroot artifact and contract-validation metadata only. Phase 8.3 replaces that placeholder with the tested production asset graph without changing the dependency direction or root build entry point.
 
 `peegee-cache-rest` depends on `peegee-cache-api`, `peegee-cache-runtime`, and `peegee-cache-observability`. Test scope may depend on `peegee-cache-test-support`. No cache library module depends on REST or UI code. The resulting direction is:
 

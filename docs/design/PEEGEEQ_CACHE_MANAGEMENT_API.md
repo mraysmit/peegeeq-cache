@@ -1625,7 +1625,7 @@ Tests cover:
 
 The backend plan owns a minimal non-production browser harness served only from test resources. Playwright runs that harness against the real REST server to prove the local bootstrap/session flow, cookie attributes, CSRF/Fetch-Metadata rejection, no-store behavior, browser storage exclusion, and static-route isolation. Trusted-proxy identity/session behavior is verified through running-server protocol tests; end-to-end browser-to-proxy TLS termination belongs to production deployment acceptance. The harness is not packaged in the runnable artifact and is not presented as the production console.
 
-Phase 8.3 owns the production React console and its full-browser journeys for setup lifecycle and target policy, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, quotas, accessibility, and cleanup. Both suites inspect browser storage, URLs, responses, structured audit output, and ordinary logs for forbidden sensitive data and raw user-controlled identifiers.
+Phase 8.3 owns the production React console and its full-browser journeys for setup lifecycle and target policy, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, quotas, accessibility, and cleanup. Its authoritative execution sequence is [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md). Both suites inspect browser storage, URLs, responses, structured audit output, and ordinary logs for forbidden sensitive data and raw user-controlled identifiers.
 
 ## 19. Implementation state and module ownership
 

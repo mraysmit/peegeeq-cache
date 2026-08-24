@@ -1,9 +1,9 @@
 # PeeGeeQ Cache Management UI
 
 **Author:** Mark A Ray-Smith Cityline Ltd  
-**Status:** Approved design  
+**Status:** Approved design; backend contract reconciled; Phase 8.3 U0 complete
 **Date:** August 2026  
-**Version:** 0.1
+**Version:** 0.2
 
 
 ## 1. Purpose
@@ -20,6 +20,8 @@ PeeGeeQ Cache is currently a library, not a daemon. A usable browser console the
 The first release manages multiple PostgreSQL cache setups, exposes authoritative database state, supports guarded administrative operations, and keeps sensitive values masked unless an authorized operator explicitly reveals them.
 
 The corresponding interactive screen designs are available in [the management UI mockups](UI%20mockups/peegeeq-cache-management-ui-mockups.html). The complete REST, streaming, security, error, and Java service contracts are defined in [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md).
+
+Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
 ## 2. Fixed decisions
 
@@ -455,7 +457,7 @@ Use the same major frontend stack and build shape as `peegeeq-management-ui`:
 - Recharts;
 - Vitest and Testing Library;
 - Playwright;
-- Node 22.12 and npm 10.2 unless the reference project is deliberately upgraded first.
+- Node 22.22.2 and npm 10.9.4, deliberately advanced within the Node 22 LTS major, installed by Maven, and used with a committed lockfile and `npm ci`.
 
 ### 8.2 State ownership
 
@@ -808,6 +810,8 @@ Automated checks must prove:
 - no empty catch blocks or ignored asynchronous failures exist.
 
 ## 14. Implementation phases
+
+The four product phases below remain the design-level grouping. The authoritative execution sequence is the finer-grained U0-U10 strict-TDD plan in [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
 ### Phase 1: Foundation
 

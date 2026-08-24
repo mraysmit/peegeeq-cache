@@ -599,13 +599,15 @@ Prerequisites:
 2. approve the REST/UI module and reproducible root-build shape;
 3. follow phases M0–M10 in order, one failing behavior test at a time;
 4. retain Mockito prohibition and real PostgreSQL Testcontainers coverage;
-5. keep Phase 8.3 browser-console implementation deferred until an explicit start decision independent of the active backend work.
+5. keep Phase 8.3 browser-console implementation separate until an explicit start decision independent of the active backend work — satisfied on 24 August 2026.
 
 ### Phase 8.3: Management browser console
 
 **Reference designs:** [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) and [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md)
 
-**Status:** **NOT STARTED** — production React implementation is separate from the backend plan and has no approved detailed TDD plan yet.
+**Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md)
+
+**Status:** **IN PROGRESS (U0 COMPLETE; U1 NEXT)** — U0 supplies the Maven-owned Node 22.22.2/npm 10.9.4 toolchain, zero-vulnerability lockfile, generated OpenAPI compile-time types, complete 50-operation classification, strict session/problem runtime validation, the canonical UTF-8 identifier codec, 24 passing frontend tests, and a verified minimal production UI JAR. The complete 11-module PostgreSQL 18.3 reactor remains green with 524 Java tests and zero failures, errors, or skips. No production session, shell, setup, or resource-screen behavior is claimed yet; U1 owns safe static asset hosting and the authenticated application shell.
 
 Scope:
 
@@ -617,10 +619,10 @@ Scope:
 Prerequisites:
 
 1. complete management backend Phase M0 and stabilize the OpenAPI milestone from M1;
-2. synchronize `PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md` with the reviewed management API contract;
-3. create and approve a dedicated strict-TDD frontend implementation plan before production UI code;
+2. synchronize `PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md` with the reviewed management API contract — COMPLETE;
+3. create and approve a dedicated strict-TDD frontend implementation plan before production UI code — COMPLETE;
 4. retain the backend-owned non-production browser harness for backend cookie/CSRF/origin/no-store acceptance without treating it as the production console;
-5. make an explicit Phase 8.3 start decision independently from Phase 8.2.
+5. make an explicit Phase 8.3 start decision independently from Phase 8.2 — COMPLETE, 24 August 2026.
 
 ## 3.1 Implementation tracking
 
@@ -631,7 +633,7 @@ Status legend:
 - NOT STARTED: no meaningful implementation work landed yet
 - DEFERRED: intentionally postponed with rationale
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-24
 
 | Phase | Status | Evidence snapshot | Remaining to exit |
 |---|---|---|---|
@@ -643,7 +645,7 @@ Last reviewed: 2026-08-21
 | Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Overlapping manual sweeps now share the same in-flight result, and `awaitIdle()` observes that result atomically. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, sweep coalescing, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
 | Phase 6: V1 completion features | COMPLETE | Safe/recovering pub/sub, scan, bulk operations, all-operation telemetry contracts, comprehensive readiness, and interleaved telemetry/lock/pub-sub benchmark scenarios are implemented and green. | None |
 | Phase 7: Native SQL contract hardening | COMPLETE | Eight mutation functions have exact documented signatures; three stable read views, migration ledger/runner, compatibility policy, and real baseline idempotence and forward-version rejection tests are present. | None |
-| Phase 8: V2 and later | IN PROGRESS | Phase 8.1 write-behind and Phase 8.2 management backend M0–M10 are complete. The final reactor passes 524 tests and PostgreSQL 15–18 complete-reactor verification is green under OpenJDK 26.0.2. | Phase 8.3 browser console remains NOT STARTED and requires its own explicit start decision. |
+| Phase 8: V2 and later | IN PROGRESS | Phase 8.1 write-behind and Phase 8.2 management backend M0–M10 are complete. Phase 8.3 U0 is complete with a pinned Maven-owned frontend toolchain, 50-operation contract gate, 24 frontend tests, and verified UI JAR. The complete PostgreSQL 18.3 reactor passes 524 Java tests plus the frontend gate under OpenJDK 26.0.2; the established PostgreSQL 15–18 backend matrix remains green. | Execute Phase 8.3 U1–U10; U1 owns safe static asset hosting and the authenticated application shell. |
 
 Tracking update rules:
 
@@ -737,7 +739,7 @@ The implemented boundary is:
 - the mutation-aware `PgManagementService` advertises the completed M4 capabilities, requires audit reservation before database access, and returns statement-produced outcomes/metadata; its original constructor remains inspection-only for source compatibility;
 - `peegee-cache-rest` owns the cursor/protocol boundary, durable audit, both session modes, setup registry/server lifecycle, setup actions, all safe-read routes, and all M8 reveal/administration routes;
 - entry values, raw identifiers, credentials, cursor keys, and audit keys remain absent from ordinary logs and default authoritative audit intents;
-- No management-backend implementation stage remains. Production deployment/topology validation and credentialed public publication are external readiness actions; Phase 8.3 is a separate explicit product decision.
+- No management-backend implementation stage remains. Production deployment/topology validation and credentialed public publication are external readiness actions; the separate Phase 8.3 decision is now recorded and its U0–U10 plan is active.
 
 Current management evidence includes a final 11-module reactor with 524 tests (521 Surefire and 3 Failsafe) under OpenJDK 26.0.2 and zero failures, errors, or skips. The completed backend passes the complete reactor on PostgreSQL 15.17, 16.13, 17.11, and 18.3. The authoritative behavior and evidence are in `PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md`.
 
@@ -1069,4 +1071,4 @@ Current conclusion:
 - Phase 6 is complete
 - Phase 7 is complete
 - Phase 8.1 and management backend M0–M10 are complete
-- Phase 8.3 remains intentionally deferred pending its own browser-console start decision
+- Phase 8.3 is in progress under its approved strict-TDD plan; U0 is complete and U1 is the next executable phase
