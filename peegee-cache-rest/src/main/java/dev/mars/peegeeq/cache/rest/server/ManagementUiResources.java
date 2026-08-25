@@ -41,9 +41,11 @@ final class ManagementUiResources {
             return false;
         }
         if (!request.method().name().equals("GET")) {
+            browserHeaders(request);
             request.response()
                     .setStatusCode(405)
                     .putHeader("allow", "GET")
+                    .putHeader("cache-control", "no-store")
                     .end();
             return true;
         }
@@ -99,7 +101,8 @@ final class ManagementUiResources {
     }
 
     private static boolean isTraversalAttempt(String uri, String path) {
-        String raw = uri.toLowerCase(Locale.ROOT);
+        int query = uri.indexOf('?');
+        String raw = (query < 0 ? uri : uri.substring(0, query)).toLowerCase(Locale.ROOT);
         return path.indexOf('\\') >= 0
                 || raw.contains("%2e")
                 || raw.contains("%2f")
@@ -130,6 +133,7 @@ final class ManagementUiResources {
     }
 
     private static void notFound(HttpServerRequest request) {
+        browserHeaders(request);
         request.response()
                 .setStatusCode(404)
                 .putHeader(ManagementHttpServer.ERROR_CODE_HEADER, "UI_RESOURCE_NOT_FOUND")

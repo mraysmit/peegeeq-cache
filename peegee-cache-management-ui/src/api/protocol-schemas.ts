@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import type { CurrentSessionContract, ManagementProblemContract } from './openapi-contract';
 
-const utcInstantSchema = z.string().refine(
+export const utcInstantSchema = z.string().refine(
   (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)
     && Number.isFinite(Date.parse(value)),
   'must be a UTC ISO-8601 instant',

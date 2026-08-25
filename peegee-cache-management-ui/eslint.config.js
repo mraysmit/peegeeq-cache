@@ -6,7 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
   {
-    ignores: ['node/', 'node_modules/', 'target/'],
+    ignores: ['node/', 'node_modules/', 'target/', 'playwright-report/', 'test-results/'],
   },
   js.configs.recommended,
   {
@@ -18,7 +18,9 @@ export default [
         TextDecoder: 'readonly',
         TextEncoder: 'readonly',
         Response: 'readonly',
+        Storage: 'readonly',
         HTMLFormElement: 'readonly',
+        HTMLElement: 'readonly',
         atob: 'readonly',
         btoa: 'readonly',
         document: 'readonly',

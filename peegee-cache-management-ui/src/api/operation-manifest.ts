@@ -42,7 +42,9 @@ function classify(
     feature,
     securityProfile,
     transport,
-    csrfProtected: securityProfile === 'OPERATE' || securityProfile === 'VIEW_MUTATE',
+    csrfProtected: securityProfile === 'OPERATE'
+      || securityProfile === 'REVEAL'
+      || securityProfile === 'VIEW_MUTATE',
     sensitiveResponse: securityProfile === 'REVEAL' || operationId === 'getSession' || operationId === 'exchangeLocalToken',
   }));
 }

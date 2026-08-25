@@ -607,7 +607,7 @@ Prerequisites:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md)
 
-**Status:** **IN PROGRESS (U0-U1 COMPLETE; U2 NEXT)** — U0 supplies the Maven-owned Node 22.22.2/npm 10.9.4 toolchain, generated OpenAPI boundary, complete 50-operation classification, and canonical identifier/session primitives. U1 supplies the packaged production shell, exact static/SPA hosting policy, runtime-validated local-token and trusted-proxy bootstrap, memory-only CSRF handling, logout/expiry cleanup, responsive navigation, role/connection state, notifications, theme, and sanitized diagnostics. The 25 August 2026 full 11-module PostgreSQL 18.3 reactor passes 510 Surefire tests, 5 Failsafe browser/artifact tests, and 27 frontend tests with zero failures, errors, or skips. U2 owns setup lifecycle, scope, and capability gating.
+**Status:** **IN PROGRESS (U0-U2 COMPLETE; U3 NOT STARTED)** — U0 supplies the Maven-owned Node 22.22.2/npm 10.9.4 toolchain, generated OpenAPI boundary, complete 50-operation classification, and canonical identifier/session primitives. U1 supplies the packaged production shell, exact static/SPA hosting policy, runtime-validated local-token and trusted-proxy bootstrap, memory-only CSRF handling, logout/expiry cleanup, responsive navigation, role/connection state, notifications, theme, and sanitized diagnostics. U2 supplies functional setup lifecycle, strict setup/health/capability validation and presentation, capability-aware navigation, password cleanup, and a strict setup/namespace session scope allowlist with reload revalidation, setup-change invalidation, and session cleanup. Its packaged-console acceptance starts TLS PostgreSQL 18.3, applies the real schema, and drives test/register/inspect/detach/reconnect/reselect/forget through Chromium. Current authoritative evidence is an 11-module `mvn verify` passing 523 Surefire tests, 10 Failsafe tests, 46 frontend tests, and 610 Playwright tests with zero failures, errors, or skips in 10:03.
 
 Scope:
 
@@ -645,7 +645,7 @@ Last reviewed: 2026-08-25
 | Phase 5: Runtime bootstrap and managed lifecycle | COMPLETE | `PgPeeGeeCacheManager` owns a real bounded `PgExpirySweeper`, applies configured default TTL through `PgCacheService`, and manages pub/sub listener lifecycle. Overlapping manual sweeps now share the same in-flight result, and `awaitIdle()` observes that result atomically. Runtime integration tests verify physical cleanup of entries/counters/locks, default TTL, custom schemas, sweep coalescing, and start/stop guards. `Vertx` and `Pool` remain caller-owned. | None |
 | Phase 6: V1 completion features | COMPLETE | Safe/recovering pub/sub, scan, bulk operations, all-operation telemetry contracts, comprehensive readiness, and interleaved telemetry/lock/pub-sub benchmark scenarios are implemented and green. | None |
 | Phase 7: Native SQL contract hardening | COMPLETE | Eight mutation functions have exact documented signatures; three stable read views, migration ledger/runner, compatibility policy, and real baseline idempotence and forward-version rejection tests are present. | None |
-| Phase 8: V2 and later | IN PROGRESS | Phase 8.1 write-behind and Phase 8.2 management backend M0–M10 are complete. Phase 8.3 U0-U1 are complete with the pinned Maven-owned frontend toolchain, 50-operation contract gate, production UI JAR, safe static/SPA hosting, authenticated shell, both browser session modes, and memory-only sensitive session state. The 25 August 2026 PostgreSQL 18.3 reactor passes 510 Surefire, 5 Failsafe, and 27 frontend tests under OpenJDK 26.0.1 with zero failures/errors/skips; the established PostgreSQL 15–18 backend matrix remains green. | Execute Phase 8.3 U2–U10; U2 owns setup lifecycle, scope, and capability gating. |
+| Phase 8: V2 and later | IN PROGRESS | Phase 8.1 write-behind and Phase 8.2 management backend M0–M10 are complete. Phase 8.3 U0-U2 are complete: the packaged console owns the real TLS PostgreSQL setup lifecycle, health/capability gates, and strict setup/namespace scope invalidation. The current 11-module PostgreSQL 18.3 reactor passes 523 Surefire, 10 Failsafe, 46 frontend, and 610 Playwright tests with zero failures/errors/skips; the established PostgreSQL 15–18 backend matrix remains green. | Execute U3 Overview and namespace inspection, then U4–U10. |
 
 Tracking update rules:
 
@@ -751,9 +751,9 @@ Completed M5 sequence:
 4. Implement target-address and TLS trust policy with exact-address connection semantics.
 5. Add bounded actor/source rate and resource limits before protected routes exist.
 
-## 3.4 Management UI handover after U1
+## 3.4 Management UI U2 progress
 
-U0-U1 are complete. The next implementation slice is U2: setup lifecycle, scope, and capability gating.
+U0-U1 are complete. U2 is in progress: setup discovery, details, health/capabilities, registration/testing, connect/detach/forget, role/feature gates, capability-aware navigation, password cleanup, and a canonical-ID-only session scope are implemented. Namespace invalidation and real-database browser acceptance remain.
 
 The implemented U1 boundary is:
 
@@ -765,9 +765,9 @@ The implemented U1 boundary is:
 - the independent backend browser harness retains its exact-Origin, cookie, no-store, storage, and secret-exclusion checks under the production CSP;
 - `.gitattributes` enforces LF for shell fixtures after the full gate proved that CRLF produced Alpine `/bin/sh^M` and deterministic Testcontainers exit code `126` on Windows.
 
-Current U1 evidence is 27 frontend tests, 115 REST Surefire tests including 2 static-hosting/session-boundary tests, 5 REST Failsafe browser/artifact tests, and a complete 11-module `mvn verify` result of 510 Surefire plus 5 Failsafe tests with zero failures, errors, skips, or dump files. The final gate ran on PostgreSQL 18.3 and OpenJDK 26.0.1 in 5:06.
+Current U1 evidence is 28 frontend tests, 597 route-intercepted UI Playwright tests, 115 REST Surefire tests including 2 static-hosting/session-boundary tests, and 9 REST Failsafe browser/artifact tests including 6 real-server console journeys. The original complete 11-module `mvn verify` result remains 510 Surefire plus 5 Failsafe tests with zero failures, errors, skips, or dump files; the post-review focused reactor passes the complete expanded 9-test Failsafe gate plus 8 selected hosting/lifecycle tests. The reference-equivalent eight-module reactor passes all 597 UI Playwright tests and all 6 selected real-server journeys in 6:54. The original full gate ran on PostgreSQL 18.3 and OpenJDK 26.0.1 in 5:06.
 
-U2 must build on these boundaries without persisting credentials or CSRF material, weakening CSP/static routing, duplicating the UI entry point, or replacing real-server browser evidence with transport mocks.
+The delivered U2 slice builds on these boundaries without persisting credentials or CSRF material, weakening CSP/static routing, or duplicating the UI entry point. Its 10 new workflow tests use protocol fixtures for deterministic browser behavior; a real-database packaged-server lifecycle journey remains required before U2 can be marked complete.
 
 ## 4. Feature rollout by milestone
 
@@ -1089,4 +1089,4 @@ Current conclusion:
 - Phase 6 is complete
 - Phase 7 is complete
 - Phase 8.1 and management backend M0–M10 are complete
-- Phase 8.3 is in progress under its approved strict-TDD plan; U0-U1 are complete and U2 is the next executable phase
+- Phase 8.3 is in progress under its approved strict-TDD plan; U0-U1 are complete and the first U2 setup-management slice is implemented and green

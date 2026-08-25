@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import { ManagementShell } from '@src/app/ManagementShell';
-import type { BrowserSession } from '@src/api/session-client';
+import { SessionClient, type BrowserSession } from '@src/api/session-client';
 
 const session: BrowserSession = {
   user: 'alex',
@@ -19,12 +19,13 @@ const session: BrowserSession = {
     sensitiveReveal: true,
   },
 };
+const sessionClient = new SessionClient();
 
 describe('U1 authenticated management shell', () => {
   it('renders route navigation, identity, connection state, and role-aware controls', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
-        <ManagementShell session={session} onLogout={() => Promise.resolve()} />
+        <ManagementShell session={session} sessionClient={sessionClient} onLogout={() => Promise.resolve()} />
       </MemoryRouter>,
     );
 
@@ -41,7 +42,7 @@ describe('U1 authenticated management shell', () => {
     const user = userEvent.setup();
     const { container } = render(
       <MemoryRouter initialEntries={['/monitoring']}>
-        <ManagementShell session={session} onLogout={() => Promise.resolve()} />
+        <ManagementShell session={session} sessionClient={sessionClient} onLogout={() => Promise.resolve()} />
       </MemoryRouter>,
     );
 

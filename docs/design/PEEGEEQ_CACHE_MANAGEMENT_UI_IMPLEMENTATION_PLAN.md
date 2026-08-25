@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management UI Implementation Plan
 
-**Status:** Phase 8.3 in progress; U0-U1 complete; U2 is the next executable phase
+**Status:** Phase 8.3 in progress; U0-U1 complete; U2 setup lifecycle implementation in progress
 **Date:** 25 August 2026
 **Delivery method:** strict test-driven development
 **Target:** production React management console served by `peegee-cache-rest` at `/ui/*`
@@ -107,6 +107,7 @@ The root Maven reactor remains the only release build entry point.
 - `test`: run type checking, linting, static safety checks, Vitest, and Testing Library tests;
 - `prepare-package`: run the deterministic Vite production build with base path `/ui/`;
 - `package`: create the UI JAR containing `ui/index.html`, hashed `ui/assets/*`, and only required public files;
+- `integration-test`: run the route-intercepted Playwright UI matrix against the Vite application;
 - `verify`: run artifact checks and the real-backend Playwright acceptance owned by the downstream REST module.
 
 `peegee-cache-rest` declares the UI artifact as a dependency. The shaded runnable JAR merges the UI resources without writing generated output into either module's source tree. The backend fallback page is removed once the production artifact is active, preventing duplicate `ui/index.html` resources.
@@ -277,6 +278,21 @@ Verification diagnosis and portability correction:
 - `.gitattributes` now enforces `*.sh text eol=lf`; the checked fixture contains LF bytes, and the two TLS fixtures pass together from a clean reactor with 3 tests and zero failures, errors, or skips;
 - a later complete-reactor attempt exposed the legacy browser harness's reliance on inline script after loading a page now protected by U1 CSP; the harness now performs the same real-browser protocol assertions through Playwright evaluation and passes from a clean reactor without weakening CSP.
 
+Post-review browser hardening on 25 August 2026:
+
+- expanded the packaged-console gate from 2 to 6 Playwright journeys covering invalid and replayed bootstrap tokens, encoded-query deep links, failed logout with visible retry, bounded client/session expiry, and trusted-proxy identity/role changes with cookie rotation;
+- corrected failed logout handling so a `5xx` response retains the authenticated shell and in-memory CSRF proof until termination can be retried; an authoritative `401` still clears local state;
+- marked reveal operations as CSRF-protected in the UI operation manifest, limited encoded-traversal inspection to the raw path rather than SPA query data, and retained browser-security headers on UI error responses;
+- moved the Vite artifact build to `process-classes` so a clean reactor stopped at `test` provides `/ui/index.html` to downstream REST tests instead of failing or reading stale output;
+- `mvn -pl peegee-cache-rest -am verify` with the focused hosting/lifecycle and complete Failsafe selections passes 8 Surefire tests, all 9 browser/artifact Failsafe tests, and 28 frontend tests with zero failures, errors, or skips.
+
+Reference-equivalent Playwright expansion on 25 August 2026:
+
+- the `peegeeq-management-ui` and `peegeeq-utilities-ui` reference suites were inventoried at 668 and 191 declared Playwright tests respectively, establishing their route, state, fault, identity, responsive, and browser-artifact coverage patterns;
+- the cache console now owns 597 Playwright tests in 13 specification files for all current U1 routes, including direct/deep routes, every route-to-route transition, local login, logout, session expiry, identity/role changes, RFC 9457 problem responses, unknown routes, notification and theme persistence, responsive layouts, keyboard access, and browser-secret isolation;
+- Playwright is a Maven-owned `integration-test` gate with HTML, JSON, JUnit, trace, screenshot, and video output, while the downstream REST Failsafe suite retains the six real packaged-server console journeys at the authentication/session boundary;
+- `mvn -pl peegee-cache-rest -am verify` with the focused real-server selections passes all 597 UI Playwright tests, all 28 Vitest tests, and all 6 packaged-server Playwright journeys in the same eight-module reactor with zero failures, errors, or skips in 6:54.
+
 RED inventory:
 
 - hashed JavaScript/CSS requests currently receive HTML instead of the asset and correct MIME type;
@@ -302,7 +318,31 @@ Exit gate:
 
 ### U2: Setup lifecycle, scope, and capability gating
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
+
+First functional slice delivered on 25 August 2026:
+
+- replaced the Setups placeholder with contract-validated discovery, empty/loading/error states, setup metadata and health summaries, details-on-demand, and explicit active-setup scope selection;
+- added complete operator forms and actions for TLS-only connection testing, registration, registered-setup testing, connect, detach, and forget, with confirmations, serialized actions, viewer/feature gating, RFC 9457 diagnostics, and password cleanup after submission failure or modal closure;
+- extended the authenticated client with a memory-only CSRF request boundary and strict runtime validation for setup lists, summaries, details, and connection tests, plus contract validators ready for health and capability presentation;
+- added 8 focused unit/protocol tests and 10 behavior-focused Playwright workflows; all 36 frontend tests, all 607 Playwright tests, and 17 focused server setup policy/registry/route tests pass with zero failures, errors, or skips.
+
+Health, capability, and scope TDD increment on 25 August 2026:
+
+- RED proved the missing behavior through `client.health is not a function`, absence of the `Database health` details region, visibility of unsupported navigation, a missing scope-storage module, and zero persisted allowlist entries after scope selection;
+- GREEN adds strict health/capability response parsing, combined details/health/capability discovery, explicit health timestamps and capability limits, and hides destinations unsupported by the selected setup while retaining server-side authorization;
+- a Zustand setup scope store persists only `{"setupId":"<canonical-id>"}` under the versioned session-storage allowlist, rejects malformed/expanded/noncanonical state, revalidates capabilities after reload, and clears both memory and persistence through the existing session cleanup path;
+- the complete npm verification passes all 41 frontend tests and all 609 Playwright tests, including 13 focused setup/scope unit and protocol tests and 12 behavior-focused setup workflows;
+- the authoritative `mvn -pl peegee-cache-management-ui verify` lifecycle independently repeats `npm ci`, OpenAPI generation, typecheck, lint, production build, all 41 frontend tests, all 609 Playwright tests, and packaged-artifact validation with `BUILD SUCCESS` in 7:07.
+
+Namespace invalidation and real-database acceptance increment on 25 August 2026:
+
+- RED first produced six focused failures because namespace persistence and `selectNamespace` did not exist, then the first real-browser lifecycle run exposed Chromium rejecting the unescaped setup-ID pattern under Unicode Sets rules;
+- GREEN extends the strict session-storage allowlist to either `{"setupId":"<canonical-id>"}` or `{"setupId":"<canonical-id>","namespace":"<validated-namespace>"}`, retains namespace across same-setup capability revalidation, and invalidates it whenever the setup changes, detaches, is forgotten, or the session ends;
+- a Playwright workflow proves a persisted arbitrary namespace survives reload revalidation but is removed when another setup becomes active;
+- `ManagementConsoleSetupLifecycleIT` starts TLS PostgreSQL 18.3, applies the real cache schema, serves the packaged console, exchanges a local bootstrap token, tests and registers the setup, inspects database health, detaches, reconnects, reselects, and forgets it while proving password, bootstrap-token, and scope cleanup;
+- the browser-discovered setup-ID constraint defect is fixed with a Unicode-Sets-compatible escaped hyphen and a focused component regression assertion;
+- the authoritative 11-module `mvn verify` passes 523 Surefire tests, 10 Failsafe tests, 46 frontend tests, and 610 Playwright tests with zero failures, errors, or skips in 10:03.
 
 RED inventory covers setup list/detail, test/register/connect/detach/forget, password cleanup, target-policy errors, viewer/operator differences, capability navigation, and scope reset.
 
@@ -506,8 +546,8 @@ The final suite contains independent, named journeys for:
 | Phase | Status | Evidence required to advance |
 |---|---|---|
 | U0 Foundation | COMPLETE | Pinned Maven-owned toolchain, zero-vulnerability lockfile, 50-operation contract gate, 24 frontend tests, minimal source-map-free UI JAR, and complete PostgreSQL 18.3 reactor green |
-| U1 Shell and hosting | COMPLETE | Production UI JAR, exact static/SPA policy, both session modes, authenticated shell, 27 frontend tests, 2 hosting tests, 5 browser/artifact tests, and complete reactor green |
-| U2 Setups and scope | NOT STARTED | Real setup lifecycle, capability/role gates, password and scope cleanup |
+| U1 Shell and hosting | COMPLETE | Production UI JAR, exact static/SPA policy, both session modes, authenticated shell, 28 frontend tests, 597 route-intercepted UI Playwright tests, 2 hosting tests, 9 browser/artifact tests including 6 real-server console journeys, and complete reactor green |
+| U2 Setups and scope | COMPLETE | Functional real-PostgreSQL setup lifecycle, health/capability presentation, capability navigation, strict setup/namespace scope allowlist and invalidation, 18 focused unit/protocol tests, 13 workflow Playwright tests, and packaged-server browser acceptance green |
 | U3 Overview/namespaces | NOT STARTED | PostgreSQL-truth counts, cursor/export, stale/permission states |
 | U4 Entry read/reveal | NOT STARTED | Metadata isolation, formatters, arbitrary identifiers, reveal cleanup |
 | U5 Entry administration | NOT STARTED | CAS/TTL/delete/bulk behavior against PostgreSQL and durable audit |

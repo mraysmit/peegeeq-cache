@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 
-import type { BrowserSession } from '../api/session-client';
+import type { BrowserSession, ManagementClientError, SessionClient } from '../api/session-client';
+import { SetupClient } from '../api/setup-client';
+import type { SetupCapabilities } from '../api/setup-schemas';
+import { SetupsPage } from '../features/setups/SetupsPage';
+import { useSetupScopeStore } from '../state/scope-store';
 
 type ManagementShellProps = {
   session: BrowserSession;
+  sessionClient: SessionClient;
+  sessionProblem?: ManagementClientError;
   onLogout: () => Promise<void>;
 };
 
@@ -20,10 +26,59 @@ const sections = [
   { label: 'Settings', path: '/settings' },
 ] as const;
 
-export function ManagementShell({ session, onLogout }: ManagementShellProps) {
+export function ManagementShell({ session, sessionClient, sessionProblem, onLogout }: ManagementShellProps) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [endingSession, setEndingSession] = useState(false);
+  const selectedSetupId = useSetupScopeStore((state) => state.setupId);
+  const selectedCapabilities = useSetupScopeStore((state) => state.capabilities);
+  const selectStoredSetup = useSetupScopeStore((state) => state.select);
+  const clearStoredSetup = useSetupScopeStore((state) => state.clear);
+  const setupClient = useMemo(() => new SetupClient(sessionClient), [sessionClient]);
   const isOperator = session.roles.includes('operator');
+
+  const selectSetup = (setupId: string | undefined, capabilities?: SetupCapabilities) => {
+    if (setupId === undefined) {
+      clearStoredSetup();
+      return;
+    }
+    if (capabilities !== undefined) selectStoredSetup(setupId, capabilities);
+  };
+
+  useEffect(() => {
+    if (selectedSetupId === undefined || selectedCapabilities !== undefined) return undefined;
+    let active = true;
+    void setupClient.capabilities(selectedSetupId)
+      .then((capabilities) => {
+        if (active) selectStoredSetup(selectedSetupId, capabilities);
+      })
+      .catch(() => {
+        if (active) clearStoredSetup();
+      });
+    return () => {
+      active = false;
+    };
+  }, [clearStoredSetup, selectStoredSetup, selectedCapabilities, selectedSetupId, setupClient]);
+
+  const visibleSections = sections.filter((section) => {
+    if (selectedCapabilities === undefined) return true;
+    if (section.path === '/namespaces' || section.path === '/keys') {
+      return selectedCapabilities.capabilities.namespaceInspection;
+    }
+    if (section.path === '/counters') return selectedCapabilities.capabilities.counterInspection;
+    if (section.path === '/locks') return selectedCapabilities.capabilities.lockInspection;
+    if (section.path === '/pubsub') return selectedCapabilities.capabilities.pubSub;
+    return true;
+  });
+
+  const endSession = async () => {
+    setEndingSession(true);
+    try {
+      await onLogout();
+    } finally {
+      setEndingSession(false);
+    }
+  };
 
   return (
     <div className="console" data-theme={theme}>
@@ -36,6 +91,9 @@ export function ManagementShell({ session, onLogout }: ManagementShellProps) {
           <span className="status status--connected"><i aria-hidden="true" />Connected</span>
           <span>{session.user}</span>
           <span className="role">{isOperator ? 'Operator' : 'Viewer'}</span>
+          <span className="scope" title="Active setup scope">
+            {selectedSetupId === undefined ? 'No setup selected' : `Setup: ${selectedSetupId}`}
+          </span>
           <button
             aria-label={theme === 'light' ? 'Use dark theme' : 'Use light theme'}
             className="icon-button"
@@ -54,14 +112,19 @@ export function ManagementShell({ session, onLogout }: ManagementShellProps) {
             Notices
           </button>
           {session.authenticationMode === 'LOCAL_TOKEN' && (
-            <button className="session-button" onClick={() => void onLogout()} type="button">
-              End local session
+            <button
+              className="session-button"
+              disabled={endingSession}
+              onClick={() => void endSession()}
+              type="button"
+            >
+              {endingSession ? 'Ending session…' : 'End local session'}
             </button>
           )}
         </div>
       </header>
       <nav className="console__sidebar" aria-label="Management sections">
-        {sections.map((section) => (
+        {visibleSections.map((section) => (
           <NavLink
             className={({ isActive }) => isActive ? 'nav-link nav-link--active' : 'nav-link'}
             end={section.path === '/'}
@@ -73,10 +136,29 @@ export function ManagementShell({ session, onLogout }: ManagementShellProps) {
         ))}
       </nav>
       <main className="console__main" id="main-content">
+        {sessionProblem !== undefined && (
+          <div className="diagnostics" role="alert">
+            <strong>{sessionProblem.code}</strong>
+            <p>{sessionProblem.message}</p>
+            {sessionProblem.correlationId !== undefined
+              && <p>Correlation: {sessionProblem.correlationId}</p>}
+          </div>
+        )}
         <Routes>
-          {sections.map((section) => (
+          <Route
+            element={(
+              <SetupsPage
+                client={setupClient}
+                onSelectSetup={selectSetup}
+                selectedSetupId={selectedSetupId}
+                session={session}
+              />
+            )}
+            path="/setups"
+          />
+          {sections.filter((section) => section.path !== '/setups').map((section) => (
             <Route
-              element={<Section title={section.label} />}
+              element={<Section selectedSetupId={selectedSetupId} title={section.label} />}
               key={section.path}
               path={section.path}
             />
@@ -104,12 +186,16 @@ export function ManagementShell({ session, onLogout }: ManagementShellProps) {
   );
 }
 
-function Section({ title }: { title: string }) {
+function Section({ title, selectedSetupId }: { title: string; selectedSetupId?: string }) {
   return (
     <section className="workspace" aria-labelledby="workspace-title">
       <p className="workspace__context">Authenticated workspace</p>
       <h1 id="workspace-title">{title}</h1>
-      <p>This management area is ready for its feature phase.</p>
+      <p>
+        {selectedSetupId === undefined
+          ? 'Select a connected setup before using this management area.'
+          : `Active setup: ${selectedSetupId}. This management area is ready for its feature phase.`}
+      </p>
     </section>
   );
 }

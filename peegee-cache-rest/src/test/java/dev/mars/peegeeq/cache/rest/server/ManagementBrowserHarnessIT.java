@@ -2,7 +2,6 @@ package dev.mars.peegeeq.cache.rest.server;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.SameSiteAttribute;
@@ -108,7 +107,7 @@ class ManagementBrowserHarnessIT {
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
              Browser browser = playwright.chromium().launch(
-                     new BrowserType.LaunchOptions().setChannel("chrome").setHeadless(true))) {
+                     ManagementPlaywright.launchOptions())) {
             BrowserContext context = browser.newContext();
             Page page = context.newPage();
             assertEquals(200, page.navigate(origin + "/ui/").status());

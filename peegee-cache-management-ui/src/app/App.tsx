@@ -91,12 +91,21 @@ export function App({ apiBaseUrl = '' }: AppProps) {
   };
 
   const logout = async () => {
+    setProblem(undefined);
     try {
       await client.logoutLocal();
-    } finally {
       client.clear();
       setSession(undefined);
       setLoginRequired(true);
+    } catch (failure: unknown) {
+      const clientFailure = asClientError(failure);
+      if (clientFailure.status === 401) {
+        client.clear();
+        setSession(undefined);
+        setLoginRequired(true);
+        return;
+      }
+      setProblem(clientFailure);
     }
   };
 
@@ -105,7 +114,12 @@ export function App({ apiBaseUrl = '' }: AppProps) {
     return (
       <ErrorBoundary>
         <BrowserRouter basename="/ui">
-          <ManagementShell session={session} onLogout={logout} />
+          <ManagementShell
+            session={session}
+            sessionClient={client}
+            sessionProblem={problem}
+            onLogout={logout}
+          />
         </BrowserRouter>
       </ErrorBoundary>
     );

@@ -2,7 +2,6 @@ package dev.mars.peegeeq.cache.rest.server;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.AriaRole;
@@ -32,6 +31,7 @@ import java.util.Set;
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 @ExtendWith(VertxExtension.class)
 class ManagementConsoleTrustedProxyIT {
@@ -91,7 +91,7 @@ class ManagementConsoleTrustedProxyIT {
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
              Browser browser = playwright.chromium().launch(
-                     new BrowserType.LaunchOptions().setChannel("chrome").setHeadless(true));
+                     ManagementPlaywright.launchOptions());
              BrowserContext context = browser.newContext(new Browser.NewContextOptions()
                      .setExtraHTTPHeaders(Map.of(
                              "X-PeeGeeQ-User", "alex",
@@ -131,6 +131,50 @@ class ManagementConsoleTrustedProxyIT {
             assertEquals(List.of(), failedResponses);
             assertEquals(List.of(), browserErrors);
         }
+    }
+
+    @Test
+    void trustedIdentityAndRoleChangesRotateTheBrowserSession() {
+        List<String> browserErrors = new ArrayList<>();
+        try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
+                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
+             Browser browser = playwright.chromium().launch(
+                     ManagementPlaywright.launchOptions());
+             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+                     .setExtraHTTPHeaders(Map.of(
+                             "X-PeeGeeQ-User", "alex",
+                             "X-PeeGeeQ-Roles", "viewer,operator")))) {
+            Page page = context.newPage();
+            page.onPageError(browserErrors::add);
+            assertEquals(200, page.navigate(origin() + "/ui/").status());
+            assertThat(page.getByText("alex", new Page.GetByTextOptions().setExact(true))).isVisible();
+            assertThat(page.getByText("Operator", new Page.GetByTextOptions().setExact(true))).isVisible();
+            String operatorCookie = sessionCookie(context);
+
+            context.setExtraHTTPHeaders(Map.of(
+                    "X-PeeGeeQ-User", "blair",
+                    "X-PeeGeeQ-Roles", "viewer"));
+            page.reload();
+
+            assertThat(page.getByRole(
+                    AriaRole.HEADING,
+                    new Page.GetByRoleOptions().setName("Overview"))).isVisible();
+            assertThat(page.getByText("blair", new Page.GetByTextOptions().setExact(true))).isVisible();
+            assertThat(page.getByText("Viewer", new Page.GetByTextOptions().setExact(true))).isVisible();
+            assertThat(page.getByText("Operator", new Page.GetByTextOptions().setExact(true))).hasCount(0);
+            assertNotEquals(operatorCookie, sessionCookie(context));
+            assertEquals(0, ((Number) page.evaluate("localStorage.length")).intValue());
+            assertEquals(0, ((Number) page.evaluate("sessionStorage.length")).intValue());
+            assertEquals(List.of(), browserErrors);
+        }
+    }
+
+    private static String sessionCookie(BrowserContext context) {
+        return context.cookies().stream()
+                .filter(cookie -> cookie.name.equals("PGQMGMTSESSION"))
+                .findFirst()
+                .orElseThrow()
+                .value;
     }
 
     private String origin() {

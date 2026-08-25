@@ -2,7 +2,6 @@ package dev.mars.peegeeq.cache.rest.server;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.AriaRole;
@@ -25,6 +24,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,6 +35,7 @@ class ManagementConsoleLocalTokenIT {
 
     private ManagementHttpServer server;
     private LocalTokenBootstrap bootstrap;
+    private final AtomicBoolean failNextLogout = new AtomicBoolean();
     private int port;
 
     @BeforeEach
@@ -42,14 +43,15 @@ class ManagementConsoleLocalTokenIT {
         port = freePort();
         String origin = origin();
         bootstrap = LocalTokenSessionManager.start(LocalTokenAuthenticationConfig.defaults());
+        ManagementRequestRouter sessions = new LocalSessionRoutes(
+                bootstrap.manager(),
+                new BrowserRequestSecurity(BrowserOriginPolicy.localToken(origin)),
+                16 * 1024);
         server = new ManagementHttpServer(
                 vertx,
                 TestManagementConfigurations.local(port),
                 ManagementServerResources.noop(),
-                new LocalSessionRoutes(
-                        bootstrap.manager(),
-                        new BrowserRequestSecurity(BrowserOriginPolicy.localToken(origin)),
-                        16 * 1024));
+                ManagementRequestRouter.firstOf(this::failLogoutOnce, sessions));
         server.start()
                 .onSuccess(ignored -> context.completeNow())
                 .onFailure(context::failNow);
@@ -76,7 +78,7 @@ class ManagementConsoleLocalTokenIT {
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
              Browser browser = playwright.chromium().launch(
-                     new BrowserType.LaunchOptions().setChannel("chrome").setHeadless(true));
+                     ManagementPlaywright.launchOptions());
              BrowserContext context = browser.newContext()) {
             Page page = context.newPage();
             page.onConsoleMessage(message -> {
@@ -108,6 +110,9 @@ class ManagementConsoleLocalTokenIT {
             assertFalse(page.url().contains(token));
             assertFalse(page.content().contains(token));
 
+            assertEquals(200, page.navigate(origin() + "/ui/keys?prefix=a%2Fb%25").status());
+            assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Keys")))
+                    .isVisible();
             assertEquals(200, page.navigate(origin() + "/ui/monitoring").status());
             assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Monitoring")))
                     .isVisible();
@@ -121,6 +126,126 @@ class ManagementConsoleLocalTokenIT {
             assertEquals(List.of("401 /api/v1/session"), failedResponses);
             assertEquals(List.of(), browserErrors);
         }
+    }
+
+    @Test
+    void invalidAndReplayedBootstrapTokensRemainVisibleOnlyInThePasswordControl() {
+        String token = bootstrap.token();
+        List<String> browserErrors = new ArrayList<>();
+        try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
+                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
+             Browser browser = playwright.chromium().launch(
+                     ManagementPlaywright.launchOptions());
+             BrowserContext authenticatedContext = browser.newContext();
+             BrowserContext replayContext = browser.newContext()) {
+            Page authenticatedPage = authenticatedContext.newPage();
+            authenticatedPage.onPageError(browserErrors::add);
+            assertEquals(200, authenticatedPage.navigate(origin() + "/ui/").status());
+            authenticatedPage.getByLabel("Bootstrap token").fill("invalid-bootstrap-token");
+            authenticatedPage.getByRole(
+                    AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Connect")).click();
+
+            assertThat(authenticatedPage.getByText(
+                    "INVALID_BOOTSTRAP_TOKEN",
+                    new Page.GetByTextOptions().setExact(true))).isVisible();
+            assertEquals("", authenticatedPage.getByLabel("Bootstrap token").inputValue());
+            assertFalse(authenticatedPage.content().contains("invalid-bootstrap-token"));
+
+            authenticatedPage.getByLabel("Bootstrap token").fill(token);
+            authenticatedPage.getByRole(
+                    AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Connect")).click();
+            assertThat(authenticatedPage.getByRole(
+                    AriaRole.HEADING,
+                    new Page.GetByRoleOptions().setName("Overview"))).isVisible();
+
+            Page replayPage = replayContext.newPage();
+            replayPage.onPageError(browserErrors::add);
+            assertEquals(200, replayPage.navigate(origin() + "/ui/").status());
+            replayPage.getByLabel("Bootstrap token").fill(token);
+            replayPage.getByRole(
+                    AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Connect")).click();
+            assertThat(replayPage.getByText(
+                    "INVALID_BOOTSTRAP_TOKEN",
+                    new Page.GetByTextOptions().setExact(true))).isVisible();
+            assertEquals("", replayPage.getByLabel("Bootstrap token").inputValue());
+            assertEquals(0, ((Number) replayPage.evaluate("localStorage.length")).intValue());
+            assertEquals(0, ((Number) replayPage.evaluate("sessionStorage.length")).intValue());
+            assertFalse(replayPage.url().contains(token));
+            assertFalse(replayPage.content().contains(token));
+
+            authenticatedPage.reload();
+            assertThat(authenticatedPage.getByRole(
+                    AriaRole.HEADING,
+                    new Page.GetByRoleOptions().setName("Overview"))).isVisible();
+            assertEquals(List.of(), browserErrors);
+        }
+    }
+
+    @Test
+    void failedLogoutKeepsTheAuthenticatedShellAndCanBeRetried() {
+        List<String> browserErrors = new ArrayList<>();
+        try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
+                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
+             Browser browser = playwright.chromium().launch(
+                     ManagementPlaywright.launchOptions());
+             BrowserContext context = browser.newContext()) {
+            Page page = context.newPage();
+            page.onPageError(browserErrors::add);
+            assertEquals(200, page.navigate(origin() + "/ui/").status());
+            page.getByLabel("Bootstrap token").fill(bootstrap.token());
+            page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Connect")).click();
+            assertThat(page.getByRole(
+                    AriaRole.HEADING,
+                    new Page.GetByRoleOptions().setName("Overview"))).isVisible();
+
+            failNextLogout.set(true);
+            page.getByRole(
+                    AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("End local session")).click();
+
+            assertThat(page.getByRole(AriaRole.ALERT)).containsText("LOGOUT_TEST_FAILURE");
+            assertThat(page.getByRole(
+                    AriaRole.HEADING,
+                    new Page.GetByRoleOptions().setName("Overview"))).isVisible();
+            assertThat(page.getByRole(
+                    AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("End local session"))).isEnabled();
+            assertEquals(1, context.cookies().stream()
+                    .filter(cookie -> cookie.name.equals("PGQMGMTSESSION"))
+                    .count());
+
+            page.getByRole(
+                    AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("End local session")).click();
+            assertThat(page.getByRole(
+                    AriaRole.HEADING,
+                    new Page.GetByRoleOptions().setName("Connect to management console"))).isVisible();
+            assertFalse(context.cookies().stream()
+                    .anyMatch(cookie -> cookie.name.equals("PGQMGMTSESSION")));
+            assertEquals(List.of(), browserErrors);
+        }
+    }
+
+    private boolean failLogoutOnce(io.vertx.core.http.HttpServerRequest request) {
+        if (!request.method().name().equals("DELETE")
+                || !request.path().equals("/api/v1/session/local")
+                || !failNextLogout.compareAndSet(true, false)) {
+            return false;
+        }
+        request.response()
+                .setStatusCode(503)
+                .putHeader("content-type", "application/problem+json; charset=utf-8")
+                .putHeader("cache-control", "no-store")
+                .end("""
+                        {"type":"https://peegeeq.dev/problems/logout-test-failure",
+                         "title":"Logout unavailable","status":503,"code":"LOGOUT_TEST_FAILURE",
+                         "detail":"The local session could not be terminated","instance":"/api/v1/session/local",
+                         "correlationId":"logout-test-correlation","fieldErrors":[]}
+                        """);
+        return true;
     }
 
     private String origin() {

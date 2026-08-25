@@ -85,4 +85,40 @@ describe('U1 session client', () => {
       code: 'RESPONSE_CONTRACT_INVALID',
     } satisfies Partial<ManagementClientError>);
   });
+
+  it('retains the CSRF proof when logout fails so termination can be retried', async () => {
+    let logoutAttempts = 0;
+    const receivedCsrf: string[] = [];
+    handler = (request, response) => {
+      if (request.method === 'GET') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(sessionBody));
+        return;
+      }
+      logoutAttempts++;
+      receivedCsrf.push(String(request.headers['x-peegeeq-csrf'] ?? ''));
+      if (logoutAttempts === 1) {
+        response.writeHead(503, { 'content-type': 'application/problem+json' });
+        response.end(JSON.stringify({
+          type: 'https://peegeeq.dev/problems/logout-unavailable',
+          title: 'Logout unavailable',
+          status: 503,
+          code: 'LOGOUT_UNAVAILABLE',
+          detail: 'Logout is temporarily unavailable',
+          instance: '/api/v1/session/local',
+          correlationId: 'logout-correlation',
+          fieldErrors: [],
+        }));
+        return;
+      }
+      response.writeHead(204).end();
+    };
+    const client = new SessionClient(baseUrl);
+
+    await client.load();
+    await expect(client.logoutLocal()).rejects.toMatchObject({ code: 'LOGOUT_UNAVAILABLE' });
+    await expect(client.logoutLocal()).resolves.toBeUndefined();
+
+    expect(receivedCsrf).toEqual([sessionBody.csrfToken, sessionBody.csrfToken]);
+  });
 });

@@ -56,10 +56,11 @@ describe('management UI operation manifest', () => {
     }
   });
 
-  it('marks every reveal operation as sensitive and every operator mutation as CSRF protected', () => {
+  it('marks every reveal as sensitive and every protected POST profile as CSRF protected', () => {
     for (const operation of operationManifest) {
       if (operation.securityProfile === 'REVEAL') {
         expect(operation.sensitiveResponse, operation.operationId).toBe(true);
+        expect(operation.csrfProtected, operation.operationId).toBe(true);
       }
       if (operation.securityProfile === 'OPERATE') {
         expect(operation.csrfProtected, operation.operationId).toBe(true);

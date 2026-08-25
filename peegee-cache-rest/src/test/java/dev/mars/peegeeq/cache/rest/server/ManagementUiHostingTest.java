@@ -87,7 +87,9 @@ class ManagementUiHostingTest {
                     assertFalse(responses.script().body().isBlank());
                     assertEquals(404, responses.missing().status());
                     assertFalse(responses.missing().body().contains("<div id=\"root\"></div>"));
+                    assertTrue(responses.missing().contentSecurityPolicy().contains("default-src 'self'"));
                     assertEquals(404, responses.traversal().status());
+                    assertTrue(responses.traversal().contentSecurityPolicy().contains("default-src 'self'"));
                     context.completeNow();
                 }))
                 .onFailure(context::failNow);

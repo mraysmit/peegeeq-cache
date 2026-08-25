@@ -1,7 +1,13 @@
 import { currentSessionSchema, managementProblemSchema } from './protocol-schemas';
 import type { CurrentSession, ManagementProblem } from './protocol-schemas';
+import { clearSetupScope } from '../state/scope-store';
 
 export type BrowserSession = Omit<CurrentSession, 'csrfToken'>;
+
+export interface ManagementRequest {
+  readonly method?: 'GET' | 'POST' | 'DELETE';
+  readonly body?: unknown;
+}
 
 let csrfToken: string | undefined;
 
@@ -49,7 +55,6 @@ export class SessionClient {
 
   async logoutLocal(): Promise<void> {
     const token = csrfToken;
-    csrfToken = undefined;
     if (token === undefined) {
       throw new ManagementClientError(401, 'SESSION_STATE_MISSING', 'Session state is unavailable');
     }
@@ -64,10 +69,43 @@ export class SessionClient {
     if (response.status !== 204) {
       throw await this.readProblem(response);
     }
+    csrfToken = undefined;
+  }
+
+  async requestJson(path: string, request: ManagementRequest = {}): Promise<unknown> {
+    const method = request.method ?? 'GET';
+    const headers: Record<string, string> = { accept: 'application/json' };
+    if (method !== 'GET') {
+      const token = csrfToken;
+      if (token === undefined) {
+        throw new ManagementClientError(
+          401,
+          'SESSION_STATE_MISSING',
+          'Session state is unavailable',
+        );
+      }
+      headers['X-PeeGeeQ-CSRF'] = token;
+    }
+    if (request.body !== undefined) {
+      headers['content-type'] = 'application/json';
+    }
+    const response = await fetch(this.url(path), {
+      body: request.body === undefined ? undefined : JSON.stringify(request.body),
+      credentials: 'include',
+      headers,
+      method,
+    });
+    if (!response.ok) {
+      if (response.status === 401) csrfToken = undefined;
+      throw await this.readProblem(response);
+    }
+    if (response.status === 204) return undefined;
+    return this.readJson(response);
   }
 
   clear(): void {
     csrfToken = undefined;
+    clearSetupScope();
   }
 
   private url(path: string): string {
