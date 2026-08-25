@@ -1,7 +1,7 @@
 # PeeGeeQ Cache Management UI
 
 **Author:** Mark A Ray-Smith Cityline Ltd  
-**Status:** Approved design; backend contract reconciled; Phase 8.3 U0 complete
+**Status:** Approved design; backend contract reconciled; Phase 8.3 U0-U1 complete
 **Date:** August 2026  
 **Version:** 0.2
 
@@ -22,6 +22,8 @@ The first release manages multiple PostgreSQL cache setups, exposes authoritativ
 The corresponding interactive screen designs are available in [the management UI mockups](UI%20mockups/peegeeq-cache-management-ui-mockups.html). The complete REST, streaming, security, error, and Java service contracts are defined in [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md).
 
 Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
+
+As of 25 August 2026, the implemented production boundary includes the Maven-packaged React shell, exact `/ui/assets/*` serving, no-store SPA deep links, reviewed browser security headers, runtime-validated bootstrap for both authentication modes, memory-only bootstrap/CSRF handling, local logout and expiry cleanup, responsive route navigation, theme, role/connection state, notifications, error containment, and sanitized diagnostics. Setup lifecycle and scoped resource behavior begin in U2; placeholder workspace routes do not claim those later features.
 
 ## 2. Fixed decisions
 
@@ -513,9 +515,11 @@ flowchart LR
 - capability discovery;
 - bulk-confirmation token storage;
 - structured audit events;
-- static `webroot` serving with SPA fallback.
+- exact packaged asset serving and constrained SPA fallback with MIME, cache, traversal, and security-header policy.
 
-Both modules are Maven children of the root reactor. `peegee-cache-management-ui` owns the Node/Vite build and exposes its compiled webroot as a Maven artifact; `peegee-cache-rest` consumes that artifact during packaging. Generated frontend output is never written into another module's source tree. The backend remains buildable through the root reactor before Phase 8.3 by using an explicitly empty, validated UI artifact.
+Both modules are Maven children of the root reactor. `peegee-cache-management-ui` owns the Node/Vite build and exposes its compiled webroot as a Maven artifact; `peegee-cache-rest` consumes that artifact during packaging. Generated frontend output is never written into another module's source tree. U1 removed the REST-owned fallback entry point, so the UI artifact is now the single source of `ui/index.html` and its fingerprinted `ui/assets/*` graph.
+
+The static host treats `/ui` and valid client routes as no-store application-entry responses, and it treats exact asset names as immutable cacheable resources with their actual MIME types. Missing asset-like requests, malformed or encoded traversal, non-GET static requests, and unexpected classpath paths do not fall back to the application entry point. UI responses retain `nosniff`, restrictive referrer and framing policy, and the reviewed Content Security Policy.
 
 ### 9.2 Default ports and paths
 
@@ -780,7 +784,7 @@ Playwright mirrors the PeeGeeQ Management UI environment:
 - start a fresh PostgreSQL Testcontainer;
 - bootstrap the current PeeGeeQ Cache schema;
 - start the current management backend against the dynamic database port;
-- start Vite against the dynamic backend;
+- package the Vite application and serve it from the actual dynamic management backend;
 - execute explicit dependency projects with one worker where database state is shared;
 - shut down every server, pool, subscription, and container.
 

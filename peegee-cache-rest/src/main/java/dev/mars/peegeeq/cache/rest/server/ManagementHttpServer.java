@@ -9,10 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 
 /** Minimal owning HTTP lifecycle; route slices are attached behind its reserved path boundaries. */
 public final class ManagementHttpServer {
@@ -20,13 +18,12 @@ public final class ManagementHttpServer {
     private static final Logger LOGGER = LoggerFactory.getLogger(ManagementHttpServer.class);
     static final String ERROR_CODE_HEADER = "x-peegeeq-error-code";
 
-    private static final String SPA = resourceText("/ui/index.html");
-
     private final Vertx vertx;
     private final ManagementServerConfiguration configuration;
     private final ManagementServerResources resources;
     private final ManagementRequestRouter router;
     private final ManagementHttpTelemetry telemetry;
+    private final ManagementUiResources uiResources = new ManagementUiResources();
     private HttpServer httpServer;
     private Future<Void> startFuture;
     private Future<Void> stopFuture;
@@ -87,7 +84,9 @@ public final class ManagementHttpServer {
                             configuration.port(),
                             configuration.authenticationMode());
                 });
-        startFuture = attempt.recover(failure -> failedStart(candidate, failure));
+        startFuture = attempt.transform(outcome -> outcome.succeeded()
+                ? Future.succeededFuture()
+                : failedStart(candidate, outcome.cause()));
         return startFuture;
     }
 
@@ -99,17 +98,22 @@ public final class ManagementHttpServer {
         readiness(false);
         Future<Void> afterStart = startFuture == null
                 ? Future.succeededFuture()
-                : startFuture.recover(ignored -> Future.succeededFuture());
+                : startFuture.transform(ignored -> Future.succeededFuture());
         stopFuture = afterStart
-                .compose(ignored -> closeHttpServer())
-                .compose(ignored -> closeResources())
-                .onComplete(ignored -> started = false)
-                .onSuccess(ignored -> {
-                    shutdownCompleted();
-                    lifecycle(ManagementRuntimeLifecycleState.STOPPED);
-                    LOGGER.info("management.http.server.stopped");
-                })
-                .onFailure(ignored -> lifecycle(ManagementRuntimeLifecycleState.FAILED));
+                .compose(ignored -> AsyncCloseSequence.closeAll(List.of(
+                        this::closeHttpServer,
+                        this::closeResources)))
+                .transform(outcome -> {
+                    started = false;
+                    if (outcome.succeeded()) {
+                        shutdownCompleted();
+                        lifecycle(ManagementRuntimeLifecycleState.STOPPED);
+                        LOGGER.info("management.http.server.stopped");
+                        return Future.succeededFuture();
+                    }
+                    lifecycle(ManagementRuntimeLifecycleState.FAILED);
+                    return Future.failedFuture(outcome.cause());
+                });
         return stopFuture;
     }
 
@@ -146,13 +150,7 @@ public final class ManagementHttpServer {
             notFound(request);
             return;
         }
-        if (request.method().name().equals("GET")
-                && (path.equals("/ui") || path.equals("/ui/") || path.startsWith("/ui/"))) {
-            request.response()
-                    .putHeader("content-type", "text/html; charset=utf-8")
-                    .putHeader("x-content-type-options", "nosniff")
-                    .putHeader("referrer-policy", "no-referrer")
-                    .end(SPA);
+        if (uiResources.handle(request)) {
             return;
         }
         notFound(request);
@@ -229,20 +227,19 @@ public final class ManagementHttpServer {
         resourcesStarted = true;
     }
 
-    private Future<Void> unwindFailedStart(HttpServer candidate) {
-        started = false;
-        return candidate.close()
-                .recover(ignored -> Future.succeededFuture())
-                .compose(ignored -> closeResources());
-    }
-
     private Future<Void> failedStart(HttpServer candidate, Throwable failure) {
-        return unwindFailedStart(candidate)
-                .onComplete(ignored -> {
+        started = false;
+        return AsyncCloseSequence.closeAll(List.of(
+                        () -> closeCandidate(candidate),
+                        this::closeResources))
+                .transform(cleanup -> {
                     readiness(false);
                     lifecycle(ManagementRuntimeLifecycleState.FAILED);
-                })
-                .compose(ignored -> Future.failedFuture(failure));
+                    if (cleanup.failed() && cleanup.cause() != failure) {
+                        failure.addSuppressed(cleanup.cause());
+                    }
+                    return Future.failedFuture(failure);
+                });
     }
 
     private void lifecycle(ManagementRuntimeLifecycleState state) {
@@ -275,7 +272,14 @@ public final class ManagementHttpServer {
         if (server == null) {
             return Future.succeededFuture();
         }
-        return server.close().recover(ignored -> Future.succeededFuture());
+        return server.close();
+    }
+
+    private synchronized Future<Void> closeCandidate(HttpServer candidate) {
+        if (httpServer == candidate) {
+            httpServer = null;
+        }
+        return candidate.close();
     }
 
     private synchronized Future<Void> closeResources() {
@@ -284,14 +288,5 @@ public final class ManagementHttpServer {
         }
         resourcesClosed = true;
         return resources.closeAsync();
-    }
-
-    private static String resourceText(String path) {
-        try (InputStream input = ManagementHttpServer.class.getResourceAsStream(path)) {
-            if (input == null) throw new IllegalStateException("Missing management resource " + path);
-            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException failure) {
-            throw new IllegalStateException("Management resource could not be read " + path, failure);
-        }
     }
 }

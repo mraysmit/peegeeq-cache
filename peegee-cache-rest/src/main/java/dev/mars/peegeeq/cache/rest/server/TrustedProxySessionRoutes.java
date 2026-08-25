@@ -44,7 +44,9 @@ public final class TrustedProxySessionRoutes implements ManagementRequestRouter 
         }
         try {
             String origin = request.getHeader("Origin");
-            origins.requireAllowed(origin);
+            if (origin != null) {
+                origins.requireAllowed(origin);
+            }
             AuthenticatedManagementIdentity identity = authenticator.authenticate(
                     InetAddress.getByName(request.remoteAddress().hostAddress()), request.headers());
             TrustedProxyManagementSession session = sessions.createOrRefresh(
@@ -81,10 +83,12 @@ public final class TrustedProxySessionRoutes implements ManagementRequestRouter 
                 .putHeader("cache-control", "no-store")
                 .putHeader("pragma", "no-cache")
                 .putHeader("set-cookie", cookie);
-        origins.allowCredentialedOrigin(origin).ifPresent(allowed -> httpResponse
-                .putHeader("access-control-allow-origin", allowed)
-                .putHeader("access-control-allow-credentials", "true")
-                .putHeader("vary", "Origin"));
+        if (origin != null) {
+            origins.allowCredentialedOrigin(origin).ifPresent(allowed -> httpResponse
+                    .putHeader("access-control-allow-origin", allowed)
+                    .putHeader("access-control-allow-credentials", "true")
+                    .putHeader("vary", "Origin"));
+        }
         httpResponse.end(response.toString());
     }
 

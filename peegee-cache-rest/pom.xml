@@ -19,6 +19,11 @@
     <dependencies>
         <dependency>
             <groupId>dev.mars</groupId>
+            <artifactId>peegee-cache-management-ui</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.mars</groupId>
             <artifactId>peegee-cache-api</artifactId>
             <version>${project.version}</version>
             <exclusions>
@@ -64,6 +69,11 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-junit5</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

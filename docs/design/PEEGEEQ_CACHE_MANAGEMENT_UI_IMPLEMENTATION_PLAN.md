@@ -1,7 +1,7 @@
 # PeeGeeQ Cache Management UI Implementation Plan
 
-**Status:** Phase 8.3 in progress; U0 complete; U1 is the next executable phase
-**Date:** 24 August 2026
+**Status:** Phase 8.3 in progress; U0-U1 complete; U2 is the next executable phase
+**Date:** 25 August 2026
 **Delivery method:** strict test-driven development
 **Target:** production React management console served by `peegee-cache-rest` at `/ui/*`
 
@@ -28,10 +28,10 @@ The execution baseline is:
 - the OpenAPI contract contains 50 stable operation identifiers covering REST, SSE, and WebSocket surfaces;
 - PostgreSQL 15.17, 16.13, 17.11, and 18.3 complete-reactor verification is green;
 - the backend-owned non-production browser harness proves cookie, CSRF, Origin, Fetch Metadata, no-store, storage-exclusion, and static-route isolation behavior;
-- `peegee-cache-management-ui` is currently an empty Maven JAR boundary with no production frontend source;
-- `peegee-cache-rest` currently packages a fallback `ui/index.html`; it does not yet serve Vite's hashed asset graph;
+- `peegee-cache-management-ui` publishes the production U1 React shell as a Maven JAR containing Vite's entry point and fingerprinted asset graph;
+- `peegee-cache-rest` consumes that UI artifact directly, safely serves exact assets and SPA routes, and no longer owns a duplicate fallback `ui/index.html`;
 - the sibling `peegeeq-management-ui` remains the interaction and visual reference, but its dependency ranges and accidental implementation structure are not copied blindly;
-- OpenJDK 26.0.2 remains the verification JDK while emitted Java bytecode remains Java 21.
+- OpenJDK 26.0.1 is the current verification JDK while emitted Java bytecode remains Java 21; earlier U0 evidence was recorded under 26.0.2.
 
 ## 3. Scope
 
@@ -251,7 +251,31 @@ Exit gate:
 
 ### U1: Static hosting, session bootstrap, and application shell
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — RED/GREEN and all exit gates satisfied 25 August 2026
+
+RED evidence:
+
+- backend command: `mvn -pl peegee-cache-rest -am "-Dtest=ManagementUiHostingTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`;
+- intended backend failures: the existing static route omitted `Cache-Control: no-store`, and a same-origin trusted-proxy session bootstrap without an `Origin` header was rejected with `403` instead of succeeding;
+- frontend command: `npm run test:run` in `peegee-cache-management-ui`;
+- intended frontend failure: the new shell and real session-client tests could not resolve the deliberately absent `ManagementShell` and `session-client` production modules while the existing frontend suites remained green;
+- browser installation TLS failure during the first Playwright attempt was an environment failure and is not counted as RED evidence.
+
+GREEN evidence:
+
+- frontend quality: strict TypeScript and ESLint pass with zero warnings; 5 Vitest files and 27 tests pass;
+- backend boundary: `ManagementUiHostingTest` passes 2 tests against a real Vert.x listener for packaged asset MIME/cache behavior, SPA deep links, CSP/security headers, missing/traversal rejection, and trusted-proxy bootstrap without an `Origin` header;
+- browser acceptance: the production packaged console passes independent local-token and trusted-proxy journeys; the backend security harness was adapted to execute its protocol probe through Playwright rather than CSP-blocked inline page script while retaining cookie, storage, token, no-store, and exact-Origin assertions;
+- browser/artifact gate: 5 Failsafe tests pass, comprising the backend security harness, both U1 session journeys, and 2 runnable-artifact checks;
+- clean packaging prerequisite: `mvn -pl peegee-cache-rest -am clean install -DskipTests` succeeds before the verification ladder;
+- complete reactor: all 11 modules pass on PostgreSQL 18.3 under OpenJDK 26.0.1 in 5:06; 510 Surefire tests, 5 Failsafe tests, and 27 frontend tests pass with zero failures, errors, or skips, and no Surefire/Failsafe dump files are present;
+- final local verification transcript: `logs/u1-full-verify-final.log` records the ignored workspace evidence; authoritative durable evidence remains the stable test names and this plan.
+
+Verification diagnosis and portability correction:
+
+- the first complete-reactor attempts exposed a deterministic Windows checkout defect, not an intermittent test: `postgres-tls-init.sh` contained CRLF bytes and Alpine reported `/bin/sh^M: bad interpreter`, causing Testcontainers exit code `126` in `VertxPinnedDatabaseConnectorTest` and `PostgresSetupRuntimeFactoryTest`;
+- `.gitattributes` now enforces `*.sh text eol=lf`; the checked fixture contains LF bytes, and the two TLS fixtures pass together from a clean reactor with 3 tests and zero failures, errors, or skips;
+- a later complete-reactor attempt exposed the legacy browser harness's reliance on inline script after loading a page now protected by U1 CSP; the harness now performs the same real-browser protocol assertions through Playwright evaluation and passes from a clean reactor without weakening CSP.
 
 RED inventory:
 
@@ -263,11 +287,11 @@ RED inventory:
 
 Implementation:
 
-- package and serve the Vite asset graph safely from the UI dependency;
-- implement session bootstrap for trusted-proxy and local-token modes;
+- package and serve the Vite asset graph safely from the UI dependency, with exact asset lookup, MIME types, immutable asset caching, no-store SPA responses, CSP, and traversal/missing-asset rejection;
+- implement runtime-validated session bootstrap for trusted-proxy and local-token modes, same-origin safe-read handling, local logout, and bounded session-expiry scheduling;
 - implement the shell, theme, responsive sidebar, header, route table, error boundary, role model, connection indicator, notification drawer, and sanitized client diagnostics;
-- keep the bootstrap token and CSRF proof memory-only and clear bootstrap input after exchange;
-- preserve the backend-owned browser harness unchanged as an independent backend security gate.
+- keep the bootstrap token and CSRF proof memory-only, clear bootstrap input after exchange, and keep both browser storage areas empty;
+- retain the backend-owned browser harness as an independent backend security gate, updated only to remain executable under the production CSP.
 
 Exit gate:
 
@@ -482,7 +506,7 @@ The final suite contains independent, named journeys for:
 | Phase | Status | Evidence required to advance |
 |---|---|---|
 | U0 Foundation | COMPLETE | Pinned Maven-owned toolchain, zero-vulnerability lockfile, 50-operation contract gate, 24 frontend tests, minimal source-map-free UI JAR, and complete PostgreSQL 18.3 reactor green |
-| U1 Shell and hosting | NOT STARTED | Packaged assets, both sessions, shell, static security, real-browser acceptance |
+| U1 Shell and hosting | COMPLETE | Production UI JAR, exact static/SPA policy, both session modes, authenticated shell, 27 frontend tests, 2 hosting tests, 5 browser/artifact tests, and complete reactor green |
 | U2 Setups and scope | NOT STARTED | Real setup lifecycle, capability/role gates, password and scope cleanup |
 | U3 Overview/namespaces | NOT STARTED | PostgreSQL-truth counts, cursor/export, stale/permission states |
 | U4 Entry read/reveal | NOT STARTED | Metadata isolation, formatters, arbitrary identifiers, reveal cleanup |
