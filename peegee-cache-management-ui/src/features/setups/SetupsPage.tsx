@@ -14,6 +14,7 @@ import type {
   SetupHealth,
   SetupSummary,
 } from '../../api/setup-schemas';
+import { formatDisplayInstant } from '../../presentation/display-time';
 
 interface SetupsPageProps {
   readonly client: SetupClientPort;
@@ -450,8 +451,8 @@ function SetupDetailsView({ details, health, capabilities }: {
     ['Schema', details.setup.schema],
     ['Migration', details.migrationVersion],
     ['Pool size', String(details.runtime.poolMaxSize)],
-    ['Registered', formatInstant(details.registeredAt)],
-    ['Connected', details.connectedAt === null ? 'Not connected' : formatInstant(details.connectedAt)],
+    ['Registered', formatDisplayInstant(details.registeredAt)],
+    ['Connected', details.connectedAt === null ? 'Not connected' : formatDisplayInstant(details.connectedAt)],
   ];
   return (
     <div className="setup-details">
@@ -464,7 +465,7 @@ function SetupDetailsView({ details, health, capabilities }: {
         <h3 id="health-title">Database health</h3>
         <p><StateBadge value={health.status} /> {health.latencyMillis} ms · {health.schemaReady ? 'Schema ready' : 'Schema unavailable'}</p>
         <p>{health.detail}</p>
-        <small>Checked {formatInstant(health.checkedAt)}</small>
+        <small>Checked {formatDisplayInstant(health.checkedAt)}</small>
       </section>
       <section className="details-section" aria-labelledby="capabilities-title">
         <h3 id="capabilities-title">Capabilities</h3>
@@ -515,10 +516,6 @@ function humanizeCapability(value: string): string {
 
 function formatBytes(value: number): string {
   return `${value.toLocaleString('en-US')} bytes`;
-}
-
-function formatInstant(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 function actionTitle(action: ConfirmedAction): string {

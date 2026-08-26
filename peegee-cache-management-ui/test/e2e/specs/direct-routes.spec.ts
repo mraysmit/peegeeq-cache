@@ -25,10 +25,14 @@ test.describe('direct and deep management routes', () => {
         await expect(page.getByRole('heading', { name: route.label, exact: true })).toBeVisible();
         await expect(page.getByRole('link', { name: route.label, exact: true }))
           .toHaveAttribute('aria-current', 'page');
-        await expect(page.getByText(
-          route.path === '/setups' ? 'Database connections and runtime scope' : 'Authenticated workspace',
-          { exact: true },
-        )).toBeVisible();
+        const context = route.path === '/setups'
+          ? 'Database connections and runtime scope'
+          : route.path === '/'
+            ? 'Selected setup inspection'
+            : route.path === '/namespaces'
+              ? 'Database-wide inspection'
+              : 'Authenticated workspace';
+        await expect(page.getByText(context, { exact: true })).toBeVisible();
         await expect(page.getByLabel('Session and connection status')).toContainText('Connected');
       });
     }

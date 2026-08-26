@@ -178,6 +178,30 @@ class ManagementConsoleSetupLifecycleIT {
                     AriaRole.BUTTON,
                     new Locator.GetByRoleOptions().setName("Close details")).click();
 
+            page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName("Overview")).click();
+            assertThat(page.getByText("Database-wide snapshot")).isVisible();
+            assertThat(metric(page, "Live cache entries")).containsText("1");
+            assertThat(metric(page, "Live counters")).containsText("1");
+            assertThat(metric(page, "Active locks")).containsText("1");
+            assertThat(page.getByText("logical-orders")).isVisible();
+
+            page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName("Namespaces")).click();
+            Locator namespaceRow = page.getByRole(AriaRole.ROW)
+                    .filter(new Locator.FilterOptions().setHasText("logical-orders"));
+            assertThat(namespaceRow).containsText("1");
+            namespaceRow.getByRole(
+                    AriaRole.LINK,
+                    new Locator.GetByRoleOptions().setName("logical-orders")).click();
+            assertThat(page.getByRole(
+                    AriaRole.HEADING,
+                    new Page.GetByRoleOptions().setName("logical-orders").setExact(true))).isVisible();
+            assertThat(page.getByLabel("Namespace totals")).containsText("Live entries1");
+            assertEquals(
+                    "{\"setupId\":\"browser-postgres\",\"namespace\":\"logical-orders\"}",
+                    page.evaluate("sessionStorage.getItem('peegeeq-cache.scope.v1')"));
+
+            page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName("Setups")).click();
+
             confirmRowAction(page, "Detach");
             assertThat(setupRow(page)).containsText("Detached");
             assertThat(page.getByTitle("Active setup scope")).hasText("No setup selected");
@@ -221,6 +245,11 @@ class ManagementConsoleSetupLifecycleIT {
                 .filter(new Locator.FilterOptions().setHasText("Real PostgreSQL"));
     }
 
+    private static Locator metric(Page page, String label) {
+        return page.locator(".metric-card")
+                .filter(new Locator.FilterOptions().setHasText(label));
+    }
+
     private static PostgreSQLContainer postgres() {
         return new PostgreSQLContainer(PostgreSQLTestConstants.postgresImage())
                 .withDatabaseName("peegeeq")
@@ -253,6 +282,21 @@ class ManagementConsoleSetupLifecycleIT {
                 .setPassword(postgres.getPassword()), new PoolOptions().setMaxSize(1));
         try {
             await(new PgSchemaMigrator(pool, "peegee_cache").migrate());
+            await(pool.withConnection(connection -> connection.query("""
+                    INSERT INTO peegee_cache.cache_entries
+                        (namespace, cache_key, value_type, value_bytes, version)
+                    VALUES ('logical-orders', 'customer:1', 'STRING',
+                            convert_to('stored-value', 'UTF8'), 3)
+                    """).execute().compose(ignored -> connection.query("""
+                    INSERT INTO peegee_cache.cache_counters
+                        (namespace, counter_key, counter_value, version)
+                    VALUES ('logical-orders', 'count', 42, 4)
+                    """).execute()).compose(ignored -> connection.query("""
+                    INSERT INTO peegee_cache.cache_locks
+                        (namespace, lock_key, owner_token, fencing_token, version, lease_expires_at)
+                    VALUES ('logical-orders', 'lease', 'owner-secret', 7, 5,
+                            NOW() + INTERVAL '1 hour')
+                    """).execute())));
         } finally {
             await(pool.close());
         }

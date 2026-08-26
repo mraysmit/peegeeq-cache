@@ -354,6 +354,127 @@ a:focus-visible {
   color: var(--muted);
 }
 
+.scope-label,
+.panel-scope {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.85rem;
+  margin: 1.25rem 0;
+}
+
+.metric-card,
+.overview-panel {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--canvas);
+}
+
+.metric-card p,
+.metric-card small {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+}
+
+.metric-card strong {
+  display: block;
+  margin: 0.4rem 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(1.2rem, 3vw, 1.65rem);
+}
+
+.overview-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.overview-panel h2,
+.overview-section h2 {
+  margin-top: 0;
+  font-size: 1.15rem;
+}
+
+.compact-details {
+  margin: 0;
+}
+
+.compact-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.compact-details > div:last-child {
+  border-bottom: 0;
+}
+
+.compact-details dt {
+  color: var(--muted);
+}
+
+.compact-details dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
+.overview-section {
+  margin-top: 1.75rem;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: minmax(12rem, 2fr) minmax(9rem, 1fr) minmax(9rem, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.pagination,
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.pagination {
+  justify-content: flex-end;
+}
+
+.tabs {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs a,
+.tabs button {
+  padding: 0.55rem 0.75rem;
+  border: 0;
+  border-radius: 0.4rem;
+  color: var(--text);
+  background: transparent;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tabs [aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
 .badge {
   display: inline-flex;
   padding: 0.25rem 0.5rem;
@@ -568,6 +689,10 @@ a:focus-visible {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-bar {
     grid-template-columns: 1fr;
   }
 

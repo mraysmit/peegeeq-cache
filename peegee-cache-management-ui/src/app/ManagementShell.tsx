@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useParams } from 'react-router-dom';
 
 import type { BrowserSession, ManagementClientError, SessionClient } from '../api/session-client';
 import { SetupClient } from '../api/setup-client';
+import { InspectionClient } from '../api/inspection-client';
 import type { SetupCapabilities } from '../api/setup-schemas';
+import { OverviewPage } from '../features/overview/OverviewPage';
+import { NamespaceDetailsPage } from '../features/namespaces/NamespaceDetailsPage';
+import { NamespacesPage } from '../features/namespaces/NamespacesPage';
 import { SetupsPage } from '../features/setups/SetupsPage';
 import { useSetupScopeStore } from '../state/scope-store';
 
@@ -33,8 +37,10 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
   const selectedSetupId = useSetupScopeStore((state) => state.setupId);
   const selectedCapabilities = useSetupScopeStore((state) => state.capabilities);
   const selectStoredSetup = useSetupScopeStore((state) => state.select);
+  const selectNamespace = useSetupScopeStore((state) => state.selectNamespace);
   const clearStoredSetup = useSetupScopeStore((state) => state.clear);
   const setupClient = useMemo(() => new SetupClient(sessionClient), [sessionClient]);
+  const inspectionClient = useMemo(() => new InspectionClient(sessionClient), [sessionClient]);
   const isOperator = session.roles.includes('operator');
 
   const selectSetup = (setupId: string | undefined, capabilities?: SetupCapabilities) => {
@@ -146,6 +152,24 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
         )}
         <Routes>
           <Route
+            element={<OverviewPage client={inspectionClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />}
+            path="/"
+          />
+          <Route
+            element={<NamespacesPage client={inspectionClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />}
+            path="/namespaces"
+          />
+          <Route
+            element={(
+              <NamespaceDetailsRoute
+                client={inspectionClient}
+                onSelectNamespace={selectNamespace}
+                selectedSetupId={selectedSetupId}
+              />
+            )}
+            path="/namespaces/:encodedNamespace"
+          />
+          <Route
             element={(
               <SetupsPage
                 client={setupClient}
@@ -156,7 +180,7 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
             )}
             path="/setups"
           />
-          {sections.filter((section) => section.path !== '/setups').map((section) => (
+          {sections.filter((section) => !['/setups', '/', '/namespaces'].includes(section.path)).map((section) => (
             <Route
               element={<Section selectedSetupId={selectedSetupId} title={section.label} />}
               key={section.path}
@@ -184,6 +208,16 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
       )}
     </div>
   );
+}
+
+function NamespaceDetailsRoute({ client, selectedSetupId, onSelectNamespace }: {
+  readonly client: InspectionClient;
+  readonly selectedSetupId?: string;
+  readonly onSelectNamespace: (namespace?: string) => void;
+}) {
+  const { encodedNamespace } = useParams();
+  if (encodedNamespace === undefined) return <Navigate replace to="/namespaces" />;
+  return <NamespaceDetailsPage client={client} encodedNamespace={encodedNamespace} key={`${selectedSetupId ?? 'no-setup'}:${encodedNamespace}`} onSelectNamespace={onSelectNamespace} selectedSetupId={selectedSetupId} />;
 }
 
 function Section({ title, selectedSetupId }: { title: string; selectedSetupId?: string }) {

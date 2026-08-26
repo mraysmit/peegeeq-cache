@@ -1,7 +1,7 @@
 # PeeGeeQ Cache Management UI Implementation Plan
 
-**Status:** Phase 8.3 in progress; U0-U1 complete; U2 setup lifecycle implementation in progress
-**Date:** 25 August 2026
+**Status:** Phase 8.3 in progress; U0-U2 complete; U3 Overview and namespace inspection in progress
+**Date:** 26 August 2026
 **Delivery method:** strict test-driven development
 **Target:** production React management console served by `peegee-cache-rest` at `/ui/*`
 
@@ -362,7 +362,17 @@ Exit gate:
 
 ### U3: Overview and namespace inspection
 
-**Status:** NOT STARTED
+**Status:** IN PROGRESS — database Overview and core namespace inspection delivered 26 August 2026; monitoring, trend, activity, and concurrent-mutation acceptance work remains
+
+Overview and namespace strict-TDD increment on 26 August 2026:
+
+- RED first failed because the inspection client, strict inspection schemas, shared display-time boundary, and functional Overview and Namespaces pages did not exist;
+- GREEN adds strict runtime validation for Overview, namespace list/detail, and export responses; exact decimal-string/`BigInt` count rendering; database-wide labels; privilege-aware unavailable values; visibly timestamped stale data; and validated recovery;
+- Namespaces now supports submitted prefix/status/sort filters, an opaque forward/back cursor stack without client-side cursor reconstruction, server-produced JSON export validated before download, namespace details tabs, and namespace scope selection only after a validated detail response;
+- one display-time formatter owns UTC-by-default and browser-local presentation for setup, Overview, and namespace timestamps;
+- `ManagementConsoleSetupLifecycleIT` seeds one real entry, counter, and lock in TLS PostgreSQL 18.3, then verifies the packaged console's database-wide Overview totals, namespace details, scope persistence, and cleanup through Chromium;
+- the authoritative 11-module `mvn verify` passes 523 Surefire tests, 10 Failsafe tests, 63 frontend tests, and 614 Playwright tests with zero failures, errors, or skips in 9:49 on OpenJDK 26.0.2;
+- U3 remains in progress pending detailed database/runtime storage and connection panels, current-session trend charts, live recent activity integration, and a real concurrent-database-mutation cursor acceptance journey.
 
 RED inventory covers database versus console-runtime labels, permission-aware unavailable values, cursor navigation, scope transitions, timestamps, stale markers, export, and empty/error states.
 
@@ -548,7 +558,7 @@ The final suite contains independent, named journeys for:
 | U0 Foundation | COMPLETE | Pinned Maven-owned toolchain, zero-vulnerability lockfile, 50-operation contract gate, 24 frontend tests, minimal source-map-free UI JAR, and complete PostgreSQL 18.3 reactor green |
 | U1 Shell and hosting | COMPLETE | Production UI JAR, exact static/SPA policy, both session modes, authenticated shell, 28 frontend tests, 597 route-intercepted UI Playwright tests, 2 hosting tests, 9 browser/artifact tests including 6 real-server console journeys, and complete reactor green |
 | U2 Setups and scope | COMPLETE | Functional real-PostgreSQL setup lifecycle, health/capability presentation, capability navigation, strict setup/namespace scope allowlist and invalidation, 18 focused unit/protocol tests, 13 workflow Playwright tests, and packaged-server browser acceptance green |
-| U3 Overview/namespaces | NOT STARTED | PostgreSQL-truth counts, cursor/export, stale/permission states |
+| U3 Overview/namespaces | IN PROGRESS | Strict Overview and namespace contracts/pages; exact database-wide counts; stale, recovery, and permission-limited unavailable states; prefix/filter/opaque-cursor navigation; validated export; detail/scope flow; real TLS PostgreSQL 1/1/1 count acceptance; 63 frontend and 614 Playwright tests green. Remaining: detailed storage/connection monitoring, session trends, live activity, and concurrent-mutation cursor acceptance |
 | U4 Entry read/reveal | NOT STARTED | Metadata isolation, formatters, arbitrary identifiers, reveal cleanup |
 | U5 Entry administration | NOT STARTED | CAS/TTL/delete/bulk behavior against PostgreSQL and durable audit |
 | U6 Counters/locks | NOT STARTED | 64-bit/concurrency/reveal/forced-release evidence |

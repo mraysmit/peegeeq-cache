@@ -15,6 +15,7 @@ export default [
       ecmaVersion: 'latest',
       globals: {
         URL: 'readonly',
+        Blob: 'readonly',
         TextDecoder: 'readonly',
         TextEncoder: 'readonly',
         Response: 'readonly',
