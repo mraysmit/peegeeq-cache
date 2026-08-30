@@ -209,7 +209,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -257,7 +257,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -482,7 +482,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -570,7 +570,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -601,7 +601,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -633,7 +633,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -691,7 +691,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -804,7 +804,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -939,7 +939,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -992,7 +992,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -1065,7 +1065,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -1096,7 +1096,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),
@@ -1171,12 +1171,21 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
         }
         ManagementEntryMetadata metadata = result.representation();
         ObjectNode response = json.createObjectNode();
+        response.put("namespace", metadata.key().namespace());
+        response.put("encodedNamespace",
+                ManagementIdentifierCodec.encodeNamespace(metadata.key().namespace()));
         response.put("key", metadata.key().key());
+        response.put("encodedKey", ManagementIdentifierCodec.encodeKey(metadata.key().key()));
         response.put("valueType", metadata.valueType().name());
         response.put("sizeBytes", Long.toString(metadata.sizeBytes()));
         response.put("version", Long.toString(metadata.version()));
         response.put("createdAt", metadata.createdAt().toString());
         response.put("updatedAt", metadata.updatedAt().toString());
+        if (metadata.lastAccessedAt() == null) {
+            response.putNull("lastAccessedAt");
+        } else {
+            response.put("lastAccessedAt", metadata.lastAccessedAt().toString());
+        }
         response.set("ttl", ttl(metadata.ttl()));
         request.response()
                 .setStatusCode(200)
@@ -1213,7 +1222,7 @@ public final class SetupAdministrationRoutes implements ManagementRequestRouter 
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireOperator(authenticated);
             browserSecurity.validateStateChange(
-                    request.getHeader("Cookie"),
+                    authenticated.sessionCookie(),
                     request.getHeader("X-PeeGeeQ-CSRF"),
                     authenticated.sessionCookie(),
                     authenticated.csrfToken(),

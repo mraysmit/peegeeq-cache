@@ -189,7 +189,8 @@ final class PgManagementMutationSql {
                     RETURNING entry.namespace, entry.cache_key, entry.value_type,
                               CASE WHEN entry.value_type = 'LONG' THEN 8::BIGINT
                                    ELSE octet_length(entry.value_bytes)::BIGINT END AS size_bytes,
-                              entry.version, entry.created_at, entry.updated_at, entry.expires_at,
+                              entry.version, entry.created_at, entry.updated_at,
+                              entry.last_accessed_at, entry.expires_at,
                               CASE WHEN entry.expires_at IS NULL THEN NULL::BIGINT
                                    ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM
                                         (entry.expires_at - statement_timestamp())) * 1000))::BIGINT
@@ -197,7 +198,7 @@ final class PgManagementMutationSql {
                 )
                 SELECT 'APPLIED'::TEXT AS outcome, FALSE AS created,
                        namespace, cache_key, value_type, size_bytes,
-                       version, created_at, updated_at, expires_at, ttl_millis
+                       version, created_at, updated_at, last_accessed_at, expires_at, ttl_millis
                   FROM mutated
                 UNION ALL
                 SELECT CASE WHEN EXISTS (SELECT 1 FROM observed)
@@ -205,7 +206,7 @@ final class PgManagementMutationSql {
                        FALSE,
                        NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::BIGINT,
                        NULL::BIGINT, NULL::TIMESTAMPTZ, NULL::TIMESTAMPTZ,
-                       NULL::TIMESTAMPTZ, NULL::BIGINT
+                       NULL::TIMESTAMPTZ, NULL::TIMESTAMPTZ, NULL::BIGINT
                  WHERE NOT EXISTS (SELECT 1 FROM mutated)
                 """.formatted(entries);
 
@@ -324,7 +325,8 @@ final class PgManagementMutationSql {
                     RETURNING entry.namespace, entry.cache_key, entry.value_type,
                               CASE WHEN entry.value_type = 'LONG' THEN 8::BIGINT
                                    ELSE octet_length(entry.value_bytes)::BIGINT END AS size_bytes,
-                              entry.version, entry.created_at, entry.updated_at, entry.expires_at,
+                              entry.version, entry.created_at, entry.updated_at,
+                              entry.last_accessed_at, entry.expires_at,
                               CASE WHEN entry.expires_at IS NULL THEN NULL::BIGINT
                                    ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM
                                         (entry.expires_at - statement_timestamp())) * 1000))::BIGINT
@@ -332,14 +334,14 @@ final class PgManagementMutationSql {
                 )
                 SELECT 'APPLIED'::TEXT AS outcome,
                        namespace, cache_key, value_type, size_bytes,
-                       version, created_at, updated_at, expires_at, ttl_millis
+                       version, created_at, updated_at, last_accessed_at, expires_at, ttl_millis
                   FROM mutated
                 UNION ALL
                 SELECT CASE WHEN EXISTS (SELECT 1 FROM observed)
                             THEN 'VERSION_MISMATCH' ELSE 'NOT_FOUND' END,
                        NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::BIGINT,
                        NULL::BIGINT, NULL::TIMESTAMPTZ, NULL::TIMESTAMPTZ,
-                       NULL::TIMESTAMPTZ, NULL::BIGINT
+                       NULL::TIMESTAMPTZ, NULL::TIMESTAMPTZ, NULL::BIGINT
                  WHERE NOT EXISTS (SELECT 1 FROM mutated)
                 """.formatted(entries);
 

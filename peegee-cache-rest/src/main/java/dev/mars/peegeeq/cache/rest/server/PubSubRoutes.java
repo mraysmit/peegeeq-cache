@@ -151,7 +151,8 @@ public final class PubSubRoutes implements ManagementRequestRouter {
         try {
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             if (streaming) {
-                browserSecurity.validateStreamOrigin(request.getHeader("Origin"));
+                browserSecurity.validateEventStreamOrigin(
+                        request.getHeader("Origin"), request.getHeader("Sec-Fetch-Site"));
                 requireEventStreamAccept(request.getHeader("Accept"));
                 stream(
                         request, streamMatcher.group(1), streamMatcher.group(2), authenticated,

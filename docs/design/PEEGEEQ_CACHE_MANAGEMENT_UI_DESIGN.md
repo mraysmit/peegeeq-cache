@@ -1,7 +1,7 @@
 # PeeGeeQ Cache Management UI
 
 **Author:** Mark A Ray-Smith Cityline Ltd  
-**Status:** Approved design; backend contract reconciled; Phase 8.3 U0-U1 complete
+**Status:** Approved and implemented; Phase 8.3 U0-U10 complete
 **Date:** August 2026  
 **Version:** 0.2
 
@@ -23,7 +23,7 @@ The corresponding interactive screen designs are available in [the management UI
 
 Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
-As of 25 August 2026, the implemented production boundary includes the Maven-packaged React shell, exact `/ui/assets/*` serving, no-store SPA deep links, reviewed browser security headers, runtime-validated bootstrap for both authentication modes, memory-only bootstrap/CSRF handling, local logout and expiry cleanup, responsive route navigation, theme, role/connection state, notifications, error containment, and sanitized diagnostics. Setup lifecycle and scoped resource behavior begin in U2; placeholder workspace routes do not claim those later features.
+As of 30 August 2026, the implemented production boundary includes the complete Maven-packaged React console: both authentication modes; setup lifecycle and capability-aware scope; Overview and namespace inspection; safe entry browsing/reveal and guarded administration; precision-safe counters; masked/version-checked locks; bounded non-durable Pub/Sub; strict SSE/WebSocket transports; monitoring, activity, notifications, and harmless settings; accessible focus behavior; route-wide mobile/desktop axe and viewport containment plus six-viewport populated-workflow coverage; screenshot inspection; and cross-surface privacy checks. The complete local reactor is green with 513 Surefire, 21 Failsafe, and 112 Vitest tests. The 19 Java Playwright browser tests include 16 independent journey owners and 12 isolated packaged Chromium journeys against real TLS PostgreSQL, with no product-request interception; two additional Failsafe tests validate the runnable artifact. The refreshed complete reactor passes PostgreSQL 15.17, 16.13, 17.11, and 18.3.
 
 ## 2. Fixed decisions
 
@@ -168,7 +168,7 @@ For direct local operation, `LOCAL_TOKEN` mode binds only to loopback. Startup c
 
 Both authentication modes establish an in-memory `PGQMGMTSESSION` cookie with `HttpOnly`, `SameSite=Strict`, path `/`, and `Secure` under HTTPS. The default idle lifetime is 30 minutes, the default absolute lifetime is eight hours, and configuration cannot extend the absolute lifetime beyond 24 hours. `GET /api/v1/session` creates or refreshes the trusted-proxy session; identity or role changes invalidate it. Session and bootstrap secrets never enter browser persistence or logs.
 
-Every state-changing request except the initial local-token exchange requires an allowed `Origin` and matching session-bound `X-PeeGeeQ-CSRF` value. The bootstrap exception is limited to loopback, exact same origin, JSON, the single-use token, disabled CORS, and a dedicated rate limit. SSE and WebSocket handshakes also validate the management session and origin. Exactly one authentication mode is configured; there is no anonymous mode.
+Every state-changing request except the initial local-token exchange requires an allowed `Origin` and matching session-bound `X-PeeGeeQ-CSRF` value. The bootstrap exception is limited to loopback, exact same origin, JSON, the single-use token, disabled CORS, and a dedicated rate limit. SSE and WebSocket handshakes validate the management session. SSE validates an `Origin` whenever the browser supplies one and accepts its omission only for an exact `Sec-Fetch-Site: same-origin` request; WebSocket origin validation remains mandatory. Exactly one authentication mode is configured; there is no anonymous mode.
 
 The proxy must strip client-supplied identity headers before adding authoritative values and must terminate TLS for non-loopback use.
 

@@ -939,7 +939,7 @@ Phase gate:
 
 Objective: finish the backend as an operable product component rather than a collection of routes.
 
-Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts under OpenJDK 26.0.2 with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chrome verifies local bootstrap/session cookies, storage exclusion, no-store responses, cross-site rejection, and static-route isolation; trusted-proxy identity/session behavior remains covered at the running-server protocol boundary because browser-to-proxy TLS termination belongs to deployment. The final reactor passes 524 tests (521 Surefire and 3 Failsafe) with zero failures, errors, or skips, and the complete reactor passes PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts under OpenJDK 26.0.2 with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chrome verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, and static-route isolation. The current reactor passes 513 Surefire, 21 Failsafe, and 112 Vitest tests with zero failures, errors, or skips, and the complete reactor passes PostgreSQL 15.17, 16.13, 17.11, and 18.3.
 
 ### M10.1 Mandatory observability
 
@@ -988,12 +988,12 @@ Final evidence under OpenJDK 26.0.2:
 
 | Gate | Result |
 |---|---|
-| PostgreSQL 15.17 complete reactor | Green, 2:03 |
-| PostgreSQL 16.13 complete reactor | Green, 1:52 |
-| PostgreSQL 17.11 complete reactor | Green, 1:52 |
-| PostgreSQL 18.3 clean complete reactor | Green, 2:05 |
-| Final post-hardening complete reactor | 524 tests: 521 Surefire + 3 Failsafe; 0 failures/errors/skips |
-| Real-browser and runnable-artifact Failsafe gate | 3 tests; 0 failures/errors/skips |
+| PostgreSQL 15.17 complete reactor | Green, 3:28 |
+| PostgreSQL 16.13 complete reactor | Green, 3:30 |
+| PostgreSQL 17.11 complete reactor | Green, 3:34 |
+| PostgreSQL 18.3 complete reactor | Green, 3:28 |
+| Final post-hardening complete reactor | 513 Surefire + 21 Failsafe + 112 Vitest; 0 failures/errors/skips |
+| Real-browser and runnable-artifact Failsafe gate | 19 Java Playwright tests + 2 runnable-artifact tests; 0 failures/errors/skips |
 | Dependency/build contract | Maven Enforcer dependency convergence and duplicate-version rules green in every row |
 | Release artifacts | `-P release-artifacts -DskipTests package` green for all 11 modules; source and Javadoc jars generated |
 | Repository hygiene | `git diff --check` green; no generated targets, jars, classes, logs, or benchmark results in the change inventory |

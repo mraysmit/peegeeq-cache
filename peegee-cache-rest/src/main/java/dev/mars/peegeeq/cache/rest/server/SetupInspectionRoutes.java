@@ -743,6 +743,11 @@ public final class SetupInspectionRoutes implements ManagementRequestRouter {
         node.put("version", Long.toString(value.version()));
         node.put("createdAt", value.createdAt().toString());
         node.put("updatedAt", value.updatedAt().toString());
+        if (value.lastAccessedAt() == null) {
+            node.putNull("lastAccessedAt");
+        } else {
+            node.put("lastAccessedAt", value.lastAccessedAt().toString());
+        }
         node.set("ttl", ttl(value.ttl()));
         return node;
     }

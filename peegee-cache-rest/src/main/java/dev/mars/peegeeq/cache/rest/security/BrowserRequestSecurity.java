@@ -56,6 +56,13 @@ public final class BrowserRequestSecurity {
         originPolicy.requireAllowed(origin);
     }
 
+    public void validateEventStreamOrigin(String origin, String fetchSite) {
+        if (origin == null && "same-origin".equals(fetchSite)) {
+            return;
+        }
+        originPolicy.requireAllowed(origin);
+    }
+
     private String normalizedAllowedOrigin(String origin) {
         if (!originPolicy.isAllowed(origin)) {
             return null;

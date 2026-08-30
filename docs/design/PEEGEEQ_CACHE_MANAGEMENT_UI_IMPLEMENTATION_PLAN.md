@@ -1,13 +1,15 @@
 # PeeGeeQ Cache Management UI Implementation Plan
 
-**Status:** Phase 8.3 in progress; U0-U2 complete; U3 Overview and namespace inspection in progress
-**Date:** 26 August 2026
+**Status:** Phase 8.3 COMPLETE; U0-U10 complete with packaged Chromium/PostgreSQL acceptance and PostgreSQL 15-18 compatibility evidence
+**Date:** 30 August 2026
 **Delivery method:** strict test-driven development
 **Target:** production React management console served by `peegee-cache-rest` at `/ui/*`
 
 ## 1. Purpose
 
 This document is the execution authority for Phase 8.3 of the PeeGeeQ Cache roadmap. It turns the approved management UI design into ordered, test-first slices with objective entry gates, red/green evidence, module ownership, and completion criteria.
+
+The follow-on expansion from the completed 19-test real-browser acceptance backbone to 540 distinct Playwright scenarios is tracked separately in [PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md). That assurance plan does not reopen the completed U0-U10 product implementation boundary.
 
 The management backend is already complete. This plan does not reopen backend phases M0-M10 or weaken their security, audit, lifecycle, compatibility, packaging, and observability guarantees. Backend changes are allowed only when a production-console integration test exposes a missing browser-facing behavior, such as static asset delivery. Every such change begins with a focused failing Java or full-browser test and retains the complete backend regression suite.
 
@@ -31,7 +33,7 @@ The execution baseline is:
 - `peegee-cache-management-ui` publishes the production U1 React shell as a Maven JAR containing Vite's entry point and fingerprinted asset graph;
 - `peegee-cache-rest` consumes that UI artifact directly, safely serves exact assets and SPA routes, and no longer owns a duplicate fallback `ui/index.html`;
 - the sibling `peegeeq-management-ui` remains the interaction and visual reference, but its dependency ranges and accidental implementation structure are not copied blindly;
-- OpenJDK 26.0.1 is the current verification JDK while emitted Java bytecode remains Java 21; earlier U0 evidence was recorded under 26.0.2.
+- OpenJDK 26.0.2 is the current verification JDK while emitted Java bytecode remains Java 21.
 
 ## 3. Scope
 
@@ -107,8 +109,8 @@ The root Maven reactor remains the only release build entry point.
 - `test`: run type checking, linting, static safety checks, Vitest, and Testing Library tests;
 - `prepare-package`: run the deterministic Vite production build with base path `/ui/`;
 - `package`: create the UI JAR containing `ui/index.html`, hashed `ui/assets/*`, and only required public files;
-- `integration-test`: run the route-intercepted Playwright UI matrix against the Vite application;
-- `verify`: run artifact checks and the real-backend Playwright acceptance owned by the downstream REST module.
+- `integration-test`: no browser simulation is run in the UI module; Vitest owns component and protocol behavior;
+- `verify`: run artifact checks, then let the downstream REST module run Java Playwright against the packaged application and real server transports.
 
 `peegee-cache-rest` declares the UI artifact as a dependency. The shaded runnable JAR merges the UI resources without writing generated output into either module's source tree. The backend fallback page is removed once the production artifact is active, preventing duplicate `ui/index.html` resources.
 
@@ -174,19 +176,19 @@ For HTTP/SSE/WebSocket states that cannot be produced by a component alone, test
 
 ### 6.3 Full-browser acceptance
 
-The downstream `peegee-cache-rest` Failsafe phase owns `ManagementConsoleIT` because the REST artifact can only embed the already-packaged upstream UI artifact. This avoids a Maven dependency cycle.
+The downstream `peegee-cache-rest` Failsafe phase owns the `ManagementConsole*IT` classes because the REST artifact can only embed the already-packaged upstream UI artifact. This avoids a Maven dependency cycle. The suite is implemented with Java Playwright; the UI module has no second TypeScript Playwright runner.
 
-Each independent Playwright project:
+Each independent Java Playwright journey:
 
 - starts a real PostgreSQL Testcontainer using the matrix-selectable image property;
 - boots the actual cache schema;
 - starts the actual management server on an ephemeral loopback port;
 - loads the compiled UI from the actual server, not Vite dev mode;
-- uses one Chromium worker where state is intentionally shared;
+- gives every product journey an isolated browser context, server, database, audit file, and PostgreSQL container;
 - captures browser console errors, page errors, failed network requests, server logs, audit output, storage, and URLs;
 - shuts down contexts, server, pools, subscriptions, and container deterministically.
 
-Trusted-proxy and local-token modes are separate projects. Purpose-built proxy behavior uses a real loopback HTTP/TLS proxy fixture and actual headers; it does not bypass server authentication.
+Trusted-proxy and local-token modes are separate test classes. Trusted-proxy tests send authoritative headers to a real server configured with an explicit loopback trusted-peer CIDR and exercise the real trusted-session authenticator; production TLS termination remains deployment acceptance.
 
 ### 6.4 Evidence retention
 
@@ -197,10 +199,10 @@ Phase evidence records:
 - frontend module test totals;
 - Playwright journey totals when applicable;
 - root reactor totals and PostgreSQL image;
-- leak scan result for browser storage, URLs, console, ordinary logs, audit output, reports, and screenshots;
+- leak scan result for browser storage, URLs, console, ordinary logs, audit output, accessibility snapshots, and screenshots;
 - any accepted non-blocking warning with rationale.
 
-Failure traces, screenshots, video, and HTML reports belong under module `target/` directories. They are not committed. Stable test names and the implementation plan provide the durable evidence index.
+Failure diagnostics and screenshots belong under module `target/` directories. They are not committed. Stable test names, Failsafe XML, and the implementation plan provide the durable evidence index. The suite does not claim video, trace, or visual-baseline evidence that it does not generate.
 
 ## 7. Phase map
 
@@ -286,12 +288,12 @@ Post-review browser hardening on 25 August 2026:
 - moved the Vite artifact build to `process-classes` so a clean reactor stopped at `test` provides `/ui/index.html` to downstream REST tests instead of failing or reading stale output;
 - `mvn -pl peegee-cache-rest -am verify` with the focused hosting/lifecycle and complete Failsafe selections passes 8 Surefire tests, all 9 browser/artifact Failsafe tests, and 28 frontend tests with zero failures, errors, or skips.
 
-Reference-equivalent Playwright expansion on 25 August 2026:
+Browser-evidence reset on 30 August 2026:
 
-- the `peegeeq-management-ui` and `peegeeq-utilities-ui` reference suites were inventoried at 668 and 191 declared Playwright tests respectively, establishing their route, state, fault, identity, responsive, and browser-artifact coverage patterns;
-- the cache console now owns 597 Playwright tests in 13 specification files for all current U1 routes, including direct/deep routes, every route-to-route transition, local login, logout, session expiry, identity/role changes, RFC 9457 problem responses, unknown routes, notification and theme persistence, responsive layouts, keyboard access, and browser-secret isolation;
-- Playwright is a Maven-owned `integration-test` gate with HTML, JSON, JUnit, trace, screenshot, and video output, while the downstream REST Failsafe suite retains the six real packaged-server console journeys at the authentication/session boundary;
-- `mvn -pl peegee-cache-rest -am verify` with the focused real-server selections passes all 597 UI Playwright tests, all 28 Vitest tests, and all 6 packaged-server Playwright journeys in the same eight-module reactor with zero failures, errors, or skips in 6:54.
+- the former TypeScript route-intercepted matrix was removed because counting mocked routes did not establish product behavior;
+- browser automation is now owned by `peegee-cache-rest` in Java and exercises the packaged UI, real HTTP/SSE/WebSocket transports, and real PostgreSQL without Playwright request interception;
+- `ManagementBrowserCoverageTest` makes 16 named journeys and all 50 OpenAPI operations an executable accountability contract, including a single accountable owner for each journey and operation; runtime tracing additionally fails when a product journey does not actually emit a request or WebSocket opening for an operation it declares;
+- the current gate passes 19 Java Playwright Failsafe tests, including 12 isolated product journeys against real TLS PostgreSQL, with zero failures, errors, or skips; two additional Failsafe tests validate the runnable artifact without launching a browser.
 
 RED inventory:
 
@@ -325,24 +327,24 @@ First functional slice delivered on 25 August 2026:
 - replaced the Setups placeholder with contract-validated discovery, empty/loading/error states, setup metadata and health summaries, details-on-demand, and explicit active-setup scope selection;
 - added complete operator forms and actions for TLS-only connection testing, registration, registered-setup testing, connect, detach, and forget, with confirmations, serialized actions, viewer/feature gating, RFC 9457 diagnostics, and password cleanup after submission failure or modal closure;
 - extended the authenticated client with a memory-only CSRF request boundary and strict runtime validation for setup lists, summaries, details, and connection tests, plus contract validators ready for health and capability presentation;
-- added 8 focused unit/protocol tests and 10 behavior-focused Playwright workflows; all 36 frontend tests, all 607 Playwright tests, and 17 focused server setup policy/registry/route tests pass with zero failures, errors, or skips.
+- added focused unit/protocol tests and real packaged-server setup workflows; the superseded route-intercepted count is no longer accepted as evidence.
 
 Health, capability, and scope TDD increment on 25 August 2026:
 
 - RED proved the missing behavior through `client.health is not a function`, absence of the `Database health` details region, visibility of unsupported navigation, a missing scope-storage module, and zero persisted allowlist entries after scope selection;
 - GREEN adds strict health/capability response parsing, combined details/health/capability discovery, explicit health timestamps and capability limits, and hides destinations unsupported by the selected setup while retaining server-side authorization;
 - a Zustand setup scope store persists only `{"setupId":"<canonical-id>"}` under the versioned session-storage allowlist, rejects malformed/expanded/noncanonical state, revalidates capabilities after reload, and clears both memory and persistence through the existing session cleanup path;
-- the complete npm verification passes all 41 frontend tests and all 609 Playwright tests, including 13 focused setup/scope unit and protocol tests and 12 behavior-focused setup workflows;
-- the authoritative `mvn -pl peegee-cache-management-ui verify` lifecycle independently repeats `npm ci`, OpenAPI generation, typecheck, lint, production build, all 41 frontend tests, all 609 Playwright tests, and packaged-artifact validation with `BUILD SUCCESS` in 7:07.
+- the complete npm verification covers the focused setup/scope unit and protocol behavior;
+- the authoritative `mvn -pl peegee-cache-management-ui verify` lifecycle independently repeats `npm ci`, OpenAPI generation, typecheck, lint, production build, Vitest, and packaged-artifact validation. Browser acceptance remains downstream because only the REST module can exercise the packaged server boundary.
 
 Namespace invalidation and real-database acceptance increment on 25 August 2026:
 
 - RED first produced six focused failures because namespace persistence and `selectNamespace` did not exist, then the first real-browser lifecycle run exposed Chromium rejecting the unescaped setup-ID pattern under Unicode Sets rules;
 - GREEN extends the strict session-storage allowlist to either `{"setupId":"<canonical-id>"}` or `{"setupId":"<canonical-id>","namespace":"<validated-namespace>"}`, retains namespace across same-setup capability revalidation, and invalidates it whenever the setup changes, detaches, is forgotten, or the session ends;
-- a Playwright workflow proves a persisted arbitrary namespace survives reload revalidation but is removed when another setup becomes active;
-- `ManagementConsoleSetupLifecycleIT` starts TLS PostgreSQL 18.3, applies the real cache schema, serves the packaged console, exchanges a local bootstrap token, tests and registers the setup, inspects database health, detaches, reconnects, reselects, and forgets it while proving password, bootstrap-token, and scope cleanup;
+- a component regression proves a persisted arbitrary namespace survives reload revalidation but is removed when another setup becomes active;
+- `ManagementConsoleProductJourneysIT` runs the independent setup and scope journeys against TLS PostgreSQL, the real cache schema, and the packaged console while proving password, bootstrap-token, and scope cleanup;
 - the browser-discovered setup-ID constraint defect is fixed with a Unicode-Sets-compatible escaped hyphen and a focused component regression assertion;
-- the authoritative 11-module `mvn verify` passes 523 Surefire tests, 10 Failsafe tests, 46 frontend tests, and 610 Playwright tests with zero failures, errors, or skips in 10:03.
+- the earlier checkpoint is superseded by the final validation record in U10; route-intercepted test totals are intentionally excluded.
 
 RED inventory covers setup list/detail, test/register/connect/detach/forget, password cleanup, target-policy errors, viewer/operator differences, capability navigation, and scope reset.
 
@@ -362,7 +364,7 @@ Exit gate:
 
 ### U3: Overview and namespace inspection
 
-**Status:** IN PROGRESS — database Overview and core namespace inspection delivered 26 August 2026; monitoring, trend, activity, and concurrent-mutation acceptance work remains
+**Status:** COMPLETE — all Overview, namespace inspection, observability, and concurrent-mutation exit gates satisfied 29 August 2026
 
 Overview and namespace strict-TDD increment on 26 August 2026:
 
@@ -370,9 +372,12 @@ Overview and namespace strict-TDD increment on 26 August 2026:
 - GREEN adds strict runtime validation for Overview, namespace list/detail, and export responses; exact decimal-string/`BigInt` count rendering; database-wide labels; privilege-aware unavailable values; visibly timestamped stale data; and validated recovery;
 - Namespaces now supports submitted prefix/status/sort filters, an opaque forward/back cursor stack without client-side cursor reconstruction, server-produced JSON export validated before download, namespace details tabs, and namespace scope selection only after a validated detail response;
 - one display-time formatter owns UTC-by-default and browser-local presentation for setup, Overview, and namespace timestamps;
-- `ManagementConsoleSetupLifecycleIT` seeds one real entry, counter, and lock in TLS PostgreSQL 18.3, then verifies the packaged console's database-wide Overview totals, namespace details, scope persistence, and cleanup through Chromium;
-- the authoritative 11-module `mvn verify` passes 523 Surefire tests, 10 Failsafe tests, 63 frontend tests, and 614 Playwright tests with zero failures, errors, or skips in 9:49 on OpenJDK 26.0.2;
-- U3 remains in progress pending detailed database/runtime storage and connection panels, current-session trend charts, live recent activity integration, and a real concurrent-database-mutation cursor acceptance journey.
+- `ManagementConsoleProductJourneysIT` seeds real typed entries, counters, and locks, then verifies the packaged console's database-wide Overview totals, namespace details, scope persistence, and cleanup through Chromium;
+- the follow-on RED tests failed because the client had no database-monitoring, runtime-monitoring, or activity methods and the Overview lacked the corresponding panels and trend history;
+- GREEN adds strict OpenAPI-derived validation for database and management-runtime monitoring plus bounded activity, permission-aware storage/row/connection values, pool/audit/sweeper/operation telemetry, and independently stale supplementary panels that never displace a valid database snapshot;
+- the current-session cache-row trend retains at most 30 validated snapshots, preserves exact decimal-string values through `BigInt`, and is never persisted; recent management-local activity refreshes every 15 seconds, remains bounded, and never renders the raw resource identifier;
+- server repository tests mutate PostgreSQL between cursor requests and verify exact forward/back boundaries without duplicate or fabricated rows; the packaged browser journey separately verifies opaque cursor navigation against database truth;
+- the earlier checkpoint is superseded by the final 30 August validation record in U10.
 
 RED inventory covers database versus console-runtime labels, permission-aware unavailable values, cursor navigation, scope transitions, timestamps, stale markers, export, and empty/error states.
 
@@ -392,7 +397,20 @@ Exit gate:
 
 ### U4: Entry browsing, reveal, and formatting
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — strict RED/GREEN evidence, full regression, and packaged TLS PostgreSQL acceptance are green as of 30 August 2026
+
+Entry inspection strict-TDD increment on 29 August 2026:
+
+- RED first failed because the inspection client exposed no entry list/detail/reveal methods, strict value schemas, Key Browser, Key Details, value formatters, or reveal lifecycle;
+- GREEN adds metadata-only entry list/detail validation, setup-plus-namespace scoping, prefix/value-type/TTL filters, exact decimal-string rendering, and an opaque forward/back cursor stack;
+- arbitrary UTF-8 namespace and key identifiers use server-produced Base64url route segments, while ordinary URLs never contain raw identifiers or values;
+- the OpenAPI `CacheValue` discriminator now maps the wire values `STRING`, `JSON`, `LONG`, and `BYTES` explicitly, keeping generated TypeScript aligned with the server contract;
+- sensitive reveal is available only when the session role, session feature, and selected-setup capability all permit it; reveal uses CSRF-protected `POST`, client-side `no-store`, and rejects a successful response unless `Cache-Control: no-store` and `Pragma: no-cache` are both present;
+- revealed values live only in Key Details component state and are cleared by explicit Hide, timeout, document visibility loss, route change, setup change, capability loss, and unmount; copy is an explicit user action;
+- STRING text/escaped text, JSON tree/formatted/raw validation, exact LONG decimal, and BYTES hexadecimal/Base64/strict UTF-8-attempt/size views render through React text nodes only and never use HTML injection;
+- focused protocol/component tests cover cache-header rejection, strict response unions, values injected into metadata, cursor consistency, arbitrary identifiers, precision, invalid JSON/Base64/UTF-8, markup payloads, viewer gating, copy, and every cleanup trigger;
+- component tests prove operator and viewer rendering, CSRF/reason transmission, encoded routes, explicit hide, and automatic cleanup;
+- independent packaged Chromium journeys verify metadata-only detail, safe STRING/JSON/LONG/BYTES rendering, operator reveal, and cleanup against real seeded values in TLS PostgreSQL.
 
 RED inventory covers metadata-only lists, filters, cursor history, arbitrary identifier routing, STRING/JSON/LONG/BYTES formatters, invalid UTF-8, reveal authorization, no-store, copy, hide, timeout, visibility, route, and scope cleanup.
 
@@ -412,7 +430,14 @@ Exit gate:
 
 ### U5: Entry mutation and bulk deletion
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — application, strict client/component tests, and independent packaged-server PostgreSQL/audit browser acceptance are green
+
+Strict-TDD implementation increment completed 30 August 2026:
+
+- entry create/edit supports absent, present, upsert, and observed-version CAS modes without discarding form state on a conflict;
+- TTL, persist, touch, exact-version delete, bulk preview, typed confirmation, expiry, single-use execution, and partial-conflict summaries use validated authoritative responses;
+- the browser suite covers committed-result presentation, stale conflict recovery, exact preview targets, token expiry/replay/mismatch rejection, CSRF, and sensitive-state exclusion;
+- the PostgreSQL management repository and route suites independently prove atomic mutations, concurrency failures, and durable fail-closed audit outcomes.
 
 RED inventory covers create/upsert/absent/present/version modes, ETags, validation, CAS conflict, TTL, persist, touch, individual delete, preview scope, typed confirmation, expiry, reuse, filter mismatch, partial conflict, and uncertain audit outcomes.
 
@@ -432,7 +457,14 @@ Exit gate:
 
 ### U6: Counters and locks
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — application, precision/cleanup tests, and independent packaged-server PostgreSQL concurrency acceptance are green
+
+Strict-TDD implementation increment completed 30 August 2026:
+
+- counters preserve signed 64-bit decimal strings through list, exact set, signed adjustment, TTL, persist, delete, and selected bulk deletion;
+- locks keep owner values masked by default, reveal only into short-lived component state, and require the freshly loaded version plus exact key confirmation before forced release;
+- shared accessible dialogs provide initial focus, two-way focus trapping, Escape dismissal, and trigger-focus restoration;
+- component and Playwright workflows cover precision, committed results, authorization, reveal cleanup, stale preconditions, and safe release confirmation, while real-PostgreSQL repository/route tests cover concurrency behavior.
 
 RED inventory covers 64-bit decimal-string handling, overflow errors, exact set, signed adjustment, TTL/persist/delete, selected bulk delete, lock metadata, owner reveal cleanup, exact-version forced release, stale renewed/reacquired locks, and forbidden viewer actions.
 
@@ -451,7 +483,15 @@ Exit gate:
 
 ### U7: Pub/Sub and live transports
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — Pub/Sub and both live client transports have strict unit and packaged-server publish/receive/recovery/cleanup acceptance evidence
+
+Strict-TDD implementation increment completed 30 August 2026:
+
+- Pub/Sub implements bounded non-durable subscription sessions, UTF-8 channel/payload byte limits, masked metadata history, explicit payload reveal, accepted-not-delivered publish wording, and deterministic stop/cleanup;
+- metrics SSE and monitoring WebSocket clients strictly validate event payloads, deduplicate resumable identifiers, use bounded exponential backoff with jitter, surface reset/terminal states, and tear down on scope/session/page boundaries;
+- the monitoring socket is opened on demand for the notification drawer rather than during idle shell use;
+- the server health event was corrected to emit numeric `latencyMillis`, and focused frontend/backend contract tests reject extra, malformed, and cross-scope live payloads.
+- the packaged Chromium journey exposed that same-origin Fetch may omit `Origin` on an SSE GET; the strict-TDD correction accepts that omission only with `Sec-Fetch-Site: same-origin`, retains the exact-origin rule whenever `Origin` is supplied, and keeps WebSocket origin validation mandatory.
 
 RED inventory covers channel validation, byte limits, nullable content type, accepted-not-delivered semantics, subscription lifecycle, SSE parsing, heartbeats, monotonic IDs, bounded reconnect, terminal events, non-durable labeling, payload reveal cleanup, WebSocket activity, and teardown.
 
@@ -471,7 +511,14 @@ Exit gate:
 
 ### U8: Monitoring, activity, settings, and operational states
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — monitoring, activity, settings, operational states, live metrics, and packaged-server browser acceptance are green
+
+Strict-TDD implementation increment completed 30 August 2026:
+
+- Monitoring separates database truth from runtime state, consumes live metrics snapshots, preserves stale timestamps, and bounds current-session trends and activity;
+- Settings reports identity, roles, versions, endpoint, selected setup, REST/SSE/WebSocket state, capabilities, and the automatic bounded reconnect policy;
+- only allowlisted theme, timezone, byte-unit, refresh-interval, and sensitive auto-hide preferences persist; the client auto-hide value is capped by the server capability;
+- component and packaged-server browser tests cover live state, sanitized bounded notifications, harmless persistence, stale/recovery presentation, deduplication, and contract failure isolation.
 
 RED inventory covers database/runtime separation, permission-limited values, connection pool values, expiry sweeper state, activity bounds, sanitized notifications, preferences allowlist, refresh/reconnect controls, version display, and health/capability links.
 
@@ -491,7 +538,14 @@ Exit gate:
 
 ### U9: Accessibility, responsive behavior, privacy, and threat hardening
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — route-level accessibility, responsive, privacy, injection, keyboard, and visual acceptance plus the packaged-server cross-surface leakage pass are green
+
+Strict-TDD implementation increment completed 30 August 2026:
+
+- automated axe scans report no serious or critical findings across all 11 primary routes at both 390x844 and 1440x900, and across the populated destructive-dialog workflow;
+- keyboard tests cover landmarks, names, route activation, keyboard-focusable horizontal data regions, modal focus entry/trapping/Escape/restoration, and notification state;
+- all 11 primary routes have viewport-surface containment checks at mobile and desktop breakpoints, while the populated counter workflow is additionally exercised at six controlled viewport sizes with desktop/mobile shell and destructive-dialog screenshot baselines;
+- privacy tests keep bootstrap/CSRF/revealed entry, lock, Pub/Sub, and live-event data out of persistent storage, URLs, notifications, and the DOM after cleanup; server/user strings remain text-only.
 
 RED inventory covers keyboard-only journeys, focus restoration/trapping, landmarks, headings, names/descriptions, live regions, table semantics, contrast, reduced motion, responsive navigation, zoom, unsafe text rendering, storage leakage, CSP, and browser history/cache behavior.
 
@@ -511,7 +565,16 @@ Exit gate:
 
 ### U10: Production packaging and final acceptance
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — deterministic packaging, consolidated packaged-server U2-U9 journeys, leakage verification, and the post-change PostgreSQL 15-18 matrix are green
+
+Acceptance increment completed 30 August 2026:
+
+- Maven installs the pinned Node/npm toolchain, reports zero dependency vulnerabilities, regenerates the OpenAPI types, type-checks, lints, tests, and creates a source-map-free fingerprinted Vite asset graph;
+- the UI JAR and shaded runnable artifact checks are green with a single SLF4J provider and no duplicate fallback UI;
+- `mvn verify` is green across all 11 modules under OpenJDK 26.0.2 and PostgreSQL 18.3: 513 Surefire tests, 21 Failsafe tests, and 112 Vitest tests, all with zero failures, errors, or skips;
+- 19 Java Playwright Failsafe tests implement 16 independently named journey owners; the separate Surefire accountability contract covers all 50 operations and runtime tracing verifies declared operations from observed browser traffic. Twelve isolated `ManagementConsoleProductJourneysIT` cases drive the packaged production asset through Chromium against real TLS PostgreSQL, while two non-browser Failsafe tests validate the runnable artifact;
+- the product journeys cover trusted-proxy identity/role rotation and bounded expiry; setup/scope; real namespace cursor round trips and exported JSON content; typed entry read/reveal/clipboard/CAS/TTL/persist/touch; bulk stale conflict, deterministic expiry, deletion, and replay rejection; exact 64-bit counter behavior; lock conflict recovery; Pub/Sub offline retention/resume/reveal/stop; live interruption/recovery/deduplication; axe and viewport containment across every primary route plus six populated-workflow viewports; cross-surface leakage; packaged response headers; and deterministic shutdown;
+- the complete 11-module reactor is green against PostgreSQL 15.17, 16.13, 17.11, and 18.3 after the browser-suite replacement.
 
 RED inventory covers missing production resources, wrong asset base, duplicate fallback resources, source maps, development endpoints, non-deterministic output, cache headers, runnable startup, deep links, all required full-browser journeys, and cleanup.
 
@@ -534,7 +597,7 @@ Exit gate:
 
 The final suite contains independent, named journeys for:
 
-1. trusted-proxy session bootstrap, role change, expiry, and logout;
+1. trusted-proxy session bootstrap, identity/role rotation, bounded expiry, and seamless proxy revalidation; local logout is intentionally absent because the trusted proxy/IdP controls that session;
 2. single-use local-token exchange, replay rejection, storage exclusion, and logout;
 3. setup test/register/detach/reconnect/forget with target-policy failures and password leakage checks;
 4. setup/namespace scope switching and capability-driven navigation;
@@ -548,7 +611,7 @@ The final suite contains independent, named journeys for:
 12. viewer/operator server-enforced boundaries using direct browser requests as well as visible controls;
 13. keyboard, focus, responsive, and automated accessibility acceptance;
 14. packaged deep-link/static-asset behavior and security headers;
-15. cross-surface leak inspection of responses, cookies visible to JavaScript, storage, history, URLs, DOM after cleanup, accessibility tree, console, server logs, audit output, screenshots, videos, and reports;
+15. cross-surface leak inspection of responses, cookies visible to JavaScript, storage, history, URLs, DOM after cleanup, accessibility tree, console, server logs, audit output, and screenshots;
 16. deterministic shutdown proving browser contexts, transports, server, pools, subscriptions, and PostgreSQL container return to baseline.
 
 ## 9. Phase tracking
@@ -556,16 +619,16 @@ The final suite contains independent, named journeys for:
 | Phase | Status | Evidence required to advance |
 |---|---|---|
 | U0 Foundation | COMPLETE | Pinned Maven-owned toolchain, zero-vulnerability lockfile, 50-operation contract gate, 24 frontend tests, minimal source-map-free UI JAR, and complete PostgreSQL 18.3 reactor green |
-| U1 Shell and hosting | COMPLETE | Production UI JAR, exact static/SPA policy, both session modes, authenticated shell, 28 frontend tests, 597 route-intercepted UI Playwright tests, 2 hosting tests, 9 browser/artifact tests including 6 real-server console journeys, and complete reactor green |
-| U2 Setups and scope | COMPLETE | Functional real-PostgreSQL setup lifecycle, health/capability presentation, capability navigation, strict setup/namespace scope allowlist and invalidation, 18 focused unit/protocol tests, 13 workflow Playwright tests, and packaged-server browser acceptance green |
-| U3 Overview/namespaces | IN PROGRESS | Strict Overview and namespace contracts/pages; exact database-wide counts; stale, recovery, and permission-limited unavailable states; prefix/filter/opaque-cursor navigation; validated export; detail/scope flow; real TLS PostgreSQL 1/1/1 count acceptance; 63 frontend and 614 Playwright tests green. Remaining: detailed storage/connection monitoring, session trends, live activity, and concurrent-mutation cursor acceptance |
-| U4 Entry read/reveal | NOT STARTED | Metadata isolation, formatters, arbitrary identifiers, reveal cleanup |
-| U5 Entry administration | NOT STARTED | CAS/TTL/delete/bulk behavior against PostgreSQL and durable audit |
-| U6 Counters/locks | NOT STARTED | 64-bit/concurrency/reveal/forced-release evidence |
-| U7 Pub/Sub/live | NOT STARTED | Real publish/receive/reconnect/bounds/cleanup evidence |
-| U8 Monitoring/settings | NOT STARTED | Scoped metrics, bounded activity, allowlisted preferences, operational states |
-| U9 Hardening | NOT STARTED | Accessibility, responsive, privacy, CSP, injection, visual evidence |
-| U10 Final acceptance | NOT STARTED | Packaged runnable, complete journeys, matrix, leakage, docs, reactor green |
+| U1 Shell and hosting | COMPLETE | Production UI JAR, exact static/SPA policy, both session modes, authenticated shell, real-server session/expiry/hosting journeys, and complete reactor green |
+| U2 Setups and scope | COMPLETE | Functional real-PostgreSQL setup lifecycle, health/capability presentation, capability navigation, strict setup/namespace scope allowlist and invalidation, focused unit/protocol tests, and independent packaged-server browser acceptance green |
+| U3 Overview/namespaces | COMPLETE | Strict Overview, database/runtime monitoring, bounded activity, namespace contracts/pages, database-wide counts, permission-aware values, stale/recovery states, opaque-cursor navigation, validated export, and real TLS PostgreSQL browser acceptance green |
+| U4 Entry read/reveal | COMPLETE | Strict metadata/value contracts; filtered opaque-cursor browser; encoded arbitrary identifiers; safe STRING/JSON/LONG/BYTES views; role/feature/capability-gated no-store reveal; complete regression and packaged TLS PostgreSQL console acceptance green |
+| U5 Entry administration | COMPLETE | CAS/TTL/persist/touch/delete/bulk UI, strict component/client tests, PostgreSQL/audit backend evidence, and independent packaged-browser administration are green |
+| U6 Counters/locks | COMPLETE | Precision-safe counter and guarded lock UI, cleanup/focus tests, PostgreSQL concurrency evidence, and independent packaged-browser administration are green |
+| U7 Pub/Sub/live | COMPLETE | Bounded Pub/Sub/SSE/WebSocket clients, strict event schemas, lifecycle tests, server resource/recovery evidence, and packaged real publish/receive/recovery are green |
+| U8 Monitoring/settings | COMPLETE | Scoped monitoring, live metrics, bounded activity, harmless preferences, operational states, and packaged live/settings acceptance are green |
+| U9 Hardening | COMPLETE | Axe, keyboard/focus, six-viewport responsive, privacy, injection, screenshot, and packaged cross-surface leakage acceptance are green |
+| U10 Final acceptance | COMPLETE | Deterministic artifacts; 16 named browser journeys with executable ownership/runtime evidence for all 50 operations; full reactor (513 Surefire, 21 Failsafe, 112 Vitest); and PostgreSQL 15.17, 16.13, 17.11, and 18.3 matrix are green |
 
 Status changes occur only in the same change set as their evidence. `IN PROGRESS` means at least one valid RED test exists for the phase. `COMPLETE` means every exit criterion and owning regression gate is green. Planning or production code alone cannot close a phase.
 

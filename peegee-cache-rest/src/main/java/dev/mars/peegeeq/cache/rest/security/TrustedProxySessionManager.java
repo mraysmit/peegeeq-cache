@@ -25,10 +25,18 @@ public final class TrustedProxySessionManager implements AutoCloseable {
     private boolean closed;
 
     public static TrustedProxySessionManager createDefault() {
+        return create(Duration.ofMinutes(30), Duration.ofHours(8), Clock.systemUTC());
+    }
+
+    /** Creates a manager with explicit lifetimes and clock for deterministic host integration. */
+    public static TrustedProxySessionManager create(
+            Duration idleLifetime,
+            Duration absoluteLifetime,
+            Clock clock) {
         return new TrustedProxySessionManager(
-                Duration.ofMinutes(30),
-                Duration.ofHours(8),
-                Clock.systemUTC(),
+                idleLifetime,
+                absoluteLifetime,
+                clock,
                 size -> {
                     byte[] bytes = new byte[size];
                     new SecureRandom().nextBytes(bytes);

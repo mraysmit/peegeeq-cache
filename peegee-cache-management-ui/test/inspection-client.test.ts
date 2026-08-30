@@ -24,6 +24,91 @@ const validOverview = {
   topNamespaces: [],
 };
 
+const validDatabaseMonitoring = {
+  scope: 'DATABASE',
+  observedAt: '2026-08-26T10:15:30Z',
+  health: validOverview.health,
+  tableBytes: { availability: 'AVAILABLE', reason: null, value: '2048' },
+  indexBytes: { availability: 'AVAILABLE', reason: null, value: '1024' },
+  schemaBytes: { availability: 'AVAILABLE', reason: null, value: '3072' },
+  liveRows: { availability: 'AVAILABLE', reason: null, value: '5' },
+  expiredRows: { availability: 'AVAILABLE', reason: null, value: '2' },
+  deadTuples: { availability: 'UNAVAILABLE', reason: 'pg_stat privilege required', value: null },
+  lastVacuumAt: null,
+  lastAutovacuumAt: '2026-08-26T10:10:00Z',
+  databaseConnections: { availability: 'AVAILABLE', reason: null, value: '12' },
+  cacheConnections: { availability: 'AVAILABLE', reason: null, value: '3' },
+  expiryBacklog: '2',
+  oldestExpiredRowLagMillis: 2500,
+};
+
+const validRuntimeMonitoring = {
+  scope: 'MANAGEMENT_RUNTIME',
+  observedAt: '2026-08-26T10:15:31Z',
+  lifecycleState: 'RUNNING',
+  pool: {
+    active: { availability: 'AVAILABLE', reason: null, value: '1' },
+    idle: { availability: 'AVAILABLE', reason: null, value: '2' },
+    pending: { availability: 'AVAILABLE', reason: null, value: '0' },
+    maximum: { availability: 'AVAILABLE', reason: null, value: '3' },
+  },
+  activeOperations: '1',
+  pubSubSubscriptions: '2',
+  sseClients: '1',
+  webSocketClients: '1',
+  retainedPayloadBytes: '64',
+  auditQueue: { depth: '0', capacity: '1024', acceptingMutations: true },
+  expirySweeper: { ownedByRuntime: true, running: true, lastSweepAt: '2026-08-26T10:15:00Z' },
+  operations: [{ operation: 'getOverview', status: 'COMPLETE', count: '4', errorCount: '0', latencyMillis: '12' }],
+};
+
+const validActivity = {
+  items: [{
+    eventId: 'event-2', occurredAt: '2026-08-26T10:15:32Z', actor: 'local-operator',
+    action: 'SETUP_CONNECTED', outcome: 'SUCCEEDED', setupId: 'primary-cache',
+    namespace: null, resource: { type: 'SETUP', identifier: 'must-not-render' },
+    summary: 'Setup connected', correlationId: 'corr-activity-2',
+  }],
+  nextAfter: 'event-2',
+  hasMore: true,
+};
+
+const validEntry = {
+  namespace: '客户/订单',
+  encodedNamespace: '5a6i5oi3L-iureWNlQ',
+  key: 'café/東京/🔒?x=1',
+  encodedKey: 'Y2Fmw6kv5p2x5LqsL_CflJI_eD0x',
+  valueType: 'STRING',
+  sizeBytes: '17',
+  version: '9007199254740993',
+  createdAt: '2026-08-26T10:00:00Z',
+  updatedAt: '2026-08-26T10:15:00Z',
+  lastAccessedAt: null,
+  ttl: { state: 'EXPIRING', ttlMillis: 45_000, expiresAt: '2026-08-26T10:15:45Z' },
+} as const;
+
+const validEntryPage = {
+  items: [validEntry],
+  nextCursor: 'entry-cursor-2',
+  hasMore: true,
+} as const;
+
+const validSession = {
+  user: 'local-operator', roles: ['viewer', 'operator'], serverVersion: '0.1.0-SNAPSHOT',
+  apiVersion: 'v1', authenticationMode: 'LOCAL_TOKEN',
+  csrfToken: 'csrf-token-with-at-least-thirty-two-characters',
+  sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z',
+  features: { setupRegistration: true, sensitiveReveal: true },
+} as const;
+
+const validRevealedEntry = {
+  key: validEntry.key,
+  version: validEntry.version,
+  value: { type: 'STRING', text: 'transient-value' },
+  revealedAt: '2026-08-26T10:15:30Z',
+  autoHideAfterMillis: 60_000,
+} as const;
+
 describe('U3 inspection protocol client', () => {
   let server: Server;
   let baseUrl: string;
@@ -37,7 +122,11 @@ describe('U3 inspection protocol client', () => {
     requestUrls = [];
     server = createServer((request, response) => {
       requestUrls.push(request.url ?? '');
-      response.writeHead(200, { 'content-type': 'application/json' });
+      response.writeHead(200, {
+        'cache-control': 'no-store, no-cache, must-revalidate',
+        'content-type': 'application/json',
+        pragma: 'no-cache',
+      });
       response.end(JSON.stringify(responseFor(request.url ?? '')));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -54,6 +143,99 @@ describe('U3 inspection protocol client', () => {
     const client = new InspectionClient(new SessionClient(baseUrl));
     await expect(client.overview('primary-cache')).resolves.toEqual(validOverview);
     expect(requestUrls).toEqual(['/api/v1/setups/primary-cache/overview']);
+  });
+
+  it('validates database/runtime monitoring and bounded activity through real HTTP', async () => {
+    responseFor = (url) => {
+      if (url.endsWith('/monitoring/database')) return validDatabaseMonitoring;
+      if (url.endsWith('/monitoring/runtime')) return validRuntimeMonitoring;
+      if (url.includes('/activity')) return validActivity;
+      return validOverview;
+    };
+    const client = new InspectionClient(new SessionClient(baseUrl));
+
+    await expect(client.databaseMonitoring('primary-cache')).resolves.toEqual(validDatabaseMonitoring);
+    await expect(client.runtimeMonitoring('primary-cache')).resolves.toEqual(validRuntimeMonitoring);
+    await expect(client.activity('primary-cache', {
+      after: 'event/1', limit: 10, namespace: 'orders/eu',
+      action: 'ENTRY_SET', outcome: 'SUCCEEDED',
+    })).resolves.toEqual(validActivity);
+
+    expect(requestUrls).toEqual([
+      '/api/v1/setups/primary-cache/monitoring/database',
+      '/api/v1/setups/primary-cache/monitoring/runtime',
+      '/api/v1/setups/primary-cache/activity?after=event%2F1&limit=10&namespace=orders%2Feu&action=ENTRY_SET&outcome=SUCCEEDED',
+    ]);
+  });
+
+  it('validates metadata-only entry list/detail responses and serializes exact filters', async () => {
+    responseFor = (url) => url.includes('/entries/') ? validEntry : validEntryPage;
+    const client = new InspectionClient(new SessionClient(baseUrl));
+
+    await expect(client.entries('primary-cache', validEntry.encodedNamespace, {
+      prefix: 'café/', valueType: 'STRING', ttlState: 'INCLUDE_EXPIRED',
+      cursor: 'opaque+/cursor==', limit: 25, sort: 'key:asc',
+    })).resolves.toEqual(validEntryPage);
+    await expect(client.entry(
+      'primary-cache', validEntry.encodedNamespace, validEntry.encodedKey, true,
+    )).resolves.toEqual(validEntry);
+
+    expect(requestUrls).toEqual([
+      '/api/v1/setups/primary-cache/namespaces/5a6i5oi3L-iureWNlQ/entries?prefix=caf%C3%A9%2F&valueType=STRING&ttlState=INCLUDE_EXPIRED&cursor=opaque%2B%2Fcursor%3D%3D&limit=25&sort=key%3Aasc',
+      '/api/v1/setups/primary-cache/namespaces/5a6i5oi3L-iureWNlQ/entries/Y2Fmw6kv5p2x5LqsL_CflJI_eD0x?includeExpired=true',
+    ]);
+  });
+
+  it('rejects values or inconsistent cursor state in ordinary entry responses', async () => {
+    const client = new InspectionClient(new SessionClient(baseUrl));
+
+    responseBody = { ...validEntryPage, items: [{ ...validEntry, value: 'must-not-cross' }] };
+    await expect(client.entries('primary-cache', validEntry.encodedNamespace)).rejects.toMatchObject({
+      code: 'RESPONSE_CONTRACT_INVALID',
+    });
+
+    responseBody = { ...validEntryPage, nextCursor: null };
+    await expect(client.entries('primary-cache', validEntry.encodedNamespace)).rejects.toMatchObject({
+      code: 'RESPONSE_CONTRACT_INVALID',
+    });
+  });
+
+  it('posts a sensitive reveal to the exact encoded route and validates its value union', async () => {
+    responseFor = (url) => url === '/api/v1/session' ? validSession : validRevealedEntry;
+    const sessionClient = new SessionClient(baseUrl);
+    const client = new InspectionClient(sessionClient);
+    await sessionClient.load();
+
+    await expect(client.revealEntryValue(
+      'primary/cache', validEntry.encodedNamespace, validEntry.encodedKey, ' incident review ',
+    )).resolves.toEqual(validRevealedEntry);
+    expect(requestUrls).toEqual([
+      '/api/v1/session',
+      '/api/v1/setups/primary%2Fcache/namespaces/5a6i5oi3L-iureWNlQ/entries/Y2Fmw6kv5p2x5LqsL_CflJI_eD0x/value/reveal',
+    ]);
+
+    responseBody = { ...validRevealedEntry, value: { type: 'BYTES', base64: 'not-base64' } };
+    responseFor = () => responseBody;
+    await expect(client.revealEntryValue(
+      'primary-cache', validEntry.encodedNamespace, validEntry.encodedKey,
+    )).rejects.toMatchObject({ code: 'RESPONSE_CONTRACT_INVALID', status: 502 });
+  });
+
+  it.each([
+    ['/monitoring/database', { ...validDatabaseMonitoring, scope: 'MANAGEMENT_RUNTIME' }],
+    ['/monitoring/runtime', { ...validRuntimeMonitoring, activeOperations: 1 }],
+    ['/activity', { ...validActivity, hasMore: false }],
+  ])('rejects incompatible monitoring payloads from %s', async (suffix, invalid) => {
+    responseBody = invalid;
+    const client = new InspectionClient(new SessionClient(baseUrl));
+    const request = suffix === '/monitoring/database'
+      ? client.databaseMonitoring('primary-cache')
+      : suffix === '/monitoring/runtime'
+        ? client.runtimeMonitoring('primary-cache')
+        : client.activity('primary-cache');
+    await expect(request).rejects.toMatchObject({
+      code: 'RESPONSE_CONTRACT_INVALID', status: 502,
+    } satisfies Partial<ManagementClientError>);
   });
 
   it.each([

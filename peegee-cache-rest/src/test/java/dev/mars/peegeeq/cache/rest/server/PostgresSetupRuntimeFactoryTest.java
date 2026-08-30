@@ -380,11 +380,16 @@ class PostgresSetupRuntimeFactoryTest {
                 assertEquals(200, entries.statusCode());
                 var entriesBody = new com.fasterxml.jackson.databind.ObjectMapper().readTree(entries.body());
                 assertEquals("customer:1", entriesBody.path("items").get(0).path("key").asText());
+                assertTrue(entriesBody.path("items").get(0).has("lastAccessedAt"));
+                assertTrue(entriesBody.path("items").get(0).path("lastAccessedAt").isNull());
                 assertTrue(!entries.body().contains("stored-value"));
                 HttpResponse<String> entry = get(managementPort,
                         "/api/v1/setups/orders/namespaces/" + encoded + "/entries/" + encodedKey);
                 assertEquals(200, entry.statusCode());
                 assertEquals("\"v3\"", entry.headers().firstValue("etag").orElseThrow());
+                var entryBody = new com.fasterxml.jackson.databind.ObjectMapper().readTree(entry.body());
+                assertTrue(entryBody.has("lastAccessedAt"));
+                assertTrue(entryBody.path("lastAccessedAt").isNull());
                 assertTrue(!entry.body().contains("stored-value"));
                 String revealPath = "/api/v1/setups/orders/namespaces/" + encoded
                         + "/entries/" + encodedKey + "/value/reveal";

@@ -402,6 +402,7 @@ public final class PgManagementReadRepository {
     private static ManagementEntryMetadata mapEntry(Row row) {
         OffsetDateTime createdAt = row.getOffsetDateTime("created_at");
         OffsetDateTime updatedAt = row.getOffsetDateTime("updated_at");
+        OffsetDateTime lastAccessedAt = row.getOffsetDateTime("last_accessed_at");
         ManagementTtl ttl = mapTtl(row);
         return new ManagementEntryMetadata(
                 new CacheKey(row.getString("namespace"), row.getString("cache_key")),
@@ -410,6 +411,7 @@ public final class PgManagementReadRepository {
                 row.getLong("version"),
                 createdAt.toInstant(),
                 updatedAt.toInstant(),
+                lastAccessedAt == null ? null : lastAccessedAt.toInstant(),
                 ttl);
     }
 

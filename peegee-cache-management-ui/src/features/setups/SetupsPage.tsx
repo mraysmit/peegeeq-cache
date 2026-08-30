@@ -14,6 +14,7 @@ import type {
   SetupHealth,
   SetupSummary,
 } from '../../api/setup-schemas';
+import { Modal } from '../../components/Modal';
 import { formatDisplayInstant } from '../../presentation/display-time';
 
 interface SetupsPageProps {
@@ -350,8 +351,7 @@ export function SetupsPage({
       ) : null}
 
       {registrationOpen && (
-        <div className="modal-backdrop">
-          <section aria-labelledby="registration-title" aria-modal="true" className="modal" role="dialog">
+        <Modal className="modal" labelId="registration-title" onDismiss={registrationBusy ? undefined : closeRegistration}>
             <div className="modal__heading">
               <div>
                 <p className="workspace__context">TLS-verified PostgreSQL</p>
@@ -384,13 +384,11 @@ export function SetupsPage({
                 <button className="button" disabled={registrationBusy} type="submit">{registrationBusy ? 'Working…' : 'Register setup'}</button>
               </div>
             </form>
-          </section>
-        </div>
+        </Modal>
       )}
 
       {detailsOpen && (
-        <div className="modal-backdrop">
-          <section aria-labelledby="details-title" aria-modal="true" className="modal modal--compact" role="dialog">
+        <Modal labelId="details-title" onDismiss={() => setDetailsOpen(false)}>
             <div className="modal__heading">
               <h2 id="details-title">Setup details</h2>
               <button aria-label="Close details" className="icon-button" onClick={() => setDetailsOpen(false)} type="button">Close</button>
@@ -403,13 +401,11 @@ export function SetupsPage({
                 health={detailsHealth}
               />
             )}
-          </section>
-        </div>
+        </Modal>
       )}
 
       {pendingAction !== undefined && (
-        <div className="modal-backdrop">
-          <section aria-labelledby="action-title" aria-modal="true" className="modal modal--compact" role="dialog">
+        <Modal labelId="action-title" onDismiss={actionBusy ? undefined : () => setPendingAction(undefined)}>
             <h2 id="action-title">{actionTitle(pendingAction.action)} {pendingAction.setup.displayName}?</h2>
             <p>{actionDescription(pendingAction.action)}</p>
             <div className="modal__actions">
@@ -418,8 +414,7 @@ export function SetupsPage({
                 {actionBusy ? 'Working…' : actionTitle(pendingAction.action)}
               </button>
             </div>
-          </section>
-        </div>
+        </Modal>
       )}
     </section>
   );

@@ -424,6 +424,9 @@ public final class PgManagementMutationRepository {
     }
 
     private static ManagementEntryMetadata mapEntryMetadata(Row row) {
+        var lastAccessedAt = row.getColumnIndex("last_accessed_at") < 0
+                ? null
+                : row.getOffsetDateTime("last_accessed_at");
         return new ManagementEntryMetadata(
                 new CacheKey(row.getString("namespace"), row.getString("cache_key")),
                 ValueType.valueOf(row.getString("value_type")),
@@ -431,6 +434,7 @@ public final class PgManagementMutationRepository {
                 row.getLong("version"),
                 row.getOffsetDateTime("created_at").toInstant(),
                 row.getOffsetDateTime("updated_at").toInstant(),
+                lastAccessedAt == null ? null : lastAccessedAt.toInstant(),
                 mapTtl(row));
     }
 

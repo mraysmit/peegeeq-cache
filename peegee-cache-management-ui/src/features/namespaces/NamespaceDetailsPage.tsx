@@ -63,7 +63,7 @@ export function NamespaceDetailsPage({ client, encodedNamespace, selectedSetupId
       </div>
       <div className="tabs" role="tablist" aria-label="Namespace resources">
         <button aria-selected="true" role="tab" type="button">Overview</button>
-        <Link aria-selected="false" role="tab" to={`/keys?namespace=${stats.encodedNamespace}`}>Entries</Link>
+        <Link aria-selected="false" role="tab" to="/keys">Entries</Link>
         <Link aria-selected="false" role="tab" to={`/counters?namespace=${stats.encodedNamespace}`}>Counters</Link>
         <Link aria-selected="false" role="tab" to={`/locks?namespace=${stats.encodedNamespace}`}>Locks</Link>
       </div>

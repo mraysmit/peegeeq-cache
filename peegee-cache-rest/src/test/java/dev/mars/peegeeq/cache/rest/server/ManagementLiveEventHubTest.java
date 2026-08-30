@@ -1,5 +1,7 @@
 package dev.mars.peegeeq.cache.rest.server;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -59,6 +61,24 @@ class ManagementLiveEventHubTest {
         assertEquals(1, closes.get());
         clock.advance(Duration.ofMinutes(5));
         assertEquals(0, hub.retainedEventCount());
+    }
+
+    @Test
+    void healthEventsMatchTheOpenApiNumericLatencyContract() throws Exception {
+        ManagementLiveEventHub hub = new ManagementLiveEventHub(
+                Clock.fixed(Instant.parse("2026-08-29T10:00:00Z"), ZoneOffset.UTC),
+                Duration.ofMinutes(5), 10);
+        List<ManagementLiveEventHub.Event> events = new ArrayList<>();
+        ManagementLiveEventHub.Open open = hub.open("orders", null, events::add, () -> { });
+
+        hub.healthChanged("orders", new SetupHealth(
+                SetupHealthSummary.Status.UP, true, 7,
+                Instant.parse("2026-08-29T10:00:00Z"), "Ready"));
+
+        JsonNode data = new ObjectMapper().readTree(events.getFirst().data());
+        assertTrue(data.get("latencyMillis").isIntegralNumber());
+        assertEquals(7, data.get("latencyMillis").longValue());
+        open.attachment().close();
     }
 
     private static final class MutableClock extends Clock {

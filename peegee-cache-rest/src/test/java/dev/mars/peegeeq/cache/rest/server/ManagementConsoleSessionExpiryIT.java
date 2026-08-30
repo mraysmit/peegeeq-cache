@@ -70,6 +70,21 @@ class ManagementConsoleSessionExpiryIT {
                 .onFailure(context::failNow);
     }
 
+    @ManagementBrowserScenario(
+            id = "PW-AUTH-004",
+            requirement = "UI design: bounded session expiry and non-recoverability by reload or bootstrap replay",
+            area = ManagementBrowserArea.AUTHENTICATION,
+            risk = ManagementBrowserRisk.CRITICAL,
+            action = "Authenticate, wait for the bounded session to expire, reload, and replay the consumed token",
+            expectedResult = "The shell returns to login and neither reload nor token replay restores the expired session",
+            cleanup = "Close the isolated browser context and bounded-session server lifecycle",
+            operations = {"getSession", "exchangeLocalToken"},
+            evidence = {
+                    ManagementBrowserEvidence.VISIBLE_RESULT,
+                    ManagementBrowserEvidence.HTTP_OPERATION,
+                    ManagementBrowserEvidence.SENSITIVE_STATE,
+                    ManagementBrowserEvidence.RESOURCE_CLEANUP
+            })
     @Test
     void boundedSessionExpiresInTheShellAndCannotBeRestoredByReloadOrTokenReplay() {
         String token = bootstrap.token();

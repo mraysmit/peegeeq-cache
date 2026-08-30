@@ -153,7 +153,7 @@ final class PgManagementReadSql {
                 SELECT namespace, cache_key, value_type,
                        CASE WHEN value_type = 'LONG' THEN 8::BIGINT
                             ELSE octet_length(value_bytes)::BIGINT END AS size_bytes,
-                       version, created_at, updated_at, expires_at,
+                       version, created_at, updated_at, last_accessed_at, expires_at,
                        CASE
                          WHEN expires_at IS NULL THEN NULL
                          WHEN expires_at <= statement_timestamp() THEN 0::BIGINT

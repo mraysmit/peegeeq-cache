@@ -121,4 +121,58 @@ describe('U1 session client', () => {
 
     expect(receivedCsrf).toEqual([sessionBody.csrfToken, sessionBody.csrfToken]);
   });
+
+  it('accepts sensitive JSON only when the response is explicitly non-cacheable', async () => {
+    let receivedBody = '';
+    let receivedCsrf = '';
+    handler = (request, response) => {
+      if (request.method === 'GET') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(sessionBody));
+        return;
+      }
+      receivedCsrf = String(request.headers['x-peegeeq-csrf'] ?? '');
+      request.setEncoding('utf8');
+      request.on('data', (chunk: string) => { receivedBody += chunk; });
+      request.on('end', () => {
+        response.writeHead(200, {
+          'cache-control': 'private, no-store, no-cache, must-revalidate',
+          'content-type': 'application/json',
+          pragma: 'no-cache',
+        });
+        response.end(JSON.stringify({ secret: 'transient-value' }));
+      });
+    };
+    const client = new SessionClient(baseUrl);
+
+    await client.load();
+    await expect(client.requestSensitiveJson('/reveal', {
+      body: { reason: 'incident review' }, method: 'POST',
+    })).resolves.toEqual({ secret: 'transient-value' });
+
+    expect(receivedBody).toBe('{"reason":"incident review"}');
+    expect(receivedCsrf).toBe(sessionBody.csrfToken);
+    expect(JSON.stringify({ localStorage, sessionStorage })).not.toContain('transient-value');
+  });
+
+  it.each([
+    { headers: { pragma: 'no-cache' }, description: 'missing Cache-Control no-store' },
+    { headers: { 'cache-control': 'no-store' }, description: 'missing Pragma no-cache' },
+  ])('rejects a sensitive response with $description', async ({ headers }) => {
+    handler = (request, response) => {
+      if (request.method === 'GET') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(sessionBody));
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'application/json', ...headers });
+      response.end(JSON.stringify({ secret: 'must-be-rejected' }));
+    };
+    const client = new SessionClient(baseUrl);
+
+    await client.load();
+    await expect(client.requestSensitiveJson('/reveal', { method: 'POST' })).rejects.toMatchObject({
+      code: 'SENSITIVE_RESPONSE_CACHEABLE', status: 502,
+    } satisfies Partial<ManagementClientError>);
+  });
 });

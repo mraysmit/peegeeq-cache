@@ -96,6 +96,22 @@ class BrowserRequestSecurityTest {
     }
 
     @Test
+    void sameOriginEventStreamAcceptsBrowserFetchMetadataWhenGetOmitsOrigin() {
+        BrowserRequestSecurity security = new BrowserRequestSecurity(
+                BrowserOriginPolicy.localToken("http://127.0.0.1:8080"));
+
+        security.validateEventStreamOrigin(null, "same-origin");
+        security.validateEventStreamOrigin("http://127.0.0.1:8080", "same-origin");
+
+        assertSecurityCode("ORIGIN_VALIDATION_FAILED",
+                () -> security.validateEventStreamOrigin(null, null));
+        assertSecurityCode("ORIGIN_VALIDATION_FAILED",
+                () -> security.validateEventStreamOrigin(null, "same-site"));
+        assertSecurityCode("ORIGIN_VALIDATION_FAILED",
+                () -> security.validateEventStreamOrigin("http://evil.example", "cross-site"));
+    }
+
+    @Test
     void trustedProxySessionIsBoundToIdentityRolesAndSourceAndRotatesOnChange() {
         TrustedProxySessionManager sessions = new TrustedProxySessionManager(
                 Duration.ofMinutes(30), Duration.ofHours(8),

@@ -4,12 +4,25 @@ import { NavLink, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import type { BrowserSession, ManagementClientError, SessionClient } from '../api/session-client';
 import { SetupClient } from '../api/setup-client';
 import { InspectionClient } from '../api/inspection-client';
+import { EntryAdministrationClient } from '../api/entry-administration-client';
+import { ResourceClient } from '../api/resource-client';
+import { PubSubClient } from '../api/pubsub-client';
 import type { SetupCapabilities } from '../api/setup-schemas';
 import { OverviewPage } from '../features/overview/OverviewPage';
 import { NamespaceDetailsPage } from '../features/namespaces/NamespaceDetailsPage';
 import { NamespacesPage } from '../features/namespaces/NamespacesPage';
 import { SetupsPage } from '../features/setups/SetupsPage';
+import { EntriesPage } from '../features/entries/EntriesPage';
+import { EntryDetailsPage } from '../features/entries/EntryDetailsPage';
+import { CountersPage } from '../features/counters/CountersPage';
+import { LocksPage } from '../features/locks/LocksPage';
+import { PubSubPage } from '../features/pubsub/PubSubPage';
+import { MonitoringPage } from '../features/monitoring/MonitoringPage';
+import { SettingsPage } from '../features/settings/SettingsPage';
 import { useSetupScopeStore } from '../state/scope-store';
+import { loadPreferences, savePreferences } from '../state/preferences';
+import { BrowserMonitoringSocket, type MonitoringConnectionState, type MonitoringEnvelope } from '../api/monitoring-live';
+import { formatDisplayInstant } from '../presentation/display-time';
 
 type ManagementShellProps = {
   session: BrowserSession;
@@ -31,16 +44,23 @@ const sections = [
 ] as const;
 
 export function ManagementShell({ session, sessionClient, sessionProblem, onLogout }: ManagementShellProps) {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => loadPreferences().theme);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
+  const [connectionState, setConnectionState] = useState<MonitoringConnectionState>('STOPPED');
+  const [notifications, setNotifications] = useState<MonitoringEnvelope[]>([]);
   const selectedSetupId = useSetupScopeStore((state) => state.setupId);
+  const selectedNamespace = useSetupScopeStore((state) => state.namespace);
   const selectedCapabilities = useSetupScopeStore((state) => state.capabilities);
   const selectStoredSetup = useSetupScopeStore((state) => state.select);
   const selectNamespace = useSetupScopeStore((state) => state.selectNamespace);
   const clearStoredSetup = useSetupScopeStore((state) => state.clear);
   const setupClient = useMemo(() => new SetupClient(sessionClient), [sessionClient]);
   const inspectionClient = useMemo(() => new InspectionClient(sessionClient), [sessionClient]);
+  const entryAdministrationClient = useMemo(() => new EntryAdministrationClient(sessionClient), [sessionClient]);
+  const resourceClient = useMemo(() => new ResourceClient(sessionClient), [sessionClient]);
+  const pubSubClient = useMemo(() => new PubSubClient(sessionClient), [sessionClient]);
+  const monitoringSocket = useMemo(() => new BrowserMonitoringSocket(), []);
   const isOperator = session.roles.includes('operator');
 
   const selectSetup = (setupId: string | undefined, capabilities?: SetupCapabilities) => {
@@ -66,6 +86,12 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
     };
   }, [clearStoredSetup, selectStoredSetup, selectedCapabilities, selectedSetupId, setupClient]);
 
+  useEffect(() => {
+    if (selectedSetupId === undefined || !notificationsOpen) return undefined;
+    const live = monitoringSocket.connect(selectedSetupId, (event) => setNotifications((current) => [event, ...current.filter((item) => item.eventId !== event.eventId)].slice(0, 100)), setConnectionState);
+    return () => { live.stop(); setNotifications([]); };
+  }, [monitoringSocket, notificationsOpen, selectedSetupId]);
+
   const visibleSections = sections.filter((section) => {
     if (selectedCapabilities === undefined) return true;
     if (section.path === '/namespaces' || section.path === '/keys') {
@@ -85,6 +111,10 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
       setEndingSession(false);
     }
   };
+  const toggleTheme = () => {
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next); savePreferences({ ...loadPreferences(), theme: next });
+  };
 
   return (
     <div className="console" data-theme={theme}>
@@ -94,7 +124,7 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
           <strong>Management Console</strong>
         </div>
         <div className="console__status" aria-label="Session and connection status">
-          <span className="status status--connected"><i aria-hidden="true" />Connected</span>
+          <span className={`status ${connectionState === 'STALE' ? 'status--warning' : 'status--connected'}`}><i aria-hidden="true" />{selectedSetupId === undefined || !notificationsOpen ? 'Connected' : connectionState === 'CONNECTED' ? 'Live' : connectionState === 'STALE' ? 'Live stale' : 'Connecting'}</span>
           <span>{session.user}</span>
           <span className="role">{isOperator ? 'Operator' : 'Viewer'}</span>
           <span className="scope" title="Active setup scope">
@@ -103,7 +133,7 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
           <button
             aria-label={theme === 'light' ? 'Use dark theme' : 'Use light theme'}
             className="icon-button"
-            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            onClick={toggleTheme}
             type="button"
           >
             {theme === 'light' ? 'Dark' : 'Light'}
@@ -180,7 +210,20 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
             )}
             path="/setups"
           />
-          {sections.filter((section) => !['/setups', '/', '/namespaces'].includes(section.path)).map((section) => (
+          <Route
+            element={<EntriesPage administrationClient={entryAdministrationClient} canOperate={isOperator} client={inspectionClient} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />}
+            path="/keys"
+          />
+          <Route
+            element={<EntryDetailsRoute administrationClient={entryAdministrationClient} canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.sensitiveValueReveal === true} client={inspectionClient} selectedSetupId={selectedSetupId} />}
+            path="/keys/:encodedNamespace/:encodedKey"
+          />
+          <Route element={<CountersPage canOperate={isOperator} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/counters" />
+          <Route element={<LocksPage canOperate={isOperator && selectedCapabilities?.capabilities.forcedLockRelease === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.sensitiveValueReveal === true} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/locks" />
+          <Route element={<PubSubPage canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.sensitiveValueReveal === true} client={pubSubClient} key={selectedSetupId ?? 'no-setup'} maximumChannelBytes={selectedCapabilities?.limits.pubSubChannelMaxBytes ?? 63} maximumPayloadBytes={selectedCapabilities?.limits.pubSubPayloadMaxBytes ?? 7_500} selectedSetupId={selectedSetupId} />} path="/pubsub" />
+          <Route element={<MonitoringPage client={inspectionClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/monitoring" />
+          <Route element={<SettingsPage capabilities={selectedCapabilities} selectedSetupId={selectedSetupId} session={session} />} path="/settings" />
+          {sections.filter((section) => !['/setups', '/', '/namespaces', '/keys', '/counters', '/locks', '/pubsub', '/monitoring', '/settings'].includes(section.path)).map((section) => (
             <Route
               element={<Section selectedSetupId={selectedSetupId} title={section.label} />}
               key={section.path}
@@ -203,11 +246,23 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
               Close
             </button>
           </div>
-          <p>No management notifications.</p>
+          {notifications.length === 0 ? <p>No management notifications.</p> : <ol>{notifications.map((event) => <li key={event.eventId}><strong>{event.type.replaceAll('.', ' ')}</strong><br /><time dateTime={event.occurredAt}>{formatDisplayInstant(event.occurredAt)}</time></li>)}</ol>}
         </aside>
       )}
     </div>
   );
+}
+
+function EntryDetailsRoute({ administrationClient, canOperate, canReveal, client, selectedSetupId }: {
+  readonly administrationClient: EntryAdministrationClient;
+  readonly canOperate: boolean;
+  readonly canReveal: boolean;
+  readonly client: InspectionClient;
+  readonly selectedSetupId?: string;
+}) {
+  const { encodedNamespace, encodedKey } = useParams();
+  if (encodedNamespace === undefined || encodedKey === undefined) return <Navigate replace to="/keys" />;
+  return <EntryDetailsPage administrationClient={administrationClient} canOperate={canOperate} canReveal={canReveal} client={client} encodedKey={encodedKey} encodedNamespace={encodedNamespace} key={`${selectedSetupId ?? 'no-setup'}:${encodedNamespace}:${encodedKey}`} selectedSetupId={selectedSetupId} />;
 }
 
 function NamespaceDetailsRoute({ client, selectedSetupId, onSelectNamespace }: {

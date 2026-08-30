@@ -5,8 +5,10 @@ import { clearSetupScope } from '../state/scope-store';
 export type BrowserSession = Omit<CurrentSession, 'csrfToken'>;
 
 export interface ManagementRequest {
-  readonly method?: 'GET' | 'POST' | 'DELETE';
+  readonly method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   readonly body?: unknown;
+  readonly ifMatch?: string;
+  readonly ifNoneMatch?: '*';
 }
 
 let csrfToken: string | undefined;
@@ -73,6 +75,26 @@ export class SessionClient {
   }
 
   async requestJson(path: string, request: ManagementRequest = {}): Promise<unknown> {
+    const response = await this.request(path, request);
+    if (response.status === 204) return undefined;
+    return this.readJson(response);
+  }
+
+  async requestSensitiveJson(path: string, request: ManagementRequest): Promise<unknown> {
+    const response = await this.request(path, request, 'no-store');
+    const cacheControl = response.headers.get('cache-control') ?? '';
+    const pragma = response.headers.get('pragma') ?? '';
+    if (!hasDirective(cacheControl, 'no-store') || !hasDirective(pragma, 'no-cache')) {
+      throw new ManagementClientError(
+        502,
+        'SENSITIVE_RESPONSE_CACHEABLE',
+        'The server returned sensitive data without mandatory cache prevention headers',
+      );
+    }
+    return this.readJson(response);
+  }
+
+  private async request(path: string, request: ManagementRequest, cache?: 'no-store'): Promise<Response> {
     const method = request.method ?? 'GET';
     const headers: Record<string, string> = { accept: 'application/json' };
     if (method !== 'GET') {
@@ -89,8 +111,11 @@ export class SessionClient {
     if (request.body !== undefined) {
       headers['content-type'] = 'application/json';
     }
+    if (request.ifMatch !== undefined) headers['if-match'] = request.ifMatch;
+    if (request.ifNoneMatch !== undefined) headers['if-none-match'] = request.ifNoneMatch;
     const response = await fetch(this.url(path), {
       body: request.body === undefined ? undefined : JSON.stringify(request.body),
+      cache,
       credentials: 'include',
       headers,
       method,
@@ -99,8 +124,7 @@ export class SessionClient {
       if (response.status === 401) csrfToken = undefined;
       throw await this.readProblem(response);
     }
-    if (response.status === 204) return undefined;
-    return this.readJson(response);
+    return response;
   }
 
   clear(): void {
@@ -156,6 +180,10 @@ export class SessionClient {
       );
     }
   }
+}
+
+function hasDirective(value: string, expected: string): boolean {
+  return value.split(',').some((directive) => directive.trim().toLowerCase() === expected);
 }
 
 function problemError(problem: ManagementProblem): ManagementClientError {

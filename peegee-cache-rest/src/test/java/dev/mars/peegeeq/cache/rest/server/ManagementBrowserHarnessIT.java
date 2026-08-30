@@ -4,6 +4,7 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.Response;
 import com.microsoft.playwright.options.SameSiteAttribute;
 import dev.mars.peegeeq.cache.api.management.ManagementSecretReference;
 import dev.mars.peegeeq.cache.rest.security.SetupTargetPolicy;
@@ -26,6 +27,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(VertxExtension.class)
@@ -63,7 +65,24 @@ class ManagementBrowserHarnessIT {
     @TempDir
     Path temporaryDirectory;
 
-    @Test
+    @ManagementBrowserScenario(
+            id = "PW-HARDEN-001",
+            requirement = "UI design: packaged hosting, origin enforcement, and browser secret handling",
+            area = ManagementBrowserArea.HARDENING,
+            risk = ManagementBrowserRisk.CRITICAL,
+            action = "Load the packaged console, inspect storage, and issue same-origin and cross-origin setup requests",
+            expectedResult = "The packaged UI loads, stores no credential, accepts the exact origin, and rejects a foreign origin",
+            cleanup = "Close browser context, browser, Playwright, HTTP client, and management server",
+            operations = {"listSetups"},
+            evidence = {
+                    ManagementBrowserEvidence.VISIBLE_RESULT,
+                    ManagementBrowserEvidence.HTTP_OPERATION,
+                    ManagementBrowserEvidence.SENSITIVE_STATE,
+                    ManagementBrowserEvidence.RESOURCE_CLEANUP
+            })
+    @ManagementBrowserJourney(
+            value = "packaged-hosting",
+            operations = {"listSetups"})
     void realBrowserKeepsCredentialsOutOfStorageAndEnforcesExactOrigin(
             Vertx vertx,
             VertxTestContext context) throws Exception {
@@ -110,7 +129,31 @@ class ManagementBrowserHarnessIT {
                      ManagementPlaywright.launchOptions())) {
             BrowserContext context = browser.newContext();
             Page page = context.newPage();
-            assertEquals(200, page.navigate(origin + "/ui/").status());
+            ManagementBrowserOperationTrace operationTrace = new ManagementBrowserOperationTrace();
+            operationTrace.attach(page);
+            Response shell = page.navigate(origin + "/ui/");
+            assertNotNull(shell);
+            assertEquals(200, shell.status());
+            assertTrue(shell.headers().get("content-type").startsWith("text/html"));
+            assertEquals("no-store", shell.headers().get("cache-control"));
+            assertTrue(shell.headers().get("content-security-policy").contains("default-src 'self'"));
+            assertEquals("nosniff", shell.headers().get("x-content-type-options"));
+            assertEquals("no-referrer", shell.headers().get("referrer-policy"));
+
+            String scriptSource = page.locator("script[src]").getAttribute("src");
+            assertNotNull(scriptSource);
+            assertTrue(scriptSource.startsWith("/ui/assets/"));
+            Page assetPage = context.newPage();
+            Response script = assetPage.navigate(origin + scriptSource);
+            assertNotNull(script);
+            assertEquals(200, script.status());
+            assertTrue(script.headers().get("content-type").startsWith("text/javascript"));
+            assertEquals("public, max-age=31536000, immutable",
+                    script.headers().get("cache-control"));
+            assertEquals("nosniff", script.headers().get("x-content-type-options"));
+            assertEquals("no-referrer", script.headers().get("referrer-policy"));
+            assertFalse(script.text().isBlank());
+            assetPage.close();
 
             @SuppressWarnings("unchecked")
             Map<String, Object> result =
@@ -125,6 +168,7 @@ class ManagementBrowserHarnessIT {
             assertEquals(0, ((Number) page.evaluate("sessionStorage.length")).intValue());
             assertFalse(page.url().contains(token));
             assertFalse(page.content().contains(token));
+            operationTrace.assertObserved("listSetups");
             var cookie = context.cookies().stream()
                     .filter(candidate -> candidate.name.equals("PGQMGMTSESSION"))
                     .findFirst().orElseThrow();

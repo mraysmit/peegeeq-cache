@@ -90,10 +90,11 @@ public final class LiveMonitoringRoutes implements ManagementRequestRouter {
         try {
             AuthenticatedManagementRequest authenticated = authenticator.authenticate(request);
             requireViewer(authenticated);
-            browserSecurity.validateStreamOrigin(request.getHeader("Origin"));
+            browserSecurity.validateEventStreamOrigin(
+                    request.getHeader("Origin"), request.getHeader("Sec-Fetch-Site"));
             requireEventStreamAccept(request.getHeader("Accept"));
             String setupId = matcher.group(1);
-            registry.get(setupId);
+            registry.management(setupId);
             String afterEventId = boundedEventId(request.getHeader("Last-Event-ID"));
             MetricsConnection connection = new MetricsConnection(
                     request.response(), setupId, correlationId,
@@ -122,7 +123,7 @@ public final class LiveMonitoringRoutes implements ManagementRequestRouter {
                         400, "VALIDATION_FAILED", "Monitoring WebSocket query is invalid");
             }
             String afterEventId = boundedEventId(request.getParam("afterEventId"));
-            registry.get(setupId);
+            registry.management(setupId);
             if (!request.canUpgradeToWebSocket()) {
                 throw new ManagementProtocolException(
                         400, "VALIDATION_FAILED", "A WebSocket upgrade is required");

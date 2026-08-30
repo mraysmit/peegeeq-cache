@@ -14,6 +14,7 @@ public record ManagementEntryMetadata(
         long version,
         Instant createdAt,
         Instant updatedAt,
+        Instant lastAccessedAt,
         ManagementTtl ttl) {
     public ManagementEntryMetadata {
         Objects.requireNonNull(key, "key");
@@ -23,5 +24,16 @@ public record ManagementEntryMetadata(
         Objects.requireNonNull(createdAt, "createdAt");
         Objects.requireNonNull(updatedAt, "updatedAt");
         Objects.requireNonNull(ttl, "ttl");
+    }
+
+    public ManagementEntryMetadata(
+            CacheKey key,
+            ValueType valueType,
+            long sizeBytes,
+            long version,
+            Instant createdAt,
+            Instant updatedAt,
+            ManagementTtl ttl) {
+        this(key, valueType, sizeBytes, version, createdAt, updatedAt, null, ttl);
     }
 }

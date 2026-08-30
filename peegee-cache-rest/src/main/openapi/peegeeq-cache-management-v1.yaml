@@ -765,7 +765,7 @@ paths:
       security:
         - managementSession: []
       parameters:
-        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/EventStreamOrigin'
         - $ref: '#/components/parameters/LastEventId'
       responses:
         '200':
@@ -863,7 +863,7 @@ paths:
       security:
         - managementSession: []
       parameters:
-        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/EventStreamOrigin'
         - $ref: '#/components/parameters/LastEventId'
       responses:
         '200':
@@ -970,6 +970,12 @@ components:
       in: header
       required: true
       description: Browser origin validated against the configured exact-origin policy.
+      schema: {type: string, format: uri, maxLength: 2048}
+    EventStreamOrigin:
+      name: Origin
+      in: header
+      required: false
+      description: Browser origin validated against the exact-origin policy when supplied; same-origin browser GETs that omit Origin must carry Sec-Fetch-Site same-origin.
       schema: {type: string, format: uri, maxLength: 2048}
     Csrf:
       name: X-PeeGeeQ-CSRF
@@ -1981,6 +1987,11 @@ components:
         - $ref: '#/components/schemas/CacheBytesValue'
       discriminator:
         propertyName: type
+        mapping:
+          STRING: '#/components/schemas/CacheStringValue'
+          JSON: '#/components/schemas/CacheJsonValue'
+          LONG: '#/components/schemas/CacheLongValue'
+          BYTES: '#/components/schemas/CacheBytesValue'
     RevealReasonRequest:
       type: object
       additionalProperties: false

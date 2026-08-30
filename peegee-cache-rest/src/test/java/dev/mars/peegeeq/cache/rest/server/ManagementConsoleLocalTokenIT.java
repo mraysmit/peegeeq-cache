@@ -70,7 +70,24 @@ class ManagementConsoleLocalTokenIT {
                 .onFailure(context::failNow);
     }
 
-    @Test
+    @ManagementBrowserScenario(
+            id = "PW-AUTH-001",
+            requirement = "UI design: local bootstrap exchange, authenticated navigation, logout, and secret cleanup",
+            area = ManagementBrowserArea.AUTHENTICATION,
+            risk = ManagementBrowserRisk.CRITICAL,
+            action = "Exchange a bootstrap token, navigate the packaged console, and log out",
+            expectedResult = "The shell authenticates, the token leaves browser surfaces, and logout removes the session",
+            cleanup = "Close the isolated browser context and local-token server lifecycle",
+            operations = {"getSession", "exchangeLocalToken", "deleteLocalSession"},
+            evidence = {
+                    ManagementBrowserEvidence.VISIBLE_RESULT,
+                    ManagementBrowserEvidence.HTTP_OPERATION,
+                    ManagementBrowserEvidence.SENSITIVE_STATE,
+                    ManagementBrowserEvidence.RESOURCE_CLEANUP
+            })
+    @ManagementBrowserJourney(
+            value = "local-token-session",
+            operations = {"getSession", "exchangeLocalToken", "deleteLocalSession"})
     void packagedConsoleExchangesTokenNavigatesAndLogsOutWithoutSecretLeakage() {
         String token = bootstrap.token();
         List<String> browserErrors = new ArrayList<>();
@@ -79,8 +96,10 @@ class ManagementConsoleLocalTokenIT {
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
              Browser browser = playwright.chromium().launch(
                      ManagementPlaywright.launchOptions());
-             BrowserContext context = browser.newContext()) {
+            BrowserContext context = browser.newContext()) {
             Page page = context.newPage();
+            ManagementBrowserOperationTrace operationTrace = new ManagementBrowserOperationTrace();
+            operationTrace.attach(page);
             page.onConsoleMessage(message -> {
                 if (message.type().equals("error")
                         && !message.text().startsWith("Failed to load resource:")) {
@@ -111,7 +130,7 @@ class ManagementConsoleLocalTokenIT {
             assertFalse(page.content().contains(token));
 
             assertEquals(200, page.navigate(origin() + "/ui/keys?prefix=a%2Fb%25").status());
-            assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Keys")))
+            assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Key Browser")))
                     .isVisible();
             assertEquals(200, page.navigate(origin() + "/ui/monitoring").status());
             assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Monitoring")))
@@ -125,9 +144,25 @@ class ManagementConsoleLocalTokenIT {
                     .anyMatch(cookie -> cookie.name.equals("PGQMGMTSESSION")));
             assertEquals(List.of("401 /api/v1/session"), failedResponses);
             assertEquals(List.of(), browserErrors);
+            operationTrace.assertObserved("getSession", "exchangeLocalToken", "deleteLocalSession");
         }
     }
 
+    @ManagementBrowserScenario(
+            id = "PW-AUTH-002",
+            requirement = "UI design: invalid and single-use bootstrap-token behavior",
+            area = ManagementBrowserArea.AUTHENTICATION,
+            risk = ManagementBrowserRisk.CRITICAL,
+            action = "Submit an invalid token, authenticate once, and replay the consumed token in a second context",
+            expectedResult = "Invalid and replayed tokens are rejected without leaking beyond the password control",
+            cleanup = "Close both isolated browser contexts and the local-token server lifecycle",
+            operations = {"getSession", "exchangeLocalToken"},
+            evidence = {
+                    ManagementBrowserEvidence.VISIBLE_RESULT,
+                    ManagementBrowserEvidence.HTTP_OPERATION,
+                    ManagementBrowserEvidence.SENSITIVE_STATE,
+                    ManagementBrowserEvidence.RESOURCE_CLEANUP
+            })
     @Test
     void invalidAndReplayedBootstrapTokensRemainVisibleOnlyInThePasswordControl() {
         String token = bootstrap.token();
@@ -184,8 +219,24 @@ class ManagementConsoleLocalTokenIT {
         }
     }
 
+    @ManagementBrowserScenario(
+            id = "PW-AUTH-003",
+            requirement = "UI design: failed local logout remains retryable and does not invent unauthenticated state",
+            area = ManagementBrowserArea.AUTHENTICATION,
+            risk = ManagementBrowserRisk.HIGH,
+            action = "Force one logout failure and retry logout from the still-authenticated shell",
+            expectedResult = "The first failure preserves authenticated UI state and the retry ends the session",
+            cleanup = "Clear the injected one-shot failure and close browser and server resources",
+            operations = {"getSession", "exchangeLocalToken", "deleteLocalSession"},
+            evidence = {
+                    ManagementBrowserEvidence.VISIBLE_RESULT,
+                    ManagementBrowserEvidence.HTTP_OPERATION,
+                    ManagementBrowserEvidence.SENSITIVE_STATE,
+                    ManagementBrowserEvidence.RESOURCE_CLEANUP
+            })
     @Test
     void failedLogoutKeepsTheAuthenticatedShellAndCanBeRetried() {
+        String token = bootstrap.token();
         List<String> browserErrors = new ArrayList<>();
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
@@ -195,11 +246,15 @@ class ManagementConsoleLocalTokenIT {
             Page page = context.newPage();
             page.onPageError(browserErrors::add);
             assertEquals(200, page.navigate(origin() + "/ui/").status());
-            page.getByLabel("Bootstrap token").fill(bootstrap.token());
+            page.getByLabel("Bootstrap token").fill(token);
             page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Connect")).click();
             assertThat(page.getByRole(
                     AriaRole.HEADING,
                     new Page.GetByRoleOptions().setName("Overview"))).isVisible();
+            assertFalse(page.url().contains(token));
+            assertFalse(page.content().contains(token));
+            assertEquals(0, ((Number) page.evaluate("localStorage.length")).intValue());
+            assertEquals(0, ((Number) page.evaluate("sessionStorage.length")).intValue());
 
             failNextLogout.set(true);
             page.getByRole(

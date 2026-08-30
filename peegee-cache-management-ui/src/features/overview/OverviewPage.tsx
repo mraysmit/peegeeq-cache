@@ -1,59 +1,110 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 
-import type { OverviewClientPort } from '../../api/inspection-client';
-import type { Overview } from '../../api/inspection-schemas';
+import type { MonitoringClientPort, OverviewClientPort } from '../../api/inspection-client';
+import type {
+  ActivityPage,
+  DatabaseMonitoring,
+  Overview,
+  RuntimeMonitoring,
+} from '../../api/inspection-schemas';
 import { ManagementClientError } from '../../api/session-client';
 import { formatDisplayInstant } from '../../presentation/display-time';
+import { loadPreferences } from '../../state/preferences';
+import { OverviewMonitoring } from './OverviewMonitoring';
+import { SessionTrendChart, type SessionTrendPoint } from './SessionTrendChart';
 
 interface OverviewPageProps {
-  readonly client: OverviewClientPort;
+  readonly client: OverviewClientPort & MonitoringClientPort;
   readonly selectedSetupId?: string;
 }
 
 const valueTypes = ['STRING', 'JSON', 'LONG', 'BYTES'] as const;
 
+type KeyedValue<T> = { setupId: string; value: T };
+type MonitoringProblems = Partial<Record<'activity' | 'database' | 'runtime', ManagementClientError>>;
+
 export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
-  const [snapshotState, setSnapshotState] = useState<{ setupId: string; value: Overview }>();
+  const [snapshotState, setSnapshotState] = useState<KeyedValue<Overview>>();
+  const [databaseState, setDatabaseState] = useState<KeyedValue<DatabaseMonitoring>>();
+  const [runtimeState, setRuntimeState] = useState<KeyedValue<RuntimeMonitoring>>();
+  const [activityState, setActivityState] = useState<KeyedValue<ActivityPage>>();
+  const [trendState, setTrendState] = useState<{ setupId: string; points: SessionTrendPoint[] }>();
   const [loading, setLoading] = useState(selectedSetupId !== undefined);
   const [problemState, setProblemState] = useState<{ setupId: string; value: ManagementClientError }>();
+  const [monitoringProblems, setMonitoringProblems] = useState<MonitoringProblems>({});
   const snapshot = snapshotState !== undefined && snapshotState.setupId === selectedSetupId
     ? snapshotState.value
     : undefined;
+  const database = databaseState !== undefined && databaseState.setupId === selectedSetupId
+    ? databaseState.value
+    : undefined;
+  const runtime = runtimeState !== undefined && runtimeState.setupId === selectedSetupId
+    ? runtimeState.value
+    : undefined;
+  const activity = activityState !== undefined && activityState.setupId === selectedSetupId
+    ? activityState.value
+    : undefined;
+  const trend = trendState !== undefined && trendState.setupId === selectedSetupId
+    ? trendState.points
+    : [];
   const problem = problemState !== undefined && problemState.setupId === selectedSetupId
     ? problemState.value
     : undefined;
 
-  useEffect(() => {
-    if (selectedSetupId === undefined) return undefined;
-    const setupId = selectedSetupId;
-    let active = true;
-    void client.overview(setupId)
-      .then((loaded) => {
-        if (!active) return;
-        setSnapshotState({ setupId, value: loaded });
-        setProblemState(undefined);
-      })
-      .catch((failure: unknown) => {
-        if (active) setProblemState({ setupId, value: asClientError(failure) });
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
-  }, [client, selectedSetupId]);
+  const loadSnapshot = useCallback(async (
+    setupId: string,
+    isActive: () => boolean,
+  ) => {
+    const [overviewResult, databaseResult, runtimeResult, activityResult] = await Promise.allSettled([
+      client.overview(setupId),
+      client.databaseMonitoring(setupId),
+      client.runtimeMonitoring(setupId),
+      client.activity(setupId, { limit: 20 }),
+    ]);
+    if (!isActive()) return;
 
-  const refresh = async () => {
-    if (selectedSetupId === undefined) return;
-    const setupId = selectedSetupId;
-    setLoading(true);
-    try {
-      const loaded = await client.overview(setupId);
+    if (overviewResult.status === 'fulfilled') {
+      const loaded = overviewResult.value;
       setSnapshotState({ setupId, value: loaded });
       setProblemState(undefined);
-    } catch (failure: unknown) {
-      setProblemState({ setupId, value: asClientError(failure) });
-    } finally {
-      setLoading(false);
+      setTrendState((current) => appendTrend(current, setupId, loaded));
+    } else {
+      setProblemState({ setupId, value: asClientError(overviewResult.reason) });
+    }
+    applyMonitoringResult('database', databaseResult, setupId, setDatabaseState, setMonitoringProblems);
+    applyMonitoringResult('runtime', runtimeResult, setupId, setRuntimeState, setMonitoringProblems);
+    applyMonitoringResult('activity', activityResult, setupId, setActivityState, setMonitoringProblems);
+    setLoading(false);
+  }, [client]);
+
+  useEffect(() => {
+    if (selectedSetupId === undefined) return undefined;
+    let active = true;
+    const isActive = () => active;
+    const initialTimer = window.setTimeout(() => {
+      void loadSnapshot(selectedSetupId, isActive);
+    }, 0);
+    const timer = window.setInterval(() => {
+      void loadSnapshot(selectedSetupId, isActive);
+    }, loadPreferences().refreshSeconds * 1_000);
+    return () => {
+      active = false;
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
+  }, [loadSnapshot, selectedSetupId]);
+
+  const refresh = async () => {
+    if (selectedSetupId !== undefined) {
+      setLoading(true);
+      await loadSnapshot(selectedSetupId, () => true);
     }
   };
 
@@ -127,19 +178,25 @@ export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
             ))}
           </dl>
         </section>
-        <section className="overview-panel" aria-labelledby="activity-heading">
-          <p className="panel-scope">Management-server-local</p>
-          <h2 id="activity-heading">Management server activity</h2>
-          <p>Recent console activity will appear here when the live activity slice is enabled.</p>
-        </section>
       </div>
+
+      <SessionTrendChart points={trend} />
+
+      <OverviewMonitoring
+        activity={activity}
+        activityProblem={monitoringProblems.activity}
+        database={database}
+        databaseProblem={monitoringProblems.database}
+        runtime={runtime}
+        runtimeProblem={monitoringProblems.runtime}
+      />
 
       <section className="overview-section" aria-labelledby="namespace-overview-heading">
         <h2 id="namespace-overview-heading">Namespace overview</h2>
         {snapshot.topNamespaces.length === 0 ? (
           <p>No namespaces were observed in this database snapshot.</p>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll" tabIndex={0}>
             <table className="data-table">
               <thead><tr><th>Namespace</th><th>Live entries</th><th>Counters</th><th>Locks</th><th>Expired</th><th>Storage</th></tr></thead>
               <tbody>
@@ -227,4 +284,34 @@ function formatDuration(milliseconds: number): string {
 
 function titleCase(value: string): string {
   return value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ');
+}
+
+function appendTrend(
+  current: { setupId: string; points: SessionTrendPoint[] } | undefined,
+  setupId: string,
+  snapshot: Overview,
+): { setupId: string; points: SessionTrendPoint[] } {
+  const point: SessionTrendPoint = {
+    observedAt: snapshot.observedAt,
+    liveEntries: snapshot.totals.liveEntryCount,
+    expiredEntries: snapshot.totals.expiredEntryCount,
+  };
+  const points = current?.setupId === setupId ? current.points : [];
+  const withoutSameInstant = points.filter((existing) => existing.observedAt !== point.observedAt);
+  return { setupId, points: [...withoutSameInstant, point].slice(-30) };
+}
+
+function applyMonitoringResult<T>(
+  slot: keyof MonitoringProblems,
+  result: PromiseSettledResult<T>,
+  setupId: string,
+  setValue: (value: KeyedValue<T>) => void,
+  setProblems: Dispatch<SetStateAction<MonitoringProblems>>,
+): void {
+  if (result.status === 'fulfilled') {
+    setValue({ setupId, value: result.value });
+    setProblems((current) => ({ ...current, [slot]: undefined }));
+  } else {
+    setProblems((current) => ({ ...current, [slot]: asClientError(result.reason) }));
+  }
 }

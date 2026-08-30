@@ -100,7 +100,7 @@ public final class ManagementLiveEventHub implements SetupScopeLifecycle {
         ObjectNode data = json.createObjectNode();
         data.put("status", health.status().name());
         data.put("schemaReady", health.schemaReady());
-        data.put("latencyMillis", Long.toString(health.latencyMillis()));
+        data.put("latencyMillis", health.latencyMillis());
         data.put("checkedAt", health.checkedAt().toString());
         data.put("detail", health.detail());
         publish(setupId, "health.changed", data.toString());

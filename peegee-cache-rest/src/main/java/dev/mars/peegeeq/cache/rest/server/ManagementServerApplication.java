@@ -54,13 +54,26 @@ public final class ManagementServerApplication {
             TargetAddressResolver targetResolver,
             TrustProfileCertificateResolver trustProfiles,
             MeterRegistry meterRegistry) {
+        return start(
+                configuration, secrets, targetResolver, trustProfiles, meterRegistry,
+                Clock.systemUTC());
+    }
+
+    static Future<ManagementServerApplication> start(
+            ManagementServerConfiguration configuration,
+            ManagementSecretProvider secrets,
+            TargetAddressResolver targetResolver,
+            TrustProfileCertificateResolver trustProfiles,
+            MeterRegistry meterRegistry,
+            Clock clock) {
         Objects.requireNonNull(configuration, "configuration");
         Objects.requireNonNull(secrets, "secrets");
         Objects.requireNonNull(targetResolver, "targetResolver");
         Objects.requireNonNull(trustProfiles, "trustProfiles");
         Objects.requireNonNull(meterRegistry, "meterRegistry");
+        Objects.requireNonNull(clock, "clock");
 
-        ManagementRuntimeMonitor runtimeMonitor = new ManagementRuntimeMonitor();
+        ManagementRuntimeMonitor runtimeMonitor = new ManagementRuntimeMonitor(clock, System::nanoTime);
         MicrometerManagementTelemetry telemetry = new MicrometerManagementTelemetry(
                 meterRegistry, runtimeMonitor);
         ManagementAuditFingerprinter fingerprinter;
@@ -85,7 +98,8 @@ public final class ManagementServerApplication {
                         fingerprinter,
                         durable,
                         telemetry,
-                        runtimeMonitor))
+                        runtimeMonitor,
+                        clock))
                 .recover(failure -> vertx.close()
                         .recover(ignored -> Future.succeededFuture())
                         .compose(ignored -> Future.failedFuture(failure)));
@@ -114,9 +128,9 @@ public final class ManagementServerApplication {
             ManagementAuditFingerprinter fingerprinter,
             DurableManagementAuditSink durable,
             MicrometerManagementTelemetry telemetry,
-            ManagementRuntimeMonitor runtimeMonitor) {
+            ManagementRuntimeMonitor runtimeMonitor,
+            Clock clock) {
         try {
-            Clock clock = Clock.systemUTC();
             ManagementActivityStore activity = new ManagementActivityStore(ACTIVITY_CAPACITY);
             ManagementLiveEventHub liveEvents = new ManagementLiveEventHub(
                     clock, Duration.ofMinutes(5), ACTIVITY_CAPACITY);
@@ -131,7 +145,7 @@ public final class ManagementServerApplication {
                     fingerprinter,
                     clock,
                     () -> UUID.randomUUID().toString());
-            SetupRegistry registry = new SetupRegistry(runtimeFactory, secrets, runtimeMonitor);
+            SetupRegistry registry = new SetupRegistry(runtimeFactory, secrets, clock, runtimeMonitor);
             BrowserRequestSecurity browserSecurity = new BrowserRequestSecurity(
                     configuration.originPolicy());
             ManagementRateLimiter rateLimiter = defaultRateLimiter(clock, telemetry);
