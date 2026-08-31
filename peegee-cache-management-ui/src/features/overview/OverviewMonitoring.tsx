@@ -5,6 +5,7 @@ import type {
 } from '../../api/inspection-schemas';
 import type { ReactNode } from 'react';
 import type { ManagementClientError } from '../../api/session-client';
+import { formatDisplayBytes } from '../../presentation/display-bytes';
 import { formatDisplayInstant } from '../../presentation/display-time';
 
 interface OverviewMonitoringProps {
@@ -82,7 +83,7 @@ export function OverviewMonitoring({
               <Detail label="Pub/Sub subscriptions" value={formatDecimal(runtime.pubSubSubscriptions)} />
               <Detail label="SSE clients" value={formatDecimal(runtime.sseClients)} />
               <Detail label="WebSocket clients" value={formatDecimal(runtime.webSocketClients)} />
-              <Detail label="Retained payload" value={formatBytes(runtime.retainedPayloadBytes)} />
+              <Detail label="Retained payload" value={formatDisplayBytes(runtime.retainedPayloadBytes)} />
             </MonitoringPanel>
             <MonitoringPanel title="Management pool">
               <AvailableDetail label="Active" value={runtime.pool.active} />
@@ -100,7 +101,7 @@ export function OverviewMonitoring({
           </div>
         )}
         {runtime !== undefined && runtime.operations.length > 0 && (
-          <div className="table-scroll" tabIndex={0}>
+          <div aria-label="Operation telemetry" className="table-scroll" role="region" tabIndex={0}>
             <table className="data-table">
               <caption>Management-server-local operation aggregates</caption>
               <thead><tr><th>Operation</th><th>Status</th><th>Count</th><th>Errors</th><th>Total latency</th></tr></thead>
@@ -132,7 +133,7 @@ export function OverviewMonitoring({
         ) : activity.items.length === 0 ? (
           <p>No activity is retained for this setup in the current management process.</p>
         ) : (
-          <div className="table-scroll" tabIndex={0}>
+          <div aria-label="Recent activity events" className="table-scroll" role="region" tabIndex={0}>
             <table className="data-table">
               <thead><tr><th>Occurred</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Resource</th><th>Summary</th><th>Correlation</th></tr></thead>
               <tbody>{activity.items.slice(0, 20).map((event) => (
@@ -163,7 +164,7 @@ function AvailableDetail({ label, value, bytes = false }: { readonly label: stri
   if (value.availability === 'UNAVAILABLE') {
     return <Detail label={label} value="Unavailable" detail={value.reason} />;
   }
-  return <Detail label={label} value={bytes ? formatBytes(value.value) : formatDecimal(value.value)} />;
+  return <Detail label={label} value={bytes ? formatDisplayBytes(value.value) : formatDecimal(value.value)} />;
 }
 
 function Detail({ label, value, detail }: { readonly label: string; readonly value: string; readonly detail?: string }) {
@@ -184,21 +185,6 @@ function formatOptionalInstant(value: string | null): string {
 
 function formatDecimal(value: string): string {
   return BigInt(value).toLocaleString('en-US');
-}
-
-function formatBytes(value: string): string {
-  const bytes = BigInt(value);
-  if (bytes < 1_024n) return `${formatDecimal(value)} B`;
-  const units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB'];
-  let divisor = 1_024n;
-  let unit = 0;
-  while (bytes >= divisor * 1_024n && unit < units.length - 1) {
-    divisor *= 1_024n;
-    unit += 1;
-  }
-  const whole = bytes / divisor;
-  const tenths = (bytes % divisor) * 10n / divisor;
-  return `${whole}${whole < 10n && tenths > 0n ? `.${tenths}` : ''} ${units[unit]}`;
 }
 
 function formatDuration(value: number | bigint): string {

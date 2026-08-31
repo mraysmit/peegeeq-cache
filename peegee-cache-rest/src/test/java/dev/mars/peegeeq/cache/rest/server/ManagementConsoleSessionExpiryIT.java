@@ -88,6 +88,7 @@ class ManagementConsoleSessionExpiryIT {
     @Test
     void boundedSessionExpiresInTheShellAndCannotBeRestoredByReloadOrTokenReplay() {
         String token = bootstrap.token();
+        ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
         List<String> browserErrors = new ArrayList<>();
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));

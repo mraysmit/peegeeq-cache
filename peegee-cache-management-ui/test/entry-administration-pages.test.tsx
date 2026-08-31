@@ -60,6 +60,40 @@ function details(inspection: FakeInspection, administration: FakeAdministration)
 }
 
 describe('U5 entry administration pages', () => {
+  it('renders viewer entry inventory and details without mutation or reveal controls', async () => {
+    const inspection = new FakeInspection();
+    const administration = new FakeAdministration();
+    const inventory = render(<MemoryRouter><EntriesPage
+      administrationClient={administration} canOperate={false} client={inspection}
+      selectedNamespace="orders" selectedSetupId="primary-cache"
+    /></MemoryRouter>);
+    expect(await screen.findByRole('link', { name: metadata.key })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Entry results' })).toHaveAttribute('tabindex', '0');
+    expect(screen.queryByRole('button', { name: 'Create entry' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(`Select ${metadata.key}`)).not.toBeInTheDocument();
+    inventory.unmount();
+
+    render(<MemoryRouter><EntryDetailsPage
+      administrationClient={administration} canOperate={false} canReveal={false} client={inspection}
+      encodedKey={metadata.encodedKey} encodedNamespace={metadata.encodedNamespace}
+      selectedSetupId="primary-cache"
+    /></MemoryRouter>);
+    expect(await screen.findByText('Value hidden')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Edit entry' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reveal value' })).not.toBeInTheDocument();
+  });
+
+  it('keeps single-entry administration while a setup disables bulk deletion', async () => {
+    render(<MemoryRouter><EntriesPage
+      administrationClient={new FakeAdministration()} canBulkDelete={false} canOperate client={new FakeInspection()}
+      selectedNamespace="orders" selectedSetupId="primary-cache"
+    /></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: 'Create entry' })).toBeVisible();
+    expect(screen.queryByLabelText(`Select ${metadata.key}`)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Preview selected deletion' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Preview matching-filter deletion' })).not.toBeInTheDocument();
+  });
+
   it('defaults existing edits to observed-version CAS and presents the committed server result', async () => {
     const inspection = new FakeInspection();
     const administration = new FakeAdministration();

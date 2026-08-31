@@ -120,7 +120,13 @@ class SetupReadRoutesTest {
             JsonNode capabilities = JSON.readTree(get(
                     port, "/api/v1/setups/alpha/capabilities", "role=viewer", null).body());
             assertEquals("1", capabilities.path("migrationVersion").asText());
-            assertTrue(capabilities.path("capabilities").path("namespaceInspection").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("namespaceInspection").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("counterInspection").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("lockInspection").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("forcedLockRelease").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("entryValueReveal").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("lockOwnerReveal").asBoolean());
+            assertTrue(capabilities.path("capabilities").path("pubSubPayloadReveal").asBoolean());
             assertEquals(49, capabilities.path("limits").path("pubSubChannelMaxBytes").asInt());
             assertEquals(7_500, capabilities.path("limits").path("pubSubPayloadMaxBytes").asInt());
             assertEquals(10_485_760, capabilities.path("limits").path("maximumValueBytes").asInt());

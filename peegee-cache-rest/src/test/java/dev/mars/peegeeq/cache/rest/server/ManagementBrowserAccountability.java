@@ -16,7 +16,8 @@ final class ManagementBrowserAccountability {
     static List<String> violations(
             Method method,
             Set<String> knownOperations,
-            Set<String> mutationOperations,
+            Set<String> databaseMutationOperations,
+            Set<String> auditedOperations,
             Set<String> sensitiveOperations) {
         ManagementBrowserScenario scenario = method.getAnnotation(ManagementBrowserScenario.class);
         if (scenario == null) {
@@ -49,10 +50,13 @@ final class ManagementBrowserAccountability {
         if (!operations.isEmpty() && !evidence.contains(ManagementBrowserEvidence.HTTP_OPERATION)) {
             violations.add("operations declared without operation evidence");
         }
-        if (intersects(operations, mutationOperations)
-                && !evidence.contains(ManagementBrowserEvidence.DATABASE)
+        if (intersects(operations, databaseMutationOperations)
+                && !evidence.contains(ManagementBrowserEvidence.DATABASE)) {
+            violations.add("database mutation lacks database evidence");
+        }
+        if (intersects(operations, auditedOperations)
                 && !evidence.contains(ManagementBrowserEvidence.DURABLE_AUDIT)) {
-            violations.add("mutation lacks database or durable-audit evidence");
+            violations.add("audited operation lacks durable-audit evidence");
         }
         if (intersects(operations, sensitiveOperations)
                 && !evidence.contains(ManagementBrowserEvidence.SENSITIVE_STATE)) {

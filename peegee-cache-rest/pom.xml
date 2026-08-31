@@ -16,6 +16,14 @@
 
     <description>Vert.x management API and static-host packaging boundary.</description>
 
+    <properties>
+        <peegeeq.playwright.headless>true</peegeeq.playwright.headless>
+        <peegeeq.playwright.slowMo>0</peegeeq.playwright.slowMo>
+        <peegeeq.playwright.pauseBetweenScenarios>0</peegeeq.playwright.pauseBetweenScenarios>
+        <peegeeq.playwright.scenarios></peegeeq.playwright.scenarios>
+        <peegeeq.playwright.expectedScenarios>559</peegeeq.playwright.expectedScenarios>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>dev.mars</groupId>
@@ -69,6 +77,11 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -170,6 +183,13 @@
                 <configuration>
                     <systemPropertyVariables>
                         <peegeeq.runnable.artifact>${project.build.directory}/${project.build.finalName}-runnable.jar</peegeeq.runnable.artifact>
+                        <peegeeq.playwright.report>${project.build.directory}/playwright-evidence.html</peegeeq.playwright.report>
+                        <peegeeq.playwright.artifacts>${project.build.directory}/playwright-artifacts</peegeeq.playwright.artifacts>
+                        <peegeeq.playwright.headless>${peegeeq.playwright.headless}</peegeeq.playwright.headless>
+                        <peegeeq.playwright.slowMo>${peegeeq.playwright.slowMo}</peegeeq.playwright.slowMo>
+                        <peegeeq.playwright.pauseBetweenScenarios>${peegeeq.playwright.pauseBetweenScenarios}</peegeeq.playwright.pauseBetweenScenarios>
+                        <peegeeq.playwright.scenarios>${peegeeq.playwright.scenarios}</peegeeq.playwright.scenarios>
+                        <peegeeq.playwright.expectedScenarios>${peegeeq.playwright.expectedScenarios}</peegeeq.playwright.expectedScenarios>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>
@@ -181,6 +201,39 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>verify-playwright-evidence</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <available file="${project.build.directory}/playwright-evidence.html"
+                                           property="playwright.evidence.exists"/>
+                                <fail unless="playwright.evidence.exists"
+                                      message="The Playwright evidence report was not produced; report generation or sensitive-canary validation failed."/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>playwright-observe</id>
+            <properties>
+                <peegeeq.playwright.headless>false</peegeeq.playwright.headless>
+                <peegeeq.playwright.slowMo>350</peegeeq.playwright.slowMo>
+                <peegeeq.playwright.pauseBetweenScenarios>1500</peegeeq.playwright.pauseBetweenScenarios>
+            </properties>
+        </profile>
+    </profiles>
 </project>

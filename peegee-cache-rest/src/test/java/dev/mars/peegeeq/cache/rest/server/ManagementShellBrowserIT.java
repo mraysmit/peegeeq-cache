@@ -30,7 +30,7 @@ class ManagementShellBrowserIT {
             action = "Open the packaged overview route with a connected setup",
             expectedResult = "The overview identifies database scope and shows the seeded live-entry total",
             cleanup = "Close the isolated context and reset the worker schema",
-            operations = {"getOverview"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT,
+            operations = {"getOverview", "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT,
             ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE,
             ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
@@ -271,7 +271,7 @@ class ManagementShellBrowserIT {
             action = "Navigate to an unknown non-asset UI route",
             expectedResult = "The client router replaces it with Overview while retaining setup scope",
             cleanup = "Close the isolated context and reset the schema",
-            operations = {"getOverview"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT,
+            operations = {"getOverview", "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT,
             ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void unknownClientRouteRecoversToOverview() throws Exception {
@@ -293,6 +293,7 @@ class ManagementShellBrowserIT {
     @Test
     void missingAssetLikePathIsNotRewrittenToShell() throws Exception {
         prepared(context -> {
+            context.diagnostics().expectFailedResponse(404, "/ui/missing-bundle.js");
             Page page = context.page();
             assertEquals(404, page.navigate(context.origin() + "/ui/missing-bundle.js").status());
             assertThat(page.getByRole(AriaRole.HEADING,

@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 import { ManagementShell } from '@src/app/ManagementShell';
 import { SessionClient, type BrowserSession } from '@src/api/session-client';
+import type { SetupCapabilities } from '@src/api/setup-schemas';
+import { useSetupScopeStore } from '@src/state/scope-store';
 
 const session: BrowserSession = {
   user: 'alex',
@@ -52,5 +54,41 @@ describe('U1 authenticated management shell', () => {
     expect(container.firstElementChild).toHaveAttribute('data-theme', 'dark');
     expect(screen.getByRole('complementary', { name: 'Notifications' })).toBeVisible();
     expect(container).not.toHaveTextContent('csrf-token-with-at-least-thirty-two-characters');
+  });
+
+  it('blocks direct routes for capabilities the active setup does not provide', () => {
+    const capabilities: SetupCapabilities = {
+      migrationVersion: '1',
+      capabilities: {
+        namespaceInspection: true,
+        expiredEntryInspection: true,
+        counterInspection: false,
+        lockInspection: false,
+        forcedLockRelease: false,
+        bulkEntryDelete: true,
+        bulkCounterDelete: false,
+        pubSub: false,
+        databaseStatistics: true,
+        entryValueReveal: false,
+        lockOwnerReveal: false,
+        pubSubPayloadReveal: false,
+      },
+      limits: { maximumValueBytes: 1024, pubSubChannelMaxBytes: 49, pubSubPayloadMaxBytes: 7500 },
+    };
+    useSetupScopeStore.getState().select('primary-cache', capabilities);
+    try {
+      render(
+        <MemoryRouter initialEntries={['/counters']}>
+          <ManagementShell session={session} sessionClient={sessionClient} onLogout={() => Promise.resolve()} />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole('heading', { name: 'Counters unavailable' })).toBeVisible();
+      expect(screen.getByText(/does not provide counter inspection/u)).toBeVisible();
+      expect(screen.queryByRole('link', { name: 'Counters' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Create counter' })).not.toBeInTheDocument();
+    } finally {
+      useSetupScopeStore.getState().clear();
+    }
   });
 });

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -23,8 +24,11 @@ import java.time.ZoneId;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -53,6 +57,7 @@ class ManagementConsoleProductJourneysIT {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DATABASE,
+                    ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.SENSITIVE_STATE,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
@@ -64,6 +69,7 @@ class ManagementConsoleProductJourneysIT {
             })
     void setupTestRegisterInspectDetachReconnectAndForgetUsesTheRealDatabase() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), false, context -> {
+            context.diagnostics().expectFailedResponse(403, "/api/v1/setups/actions/test");
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
@@ -135,7 +141,7 @@ class ManagementConsoleProductJourneysIT {
             action = "Select a setup and namespace, reload the page, and inspect capability-driven navigation",
             expectedResult = "Valid scope is restored and only server-advertised feature navigation is available",
             cleanup = "Clear the isolated context scope and close all fixture resources",
-            operations = {"getSetupCapabilities", "getNamespace"},
+            operations = {"getSetupCapabilities", "listNamespaces", "getNamespace"},
             evidence = {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
@@ -254,13 +260,14 @@ class ManagementConsoleProductJourneysIT {
             expectedResult = "The UI renders exact values and outcomes while PostgreSQL records each committed transition",
             cleanup = "Hide revealed values, delete scenario entries, and close all fixture resources",
             operations = {
-                    "listEntries", "getEntry", "revealEntryValue", "setEntry",
+                    "listNamespaces", "getNamespace", "listEntries", "getEntry", "revealEntryValue", "setEntry",
                     "deleteEntry", "expireEntry", "persistEntry", "touchEntry"
             },
             evidence = {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DATABASE,
+                    ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.SENSITIVE_STATE,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
@@ -272,6 +279,8 @@ class ManagementConsoleProductJourneysIT {
             })
     void entryCreateBrowseRevealEditExpirePersistTouchAndDeleteIsVersionChecked() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
+            context.diagnostics().expectFailedResponse(412,
+                    "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
@@ -368,11 +377,13 @@ class ManagementConsoleProductJourneysIT {
             action = "Preview bulk deletion, change a target, execute, replay, and execute an expired preview",
             expectedResult = "Only valid targets are deleted and stale, replayed, and expired previews receive exact outcomes",
             cleanup = "Remove remaining seeded entries and close clock, browser, server, and PostgreSQL resources",
-            operations = {"previewEntryBulkDelete", "executeEntryBulkDelete"},
+            operations = {"listNamespaces", "getNamespace", "listEntries", "setEntry",
+                    "previewEntryBulkDelete", "executeEntryBulkDelete"},
             evidence = {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DATABASE,
+                    ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
     @ManagementBrowserJourney(
@@ -380,7 +391,15 @@ class ManagementConsoleProductJourneysIT {
             operations = {"previewEntryBulkDelete", "executeEntryBulkDelete"})
     void bulkEntryDeletionReportsStaleTargetsAndCannotBeReplayed() throws Exception {
         MutableClock clock = new MutableClock(Instant.now(), ZoneId.of("UTC"));
-        ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, clock, context -> {
+        List<String> runtimeOperations = List.of(
+                "listNamespaces", "getNamespace", "listEntries", "setEntry",
+                "previewEntryBulkDelete", "executeEntryBulkDelete");
+        ManagementConsolePostgresFixture.run(
+                temporaryDirectory, POSTGRES.postgres(), true, clock, runtimeOperations, context -> {
+            context.diagnostics().expectFailedResponse(409,
+                    "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute");
+            context.diagnostics().expectFailedResponse(409,
+                    "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute");
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
@@ -519,6 +538,7 @@ class ManagementConsoleProductJourneysIT {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DATABASE,
+                    ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
     @ManagementBrowserJourney(
@@ -530,6 +550,8 @@ class ManagementConsoleProductJourneysIT {
             })
     void countersSupportExactSigned64BitLifecycleAndBulkDeletion() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
+            context.diagnostics().expectFailedResponse(409,
+                    "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/increment");
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
@@ -619,6 +641,7 @@ class ManagementConsoleProductJourneysIT {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DATABASE,
+                    ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.SENSITIVE_STATE,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
@@ -627,6 +650,8 @@ class ManagementConsoleProductJourneysIT {
             operations = {"listLocks", "getLock", "revealLockOwner", "forceReleaseLock"})
     void lockOwnerRemainsMaskedAndStaleReleaseIsRejectedBeforeCurrentRelease() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
+            context.diagnostics().expectFailedResponse(412,
+                    "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/force-release");
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
@@ -690,6 +715,7 @@ class ManagementConsoleProductJourneysIT {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DATABASE,
+                    ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.SENSITIVE_STATE,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
@@ -704,6 +730,16 @@ class ManagementConsoleProductJourneysIT {
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
+            AtomicReference<String> resumedFrom = new AtomicReference<>();
+            page.onRequest(request -> {
+                String path = URI.create(request.url()).getPath();
+                if (path.contains("/pubsub/subscriptions/") && path.endsWith("/stream")) {
+                    String lastEventId = request.headers().get("last-event-id");
+                    if (lastEventId != null && !lastEventId.isBlank()) {
+                        resumedFrom.set(lastEventId);
+                    }
+                }
+            });
             page.getByRole(AriaRole.LINK,
                     new Page.GetByRoleOptions().setName("Pub/Sub").setExact(true)).click();
             page.getByLabel("Channel", new Page.GetByLabelOptions().setExact(true))
@@ -735,6 +771,8 @@ class ManagementConsoleProductJourneysIT {
             context.browserContext().setOffline(false);
             assertThat(page.getByText("Non-durable · CONNECTED · bounded to 20 messages",
                     new Page.GetByTextOptions().setExact(true))).isVisible();
+            assertFalse(resumedFrom.get() == null || resumedFrom.get().isBlank(),
+                    "Pub/Sub reconnect must resume with Last-Event-ID");
             assertThat(page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Reveal payload"))).hasCount(2);
             page.getByRole(AriaRole.BUTTON,
@@ -757,26 +795,50 @@ class ManagementConsoleProductJourneysIT {
             action = "Open live transports, interrupt them, restore connectivity, and observe resumed events",
             expectedResult = "The shell exposes interruption, reconnects without reload, and deduplicates resumed events",
             cleanup = "Close SSE, WebSocket, browser, server, and PostgreSQL fixture resources",
-            operations = {"streamMetrics", "monitoringWebSocket"},
+            operations = {"getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity",
+                    "streamMetrics", "monitoringWebSocket", "detachSetup", "connectSetup",
+                    "publishPubSubMessage"},
             evidence = {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
+                    ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
     @ManagementBrowserJourney(
             value = "live-recovery",
             operations = {"streamMetrics", "monitoringWebSocket"})
     void liveTransportsExposeInterruptionAndRecoverWithoutReloadingThePage() throws Exception {
-        ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
+        List<String> runtimeOperations = List.of(
+                "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity",
+                "streamMetrics", "monitoringWebSocket", "detachSetup",
+                "connectSetup", "publishPubSubMessage");
+        ManagementConsolePostgresFixture.run(
+                temporaryDirectory, POSTGRES.postgres(), true, runtimeOperations, context -> {
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
+            AtomicReference<String> metricsResumeId = new AtomicReference<>();
+            AtomicInteger runtimeRequests = new AtomicInteger();
+            page.onRequest(request -> {
+                String path = URI.create(request.url()).getPath();
+                if (path.endsWith("/monitoring/runtime")) {
+                    runtimeRequests.incrementAndGet();
+                }
+                if (path.endsWith("/sse/metrics")) {
+                    String lastEventId = request.headers().get("last-event-id");
+                    if (lastEventId != null && !lastEventId.isBlank()) {
+                        metricsResumeId.set(lastEventId);
+                    }
+                }
+            });
             page.getByLabel("Open notifications").click();
             assertThat(page.getByText("Live", new Page.GetByTextOptions().setExact(true))).isVisible();
             page.getByRole(AriaRole.LINK,
                     new Page.GetByRoleOptions().setName("Monitoring").setExact(true)).click();
             assertThat(page.getByText("Live metrics connected",
                     new Page.GetByTextOptions().setExact(true))).isVisible();
+            page.waitForCondition(() -> runtimeRequests.get() >= 2,
+                    new Page.WaitForConditionOptions().setTimeout(20_000));
             assertEquals(204, postSetupAction(page, "detach"));
             assertThat(page.getByText("Live metrics interrupted; displayed values may be stale",
                     new Page.GetByTextOptions().setExact(true))).isVisible();
@@ -785,6 +847,9 @@ class ManagementConsoleProductJourneysIT {
             assertEquals(200, postSetupAction(page, "connect"));
             assertThat(page.getByText("Live metrics connected",
                     new Page.GetByTextOptions().setExact(true))).isVisible();
+            page.waitForCondition(
+                    () -> metricsResumeId.get() != null && !metricsResumeId.get().isBlank(),
+                    new Page.WaitForConditionOptions().setTimeout(10_000));
             assertThat(page.getByText("Live", new Page.GetByTextOptions().setExact(true))).isVisible();
             assertEquals(200, postJson(page,
                     "/api/v1/setups/browser-postgres/pubsub/publish",
@@ -803,8 +868,12 @@ class ManagementConsoleProductJourneysIT {
             action = "Navigate populated routes by keyboard, resize the viewport, and exercise dialog focus behavior",
             expectedResult = "Primary content remains reachable and dialog focus is trapped, escaped, and restored",
             cleanup = "Close dialogs, restore context state, and close all browser and fixture resources",
+            operations = {"getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity",
+                    "listNamespaces", "getNamespace", "listEntries", "getEntry", "listCounters",
+                    "listLocks", "streamMetrics"},
             evidence = {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
+                    ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
     @ManagementBrowserJourney(
@@ -816,7 +885,7 @@ class ManagementConsoleProductJourneysIT {
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
 
-            Map<String, String> primaryRoutes = Map.ofEntries(
+            List<Map.Entry<String, String>> primaryRoutes = List.of(
                     Map.entry("/ui/", "Overview"),
                     Map.entry("/ui/setups", "Setups"),
                     Map.entry("/ui/namespaces", "Namespaces"),
@@ -830,11 +899,15 @@ class ManagementConsoleProductJourneysIT {
                     Map.entry("/ui/pubsub", "Pub/Sub"),
                     Map.entry("/ui/monitoring", "Monitoring"),
                     Map.entry("/ui/settings", "Settings"));
-            for (Map.Entry<String, String> route : primaryRoutes.entrySet()) {
+            for (Map.Entry<String, String> route : primaryRoutes) {
                 assertEquals(200, page.navigate(context.origin() + route.getKey()).status());
                 assertThat(page.getByRole(AriaRole.HEADING,
                         new Page.GetByRoleOptions().setName(route.getValue()).setExact(true)))
                         .isVisible();
+                if (route.getKey().equals("/ui/keys")) {
+                    assertThat(page.getByRole(AriaRole.LINK,
+                            new Page.GetByRoleOptions().setName("customer:1").setExact(true))).isVisible();
+                }
                 for (int[] viewport : List.of(new int[]{390, 844}, new int[]{1440, 900})) {
                     page.setViewportSize(viewport[0], viewport[1]);
                     assertViewportSurfacesContained(page, route.getKey() + " at "
@@ -882,8 +955,10 @@ class ManagementConsoleProductJourneysIT {
             action = "Reveal a value and scan DOM, URL, history, storage, console, failures, and durable audit data",
             expectedResult = "Sensitive canaries appear only in the authorized transient control and nowhere persistent",
             cleanup = "Hide the revealed value, clear sensitive DOM state, and close all fixture resources",
+            operations = {"listNamespaces", "getNamespace", "listEntries", "getEntry", "revealEntryValue"},
             evidence = {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
+                    ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.SENSITIVE_STATE,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
@@ -892,12 +967,17 @@ class ManagementConsoleProductJourneysIT {
             value = "cross-surface-leakage",
             operations = {})
     void revealedValuesAndCredentialsAreAbsentFromPersistentBrowserAndAuditSurfaces() throws Exception {
-        ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
+        ManagementConsolePostgresFixture.run(
+                temporaryDirectory, POSTGRES.postgres(), true,
+                List.of("listNamespaces", "getNamespace", "listEntries", "getEntry", "revealEntryValue"),
+                context -> {
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             openEntry(page, "customer:1");
             page.getByLabel("Reveal reason (optional)").fill("leakage verification");
+            page.evaluate("document.activeElement.blur()");
+            byte[] maskedPanel = page.locator(".value-panel").screenshot();
             page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Reveal value")).click();
             assertThat(page.getByText("stored-value", new Page.GetByTextOptions().setExact(true)))
@@ -923,13 +1003,9 @@ class ManagementConsoleProductJourneysIT {
             assertFalse(accessibilityTree.contains(ManagementConsolePostgresFixture.DATABASE_PASSWORD));
             assertFalse(accessibilityTree.contains(context.bootstrapToken()));
 
-            Path screenshot = temporaryDirectory.resolve("cross-surface-clean.png");
-            page.screenshot(new Page.ScreenshotOptions().setFullPage(true).setPath(screenshot));
-            String screenshotBytes = new String(Files.readAllBytes(screenshot),
-                    StandardCharsets.ISO_8859_1);
-            assertFalse(screenshotBytes.contains("stored-value"));
-            assertFalse(screenshotBytes.contains(ManagementConsolePostgresFixture.DATABASE_PASSWORD));
-            assertFalse(screenshotBytes.contains(context.bootstrapToken()));
+            page.evaluate("document.activeElement.blur()");
+            assertArrayEquals(maskedPanel, page.locator(".value-panel").screenshot(),
+                    "Sensitive panel must return to its exact masked visual state");
 
             String audit = Files.readString(context.auditPath());
             assertFalse(audit.contains("stored-value"));
@@ -955,7 +1031,9 @@ class ManagementConsoleProductJourneysIT {
             value = "deterministic-shutdown",
             operations = {})
     void activeBrowserTransportsAreClosedAndResourceGaugesReturnToZero() throws Exception {
-        ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
+        ManagementConsolePostgresFixture.run(
+                temporaryDirectory, POSTGRES.postgres(), true,
+                List.of("createPubSubSubscription", "streamPubSubMessages"), context -> {
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();

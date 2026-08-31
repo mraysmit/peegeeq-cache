@@ -49,7 +49,9 @@ const connectionTest = {
     bulkCounterDelete: true,
     pubSub: true,
     databaseStatistics: true,
-    sensitiveValueReveal: true,
+    entryValueReveal: true,
+    lockOwnerReveal: true,
+    pubSubPayloadReveal: true,
   },
   limits: {
     pubSubChannelMaxBytes: 63,

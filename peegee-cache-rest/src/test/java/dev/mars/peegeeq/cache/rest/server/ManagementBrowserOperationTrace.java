@@ -3,11 +3,13 @@ package dev.mars.peegeeq.cache.rest.server;
 import com.microsoft.playwright.Page;
 
 import java.net.URI;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
 import static java.util.Map.entry;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Derives management operation IDs from requests observed by the real browser. */
@@ -79,11 +81,22 @@ final class ManagementBrowserOperationTrace {
         }
     }
 
+    void assertObservedExactly(Collection<String> expectedOperations, Set<String> allowedOperations) {
+        expectedOperations.forEach(operation -> assertTrue(observed.contains(operation),
+                () -> "Browser did not invoke declared operation " + operation + "; observed=" + observed));
+        Set<String> unexpected = new LinkedHashSet<>(observed);
+        unexpected.removeAll(expectedOperations);
+        unexpected.removeAll(allowedOperations);
+        assertEquals(Set.of(), unexpected,
+                () -> "Browser invoked undeclared feature operations " + unexpected
+                        + "; declared=" + expectedOperations + "; allowed fixture traffic=" + allowedOperations);
+    }
+
     Set<String> observed() {
         return Set.copyOf(observed);
     }
 
-    private void observe(String method, String path) {
+    void observe(String method, String path) {
         String operation = OPERATIONS.get(method + " " + ManagementRouteTemplate.resolve(path));
         if (operation != null) {
             observed.add(operation);

@@ -127,6 +127,7 @@ describe('U3 database overview page', () => {
       overview.observedAt,
     );
     expect(screen.getByRole('heading', { name: 'Namespace overview' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Namespace overview results' })).toHaveAttribute('tabindex', '0');
     expect(screen.getByText('客户/订单')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Database storage' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Database connections' })).toBeVisible();

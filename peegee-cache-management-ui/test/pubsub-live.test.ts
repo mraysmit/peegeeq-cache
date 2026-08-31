@@ -57,4 +57,5 @@ describe('U7 pub/sub protocol and SSE framing', () => {
       vi.unstubAllGlobals();
     }
   });
+
 });

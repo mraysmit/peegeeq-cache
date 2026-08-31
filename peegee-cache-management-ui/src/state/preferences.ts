@@ -8,6 +8,7 @@ const schema = z.object({
 }).strict();
 export type Preferences = z.infer<typeof schema>;
 export const defaultPreferences: Preferences = { theme: 'light', timezone: 'LOCAL', byteUnits: 'BINARY', refreshSeconds: 15, autoHideSeconds: 60 };
+export const PREFERENCES_CHANGED_EVENT = 'peegeeq:preferences-changed';
 
 export function loadPreferences(): Preferences {
   try {
@@ -17,5 +18,8 @@ export function loadPreferences(): Preferences {
     const parsed = schema.safeParse(allowlisted); return parsed.success ? parsed.data : defaultPreferences;
   } catch { return defaultPreferences; }
 }
-export function savePreferences(preferences: Preferences): void { globalThis.localStorage?.setItem(key, JSON.stringify(schema.parse(preferences))); }
+export function savePreferences(preferences: Preferences): void {
+  globalThis.localStorage?.setItem(key, JSON.stringify(schema.parse(preferences)));
+  globalThis.window?.dispatchEvent(new globalThis.Event(PREFERENCES_CHANGED_EVENT));
+}
 export function effectiveAutoHideMillis(serverMaximumMillis: number): number { return Math.min(serverMaximumMillis, loadPreferences().autoHideSeconds * 1_000); }

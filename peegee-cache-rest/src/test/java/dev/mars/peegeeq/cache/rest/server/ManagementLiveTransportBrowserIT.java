@@ -71,7 +71,7 @@ class ManagementLiveTransportBrowserIT {
         if (index < 9 || index == 19) {
             return List.of("monitoringWebSocket");
         }
-        if (index < 12) {
+        if (index < 11) {
             return List.of("getDatabaseMonitoring", "getRuntimeMonitoring", "streamMetrics", "listActivity");
         }
         return List.of(
@@ -83,7 +83,7 @@ class ManagementLiveTransportBrowserIT {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("scenarios")
+    @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#liveTransportScenarios")
     void liveTransportScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 1;
         ManagementConsolePostgresFixture.run(

@@ -105,7 +105,7 @@ final class ManagementBrowserEvidenceWriter {
     private static void scenarios(StringBuilder out, ManagementBrowserEvidenceReport report) {
         out.append("<section><h2>Scenario evidence</h2><div class=\"table-wrap\"><table>")
                 .append("<thead><tr><th>ID and behavior</th><th>Area / risk</th><th>Status</th>")
-                .append("<th>Duration</th><th>Requirement</th><th>Observed operations</th>")
+                .append("<th>Duration</th><th>Requirement</th><th>Scenario operations</th>")
                 .append("<th>Evidence</th><th>Failure</th></tr></thead><tbody>");
         report.scenarios().stream()
                 .sorted(Comparator.comparing(ManagementBrowserEvidenceReport.ScenarioResult::id))

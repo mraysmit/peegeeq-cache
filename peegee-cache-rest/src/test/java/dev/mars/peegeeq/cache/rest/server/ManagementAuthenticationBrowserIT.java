@@ -63,6 +63,7 @@ class ManagementAuthenticationBrowserIT {
     @BeforeEach
     void resetSession(TestInfo testInfo) {
         bootstrapToken = sessions.regenerateBootstrapToken().token();
+        ManagementBrowserEvidenceListener.registerSensitiveCanary(bootstrapToken);
         currentScenario = testInfo.getTestMethod().orElseThrow()
                 .getAnnotation(ManagementBrowserScenario.class);
         assertNotNull(currentScenario);
@@ -542,6 +543,7 @@ class ManagementAuthenticationBrowserIT {
         }
 
         private Page submit(String token) {
+            ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
             openLogin("/ui/");
             page.getByLabel("Bootstrap token").fill(token);
             page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Connect")).click();
@@ -549,6 +551,7 @@ class ManagementAuthenticationBrowserIT {
         }
 
         private Page authenticate(String path) {
+            ManagementBrowserEvidenceListener.registerSensitiveCanary(bootstrapToken);
             openLogin(path);
             page.getByLabel("Bootstrap token").fill(bootstrapToken);
             page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Connect")).click();

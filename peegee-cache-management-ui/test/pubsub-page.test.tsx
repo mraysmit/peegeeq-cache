@@ -22,6 +22,18 @@ class StreamFake implements PubSubStreamPort {
 }
 
 describe('U7 Pub/Sub page', () => {
+  it('allows viewer subscription metadata while withholding publish and reveal operations', async () => {
+    const stream = new StreamFake(); const user = userEvent.setup();
+    render(<PubSubPage canOperate={false} canReveal={false} client={new PubSubFake()} maximumChannelBytes={63} maximumPayloadBytes={7_500} selectedSetupId="primary-cache" stream={stream} />);
+    expect(screen.queryByRole('heading', { name: 'Publish' })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Channel'), 'orders');
+    await user.click(screen.getByRole('button', { name: 'Start subscription' }));
+    stream.message?.({ messageId: 'm1', channel: 'orders', contentType: null, payloadBytes: 14, receivedAt: '2026-08-29T10:01:00Z', payloadState: 'MASKED' });
+    expect(await screen.findByText('Masked')).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Retained Pub/Sub messages' })).toHaveAttribute('tabindex', '0');
+    expect(screen.queryByRole('button', { name: /Reveal payload/u })).not.toBeInTheDocument();
+  });
+
   it('labels subscriptions non-durable, keeps metadata masked, and reveals only on demand', async () => {
     const client = new PubSubFake(); const stream = new StreamFake(); const user = userEvent.setup();
     render(<PubSubPage canOperate canReveal client={client} maximumChannelBytes={63} maximumPayloadBytes={7_500} selectedSetupId="primary-cache" stream={stream} />);

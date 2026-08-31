@@ -9,7 +9,7 @@
 
 This document is the execution authority for Phase 8.3 of the PeeGeeQ Cache roadmap. It turns the approved management UI design into ordered, test-first slices with objective entry gates, red/green evidence, module ownership, and completion criteria.
 
-The follow-on expansion from the completed 19-test real-browser acceptance backbone to 540 distinct Playwright scenarios is tracked separately in [PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md). That assurance plan does not reopen the completed U0-U10 product implementation boundary.
+The follow-on expansion from the completed 19-test real-browser acceptance backbone to 557 distinct Playwright scenarios is tracked separately in [PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md). That assurance plan does not reopen the completed U0-U10 product implementation boundary.
 
 The management backend is already complete. This plan does not reopen backend phases M0-M10 or weaken their security, audit, lifecycle, compatibility, packaging, and observability guarantees. Backend changes are allowed only when a production-console integration test exposes a missing browser-facing behavior, such as static asset delivery. Every such change begins with a focused failing Java or full-browser test and retains the complete backend regression suite.
 
@@ -576,6 +576,14 @@ Acceptance increment completed 30 August 2026:
 - the product journeys cover trusted-proxy identity/role rotation and bounded expiry; setup/scope; real namespace cursor round trips and exported JSON content; typed entry read/reveal/clipboard/CAS/TTL/persist/touch; bulk stale conflict, deterministic expiry, deletion, and replay rejection; exact 64-bit counter behavior; lock conflict recovery; Pub/Sub offline retention/resume/reveal/stop; live interruption/recovery/deduplication; axe and viewport containment across every primary route plus six populated-workflow viewports; cross-surface leakage; packaged response headers; and deterministic shutdown;
 - the complete 11-module reactor is green against PostgreSQL 15.17, 16.13, 17.11, and 18.3 after the browser-suite replacement.
 
+Post-completion assurance update, 31 August 2026:
+
+- saved refresh, concealment, timezone, byte-unit, role, and granular capability behavior is now applied and covered rather than merely persisted or statically rendered;
+- browser diagnostics reject unexpected failed responses, missing/undeclared operations, missing durable audit actions, browser errors, and leaked resources; mutation journeys also assert committed PostgreSQL state;
+- the expanded catalogue contains exactly 557 independently identified Playwright scenarios and passes cumulatively on PostgreSQL 18.3 with zero failures, errors, or skips;
+- the current root reactor passes 547 Surefire and 559 Failsafe tests, and the rebuilt UI passes 123 Vitest tests, type checking, lint, and production packaging; and
+- the PostgreSQL 15-18 evidence above remains the U10 pre-expansion matrix. PostgreSQL 15-17 reruns of the expanded 557-scenario catalogue remain release-validation work.
+
 RED inventory covers missing production resources, wrong asset base, duplicate fallback resources, source maps, development endpoints, non-deterministic output, cache headers, runnable startup, deep links, all required full-browser journeys, and cleanup.
 
 Implementation:
@@ -628,7 +636,7 @@ The final suite contains independent, named journeys for:
 | U7 Pub/Sub/live | COMPLETE | Bounded Pub/Sub/SSE/WebSocket clients, strict event schemas, lifecycle tests, server resource/recovery evidence, and packaged real publish/receive/recovery are green |
 | U8 Monitoring/settings | COMPLETE | Scoped monitoring, live metrics, bounded activity, harmless preferences, operational states, and packaged live/settings acceptance are green |
 | U9 Hardening | COMPLETE | Axe, keyboard/focus, six-viewport responsive, privacy, injection, screenshot, and packaged cross-surface leakage acceptance are green |
-| U10 Final acceptance | COMPLETE | Deterministic artifacts; 16 named browser journeys with executable ownership/runtime evidence for all 50 operations; full reactor (513 Surefire, 21 Failsafe, 112 Vitest); and PostgreSQL 15.17, 16.13, 17.11, and 18.3 matrix are green |
+| U10 Final acceptance | COMPLETE | Deterministic artifacts; 16 named browser journeys with executable ownership/runtime evidence for all 50 operations; expanded 557-scenario PostgreSQL 18.3 gate; current full reactor (547 Surefire, 559 Failsafe, 123 Vitest); and the pre-expansion PostgreSQL 15.17, 16.13, 17.11, and 18.3 matrix are green |
 
 Status changes occur only in the same change set as their evidence. `IN PROGRESS` means at least one valid RED test exists for the phase. `COMPLETE` means every exit criterion and owning regression gate is green. Planning or production code alone cannot close a phase.
 

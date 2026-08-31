@@ -15,6 +15,7 @@ import type {
   SetupSummary,
 } from '../../api/setup-schemas';
 import { Modal } from '../../components/Modal';
+import { formatDisplayBytes } from '../../presentation/display-bytes';
 import { formatDisplayInstant } from '../../presentation/display-time';
 
 interface SetupsPageProps {
@@ -273,7 +274,7 @@ export function SetupsPage({
           )}
         </div>
       ) : setups.length > 0 ? (
-        <div className="table-scroll">
+        <div aria-label="Registered setups" className="table-scroll" role="region" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -473,9 +474,9 @@ function SetupDetailsView({ details, health, capabilities }: {
           ))}
         </ul>
         <dl className="details-list details-list--limits">
-          <div><dt>Maximum value</dt><dd>{formatBytes(capabilities.limits.maximumValueBytes)}</dd></div>
-          <div><dt>Pub/Sub payload</dt><dd>{formatBytes(capabilities.limits.pubSubPayloadMaxBytes)}</dd></div>
-          <div><dt>Pub/Sub channel</dt><dd>{formatBytes(capabilities.limits.pubSubChannelMaxBytes)}</dd></div>
+          <div><dt>Maximum value</dt><dd>{formatDisplayBytes(capabilities.limits.maximumValueBytes)}</dd></div>
+          <div><dt>Pub/Sub payload</dt><dd>{formatDisplayBytes(capabilities.limits.pubSubPayloadMaxBytes)}</dd></div>
+          <div><dt>Pub/Sub channel</dt><dd>{formatDisplayBytes(capabilities.limits.pubSubChannelMaxBytes)}</dd></div>
         </dl>
       </section>
     </div>
@@ -507,10 +508,6 @@ function humanizeCapability(value: string): string {
     .replace(/([a-z])([A-Z])/gu, '$1 $2')
     .toLowerCase()
     .replace(/^./u, (letter) => letter.toUpperCase());
-}
-
-function formatBytes(value: number): string {
-  return `${value.toLocaleString('en-US')} bytes`;
 }
 
 function actionTitle(action: ConfirmedAction): string {

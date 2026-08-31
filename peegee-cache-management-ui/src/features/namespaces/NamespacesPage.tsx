@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { NamespaceClientPort, NamespaceQuery } from '../../api/inspection-client';
 import type { NamespacePage } from '../../api/inspection-schemas';
 import { ManagementClientError } from '../../api/session-client';
+import { formatDisplayBytes } from '../../presentation/display-bytes';
 import { formatDisplayInstant } from '../../presentation/display-time';
 
 interface NamespacesPageProps {
@@ -103,7 +104,7 @@ export function NamespacesPage({ client, selectedSetupId }: NamespacesPageProps)
       {page === undefined && loading && <p aria-busy="true">Loading namespaces…</p>}
       {page !== undefined && page.items.length === 0 && <div className="empty-state"><h2>No namespaces matched</h2><p>Change the current prefix or status filter.</p></div>}
       {page !== undefined && page.items.length > 0 && (
-        <div className="table-scroll"><table className="data-table"><thead><tr><th>Namespace</th><th>Live entries</th><th>Counters</th><th>Locks</th><th>Expiring</th><th>Expired</th><th>Storage</th><th>Observed</th></tr></thead><tbody>{page.items.map((item) => <tr key={item.encodedNamespace}><td><Link to={`/namespaces/${item.encodedNamespace}`}>{item.namespace}</Link></td><td>{formatDecimal(item.liveEntryCount)}</td><td>{formatDecimal(item.liveCounterCount)}</td><td>{formatDecimal(item.activeLockCount)}</td><td>{formatDecimal(item.expiringEntryCount)}</td><td>{formatDecimal(item.expiredEntryCount)}</td><td>{formatBytes(item.estimatedStorageBytes)}</td><td>{formatDisplayInstant(item.observedAt)}</td></tr>)}</tbody></table></div>
+        <div aria-label="Namespace results" className="table-scroll" role="region" tabIndex={0}><table className="data-table"><thead><tr><th>Namespace</th><th>Live entries</th><th>Counters</th><th>Locks</th><th>Expiring</th><th>Expired</th><th>Storage</th><th>Observed</th></tr></thead><tbody>{page.items.map((item) => <tr key={item.encodedNamespace}><td><Link to={`/namespaces/${item.encodedNamespace}`}>{item.namespace}</Link></td><td>{formatDecimal(item.liveEntryCount)}</td><td>{formatDecimal(item.liveCounterCount)}</td><td>{formatDecimal(item.activeLockCount)}</td><td>{formatDecimal(item.expiringEntryCount)}</td><td>{formatDecimal(item.expiredEntryCount)}</td><td>{formatDisplayBytes(item.estimatedStorageBytes)}</td><td>{formatDisplayInstant(item.observedAt)}</td></tr>)}</tbody></table></div>
       )}
       {page !== undefined && <nav className="pagination" aria-label="Namespace pages"><button className="button button--secondary" disabled={history.length === 0 || loading} onClick={previous} type="button">Previous page</button><span>Page {history.length + 1}</span><button className="button button--secondary" disabled={!page.hasMore || loading} onClick={next} type="button">Next page</button></nav>}
     </NamespaceWorkspace>
@@ -129,4 +130,3 @@ function asClientError(failure: unknown): ManagementClientError {
 }
 
 function formatDecimal(value: string): string { return BigInt(value).toLocaleString('en-US'); }
-function formatBytes(value: string): string { return `${formatDecimal(value)} B`; }

@@ -121,7 +121,9 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
         features.put("bulkCounterDelete", capabilities.features().bulkCounterDelete());
         features.put("pubSub", capabilities.features().pubSub());
         features.put("databaseStatistics", capabilities.features().databaseStatistics());
-        features.put("sensitiveValueReveal", capabilities.features().sensitiveValueReveal());
+        features.put("entryValueReveal", capabilities.features().entryValueReveal());
+        features.put("lockOwnerReveal", capabilities.features().lockOwnerReveal());
+        features.put("pubSubPayloadReveal", capabilities.features().pubSubPayloadReveal());
         ObjectNode limits = node.putObject("limits");
         limits.put("pubSubChannelMaxBytes", capabilities.limits().pubSubChannelMaxBytes());
         limits.put("pubSubPayloadMaxBytes", capabilities.limits().pubSubPayloadMaxBytes());

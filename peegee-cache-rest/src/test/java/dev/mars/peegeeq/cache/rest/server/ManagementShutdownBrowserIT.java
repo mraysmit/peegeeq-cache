@@ -36,7 +36,21 @@ class ManagementShutdownBrowserIT {
 
     static List<ManagementBrowserCase> scenarios() {
         return IntStream.range(0, ACTIONS.size())
-                .mapToObj(index -> new ManagementBrowserCase(
+                .mapToObj(index -> {
+                    List<String> operations = operations(index);
+                    Set<ManagementBrowserEvidence> evidence = usesPubSub(index)
+                            ? Set.of(
+                            ManagementBrowserEvidence.VISIBLE_RESULT,
+                            ManagementBrowserEvidence.HTTP_OPERATION,
+                            ManagementBrowserEvidence.DATABASE,
+                            ManagementBrowserEvidence.DURABLE_AUDIT,
+                            ManagementBrowserEvidence.RESOURCE_CLEANUP)
+                            : Set.of(
+                            ManagementBrowserEvidence.VISIBLE_RESULT,
+                            ManagementBrowserEvidence.HTTP_OPERATION,
+                            ManagementBrowserEvidence.DATABASE,
+                            ManagementBrowserEvidence.RESOURCE_CLEANUP);
+                    return new ManagementBrowserCase(
                         "PW-SHUTDOWN-%03d".formatted(index + 1),
                         "P6 deterministic-shutdown contract: " + ACTIONS.get(index),
                         ManagementBrowserArea.HARDENING,
@@ -44,12 +58,9 @@ class ManagementShutdownBrowserIT {
                         ACTIONS.get(index),
                         "The fixture and management server must " + ACTIONS.get(index) + ".",
                         "Close browser context first, then server, pools, schema resources, and PostgreSQL; assert the leaked-resource counter is zero",
-                        operations(index),
-                        Set.of(
-                                ManagementBrowserEvidence.VISIBLE_RESULT,
-                                ManagementBrowserEvidence.HTTP_OPERATION,
-                                ManagementBrowserEvidence.DATABASE,
-                                ManagementBrowserEvidence.RESOURCE_CLEANUP)))
+                        operations,
+                        evidence);
+                })
                 .toList();
     }
 
@@ -70,7 +81,7 @@ class ManagementShutdownBrowserIT {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("scenarios")
+    @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#shutdownScenarios")
     void shutdownScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 1;
         ManagementConsolePostgresFixture.run(

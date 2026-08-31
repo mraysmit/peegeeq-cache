@@ -104,6 +104,7 @@ class ManagementBrowserHarnessIT {
                 meters)
                 .compose(application -> {
                     String token = application.takeBootstrapToken().orElseThrow();
+                    ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
                     Future<Void> browserVerification = vertx.executeBlocking(() -> {
                         verifyBrowserContract(port, origin, token);
                         return null;

@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ManagementBrowserCoverageTest {
 
-    private static final int CURRENT_SCENARIO_COUNT = 540;
+    private static final int CURRENT_SCENARIO_COUNT = 559;
 
     private static final Set<String> REQUIRED_JOURNEYS = Set.of(
             "trusted-proxy-session",
@@ -51,11 +51,19 @@ class ManagementBrowserCoverageTest {
             "streamMetrics", "listActivity", "monitoringWebSocket");
 
     private static final Set<String> DATABASE_MUTATION_OPERATIONS = Set.of(
-            "registerSetup", "connectSetup", "detachSetup", "forgetSetup",
             "setEntry", "deleteEntry", "expireEntry", "persistEntry", "touchEntry",
             "executeEntryBulkDelete", "setCounter", "adjustCounter", "expireCounter",
             "persistCounter", "deleteCounter", "executeCounterBulkDelete",
-            "forceReleaseLock", "createPubSubSubscription", "deletePubSubSubscription",
+            "forceReleaseLock");
+
+    private static final Set<String> AUDITED_OPERATIONS = Set.of(
+            "testUnregisteredSetup", "registerSetup", "connectSetup", "testRegisteredSetup",
+            "detachSetup", "forgetSetup", "revealEntryValue", "setEntry", "deleteEntry",
+            "expireEntry", "persistEntry", "touchEntry", "previewEntryBulkDelete",
+            "executeEntryBulkDelete", "setCounter", "adjustCounter", "expireCounter",
+            "persistCounter", "deleteCounter", "previewCounterBulkDelete",
+            "executeCounterBulkDelete", "revealLockOwner", "forceReleaseLock",
+            "createPubSubSubscription", "revealPubSubPayload", "deletePubSubSubscription",
             "publishPubSubMessage");
 
     private static final Set<String> SENSITIVE_OPERATIONS = Set.of(
@@ -80,6 +88,9 @@ class ManagementBrowserCoverageTest {
             ManagementPubSubBrowserIT.class,
             ManagementLiveTransportBrowserIT.class,
             ManagementMonitoringBrowserIT.class,
+            ManagementCapabilityBrowserIT.class,
+            ManagementViewerBrowserIT.class,
+            ManagementBoundaryBrowserIT.class,
             ManagementAccessibilityBrowserIT.class,
             ManagementPrivacyBrowserIT.class,
             ManagementPackagingBrowserIT.class,
@@ -94,6 +105,7 @@ class ManagementBrowserCoverageTest {
             ManagementPubSubBrowserIT.scenarios(),
             ManagementLiveTransportBrowserIT.scenarios(),
             ManagementMonitoringBrowserIT.scenarios(),
+            ManagementCapabilityBrowserIT.scenarios(),
             ManagementAccessibilityBrowserIT.scenarios(),
             ManagementPrivacyBrowserIT.scenarios(),
             ManagementPackagingBrowserIT.scenarios(),
@@ -124,6 +136,8 @@ class ManagementBrowserCoverageTest {
                 () -> coverageDifference("operations", REQUIRED_OPERATIONS, operationOwners));
         assertEquals(Set.of(), duplicateKeys(operationOwners),
                 () -> "Operation IDs must have one accountable journey owner: " + operationOwners);
+        assertEquals(AUDITED_OPERATIONS, ManagementConsolePostgresFixture.auditedOperationIds(),
+                "Browser evidence metadata and the runtime durable-audit oracle must stay synchronized");
     }
 
     @Test
@@ -145,14 +159,13 @@ class ManagementBrowserCoverageTest {
             }
             scenarioOwners.computeIfAbsent(scenario.id(), ignored -> new ArrayList<>()).add(owner);
             ManagementBrowserAccountability.violations(
-                            method, REQUIRED_OPERATIONS, DATABASE_MUTATION_OPERATIONS, SENSITIVE_OPERATIONS)
+                            method, REQUIRED_OPERATIONS, DATABASE_MUTATION_OPERATIONS,
+                            AUDITED_OPERATIONS, SENSITIVE_OPERATIONS)
                     .forEach(violation -> metadataViolations.add(owner + ": " + violation));
 
-            ManagementBrowserJourney journey = method.getAnnotation(ManagementBrowserJourney.class);
-            if (journey != null) {
-                assertEquals(Set.of(journey.operations()), Set.of(scenario.operations()),
-                        () -> owner + " scenario operations do not match its journey operations");
-            }
+            // Journey operations assign one canonical coverage owner. Scenario operations describe
+            // every request the individual browser workflow is expected to make, including requests
+            // whose canonical ownership belongs to another journey.
         }
 
         PARAMETERIZED_CATALOGUES.forEach(catalogue -> catalogue.forEach(scenario -> {
@@ -190,8 +203,9 @@ class ManagementBrowserCoverageTest {
         if (!unknown.isEmpty()) violations.add("unknown operations " + unknown);
         if (!scenario.operations().isEmpty() && !scenario.evidence().contains(ManagementBrowserEvidence.HTTP_OPERATION)) violations.add("operations declared without operation evidence");
         if (scenario.operations().stream().anyMatch(DATABASE_MUTATION_OPERATIONS::contains)
-                && !scenario.evidence().contains(ManagementBrowserEvidence.DATABASE)
-                && !scenario.evidence().contains(ManagementBrowserEvidence.DURABLE_AUDIT)) violations.add("mutation lacks database or durable-audit evidence");
+                && !scenario.evidence().contains(ManagementBrowserEvidence.DATABASE)) violations.add("database mutation lacks database evidence");
+        if (scenario.operations().stream().anyMatch(AUDITED_OPERATIONS::contains)
+                && !scenario.evidence().contains(ManagementBrowserEvidence.DURABLE_AUDIT)) violations.add("audited operation lacks durable-audit evidence");
         if (scenario.operations().stream().anyMatch(SENSITIVE_OPERATIONS::contains)
                 && !scenario.evidence().contains(ManagementBrowserEvidence.SENSITIVE_STATE)) violations.add("sensitive operation lacks leakage evidence");
         return violations;

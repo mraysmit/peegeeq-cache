@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { loadPreferences, savePreferences } from '@src/state/preferences';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadPreferences, PREFERENCES_CHANGED_EVENT, savePreferences } from '@src/state/preferences';
 
 describe('U8 preference persistence', () => {
   beforeEach(() => localStorage.clear());
@@ -10,5 +10,16 @@ describe('U8 preference persistence', () => {
     savePreferences({ ...loadPreferences(), theme: 'light', refreshSeconds: 15 });
     const stored = JSON.parse(localStorage.getItem('peegeeq.management.preferences') ?? '{}') as Record<string, unknown>;
     expect(stored).toEqual({ theme: 'light', timezone: 'LOCAL', byteUnits: 'BINARY', refreshSeconds: 15, autoHideSeconds: 60 });
+  });
+
+  it('notifies the mounted shell when a preference changes', () => {
+    const listener = vi.fn();
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, listener);
+    try {
+      savePreferences({ ...loadPreferences(), theme: 'dark' });
+      expect(listener).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener(PREFERENCES_CHANGED_EVENT, listener);
+    }
   });
 });

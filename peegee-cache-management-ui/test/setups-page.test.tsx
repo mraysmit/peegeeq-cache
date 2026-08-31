@@ -61,7 +61,9 @@ const successfulTest: SetupConnectionTest = {
     bulkCounterDelete: true,
     pubSub: true,
     databaseStatistics: true,
-    sensitiveValueReveal: true,
+    entryValueReveal: true,
+    lockOwnerReveal: true,
+    pubSubPayloadReveal: true,
   },
   limits: { pubSubChannelMaxBytes: 63, pubSubPayloadMaxBytes: 8_000, maximumValueBytes: 1_000_000 },
 };
@@ -164,6 +166,7 @@ describe('functional setup management page', () => {
     render(<SetupsPage client={new FakeSetupClient()} session={operator} onSelectSetup={(id) => selected.push(id)} />);
 
     const row = (await screen.findByText('Primary cache')).closest('tr');
+    expect(screen.getByRole('region', { name: 'Registered setups' })).toHaveAttribute('tabindex', '0');
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText('db.example.test:5432/cache')).toBeVisible();
     expect(within(row as HTMLElement).getByText('Up')).toBeVisible();
@@ -187,7 +190,7 @@ describe('functional setup management page', () => {
     expect(within(dialog).getByText('PostgreSQL and cache schema are ready')).toBeVisible();
     expect(within(dialog).getByRole('heading', { name: 'Capabilities' })).toBeVisible();
     expect(within(dialog).getByText('Namespace inspection')).toBeVisible();
-    expect(within(dialog).getByText('1,000,000 bytes')).toBeVisible();
+    expect(within(dialog).getByText('976 KiB')).toBeVisible();
   });
 
   it('enforces viewer-only controls in the rendered interface', async () => {

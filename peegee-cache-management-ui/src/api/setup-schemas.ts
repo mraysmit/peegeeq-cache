@@ -46,7 +46,9 @@ const capabilityFlagsSchema = z.strictObject({
   bulkCounterDelete: z.boolean(),
   pubSub: z.boolean(),
   databaseStatistics: z.boolean(),
-  sensitiveValueReveal: z.boolean(),
+  entryValueReveal: z.boolean(),
+  lockOwnerReveal: z.boolean(),
+  pubSubPayloadReveal: z.boolean(),
 });
 
 const capabilityLimitsSchema = z.strictObject({

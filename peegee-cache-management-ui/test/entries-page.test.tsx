@@ -41,6 +41,19 @@ class FakeEntryClient implements EntryClientPort {
 }
 
 describe('U4 metadata-only entry browser', () => {
+  it('does not offer expired-entry inspection when the setup capability is absent', async () => {
+    const client = new FakeEntryClient();
+    render(
+      <MemoryRouter>
+        <EntriesPage canInspectExpired={false} client={client} selectedNamespace={entry.namespace} selectedSetupId="primary-cache" />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('link', { name: entry.key });
+    expect(screen.getByLabelText('TTL state')).not.toHaveTextContent('Include expired');
+    expect(client.queries).toEqual([{ ttlState: 'ALL_LIVE', sort: 'key:asc', limit: 50 }]);
+  });
+
   it('requires both setup and namespace scope instead of issuing a broad query', () => {
     const client = new FakeEntryClient();
     const { rerender } = render(<MemoryRouter><EntriesPage client={client} /></MemoryRouter>);

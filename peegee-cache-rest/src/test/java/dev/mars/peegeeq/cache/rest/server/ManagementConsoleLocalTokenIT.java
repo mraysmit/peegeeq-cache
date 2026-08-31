@@ -90,6 +90,7 @@ class ManagementConsoleLocalTokenIT {
             operations = {"getSession", "exchangeLocalToken", "deleteLocalSession"})
     void packagedConsoleExchangesTokenNavigatesAndLogsOutWithoutSecretLeakage() {
         String token = bootstrap.token();
+        ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
         List<String> browserErrors = new ArrayList<>();
         List<String> failedResponses = new ArrayList<>();
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
@@ -166,6 +167,7 @@ class ManagementConsoleLocalTokenIT {
     @Test
     void invalidAndReplayedBootstrapTokensRemainVisibleOnlyInThePasswordControl() {
         String token = bootstrap.token();
+        ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
         List<String> browserErrors = new ArrayList<>();
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
@@ -237,6 +239,7 @@ class ManagementConsoleLocalTokenIT {
     @Test
     void failedLogoutKeepsTheAuthenticatedShellAndCanBeRetried() {
         String token = bootstrap.token();
+        ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
         List<String> browserErrors = new ArrayList<>();
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));

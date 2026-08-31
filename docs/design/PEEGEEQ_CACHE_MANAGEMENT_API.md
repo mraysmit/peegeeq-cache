@@ -473,7 +473,9 @@ Response `200`:
     "bulkCounterDelete": true,
     "pubSub": true,
     "databaseStatistics": true,
-    "sensitiveValueReveal": true
+    "entryValueReveal": true,
+    "lockOwnerReveal": true,
+    "pubSubPayloadReveal": true
   },
   "limits": {
     "pubSubChannelMaxBytes": 49,
@@ -1629,7 +1631,7 @@ Phase 8.3 owns the production React console and its full-browser journeys for se
 
 ## 19. Implementation state and module ownership
 
-Status: **M0-M10 BACKEND AND U0-U10 PRODUCTION UI COMPLETE**. M0-M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared sampler per setup, a Prometheus scrape, a Java 21 shaded artifact verified under OpenJDK 26.0.2, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. U0-U10 supply the production React console, deterministic UI artifact, strict runtime DTO/event validation, and independent packaged Chromium/PostgreSQL acceptance without request interception. The current complete 11-module reactor passes 513 Surefire, 21 Failsafe, and 112 Vitest tests with zero failures, errors, or skips. The browser gate contains 19 Java Playwright tests, 16 named journey owners, 12 isolated real-PostgreSQL product journeys, a separate executable ownership contract for all 50 management operations, and runtime verification that declared product operations appear in observed browser traffic; two additional Failsafe tests validate the runnable artifact. Complete-reactor verification passes PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+Status: **M0-M10 BACKEND AND U0-U10 PRODUCTION UI COMPLETE**. M0-M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared sampler per setup, a Prometheus scrape, a Java 21 shaded artifact verified under OpenJDK 26.0.2, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. U0-U10 supply the production React console, deterministic UI artifact, strict runtime DTO/event validation, and independent packaged Chromium/PostgreSQL acceptance without request interception. The current complete 11-module reactor passes 547 Surefire, 559 Failsafe, and 123 Vitest tests with zero failures, errors, or skips. The browser gate contains exactly 557 independently identified Java Playwright scenarios, 16 named journey owners, 12 isolated real-PostgreSQL product journeys, a separate executable ownership contract for all 50 management operations, and runtime verification that declared operations, expected failures, PostgreSQL outcomes, and durable audit actions are observed; two additional Failsafe tests validate the runnable artifact. The U10 pre-expansion reactor passed PostgreSQL 15.17, 16.13, 17.11, and 18.3. The expanded 557-scenario catalogue is cumulatively green on PostgreSQL 18.3, with PostgreSQL 15-17 reruns retained as release validation.
 
 Ownership is:
 

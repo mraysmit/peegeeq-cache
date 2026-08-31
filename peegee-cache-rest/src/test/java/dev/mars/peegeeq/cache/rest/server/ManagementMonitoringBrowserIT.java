@@ -11,11 +11,13 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Wave P5 real-browser scenarios for monitoring, activity, notifications, and settings. */
 class ManagementMonitoringBrowserIT {
@@ -49,7 +51,7 @@ class ManagementMonitoringBrowserIT {
             "render management-pool telemetry",
             "render audit and expiry telemetry",
             "render bounded recent activity",
-            "identify session and display configuration",
+            "apply the Settings theme immediately to the mounted shell",
             "report the active setup in connection details",
             "report the effective maximum cache-value size",
             "report the effective Pub/Sub payload limit",
@@ -57,7 +59,7 @@ class ManagementMonitoringBrowserIT {
             "report the active migration version",
             "persist the selected monitoring refresh interval",
             "persist the masked-value auto-hide preference",
-            "persist UTC display preference without credentials",
+            "apply UTC timestamps and decimal byte units without persisting credentials",
             "state the browser-storage privacy boundary");
 
     static List<ManagementBrowserCase> scenarios() {
@@ -70,10 +72,16 @@ class ManagementMonitoringBrowserIT {
                         ACTIONS.get(index),
                         "The packaged console must " + ACTIONS.get(index) + ".",
                         "Clear browser preferences, close live transports, reset PostgreSQL, and close browser resources",
-                        index < 22
-                                ? List.of("getDatabaseMonitoring", "getRuntimeMonitoring", "streamMetrics", "listActivity")
-                                : List.of("getSetupCapabilities"),
-                        Set.of(
+                        operations(index),
+                        index == 29
+                                ? Set.of(
+                                ManagementBrowserEvidence.VISIBLE_RESULT,
+                                ManagementBrowserEvidence.HTTP_OPERATION,
+                                ManagementBrowserEvidence.DATABASE,
+                                ManagementBrowserEvidence.DURABLE_AUDIT,
+                                ManagementBrowserEvidence.SENSITIVE_STATE,
+                                ManagementBrowserEvidence.RESOURCE_CLEANUP)
+                                : Set.of(
                                 ManagementBrowserEvidence.VISIBLE_RESULT,
                                 ManagementBrowserEvidence.HTTP_OPERATION,
                                 ManagementBrowserEvidence.DATABASE,
@@ -81,8 +89,38 @@ class ManagementMonitoringBrowserIT {
                 .toList();
     }
 
+    private static List<String> operations(int index) {
+        if (index < 22) {
+            return List.of(
+                    "getDatabaseMonitoring",
+                    "getRuntimeMonitoring",
+                    "streamMetrics",
+                    "listActivity");
+        }
+        if (index == 28) {
+            return List.of(
+                    "getSetupCapabilities",
+                    "getDatabaseMonitoring",
+                    "getRuntimeMonitoring",
+                    "listActivity");
+        }
+        if (index == 29) {
+            return List.of(
+                    "getSetupCapabilities",
+                    "listNamespaces",
+                    "getNamespace",
+                    "listEntries",
+                    "getEntry",
+                    "revealEntryValue");
+        }
+        if (index == 30) {
+            return List.of("getSetupCapabilities", "getSetup", "getSetupHealth");
+        }
+        return List.of("getSetupCapabilities");
+    }
+
     @ParameterizedTest(name = "{0}")
-    @MethodSource("scenarios")
+    @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#monitoringScenarios")
     void monitoringAndSettingsScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 2;
         ManagementConsolePostgresFixture.run(
@@ -147,20 +185,63 @@ class ManagementMonitoringBrowserIT {
             case 19 -> heading(page, "Management pool");
             case 20 -> heading(page, "Audit and expiry");
             case 21 -> heading(page, "Recent activity");
-            case 22 -> assertThat(page.getByText("Session and display configuration", exact())).isVisible();
+            case 22 -> {
+                page.getByRole(AriaRole.COMBOBOX,
+                        new Page.GetByRoleOptions().setName("Theme").setExact(true)).selectOption("dark");
+                assertThat(page.locator("[data-theme=dark]")).isVisible();
+            }
             case 23 -> assertDetailValue(page, "Active setup", ManagementConsolePostgresFixture.SETUP_ID);
             case 24 -> assertDetailValue(page, "Maximum value bytes", "10485760");
             case 25 -> assertDetailValue(page, "Pub/Sub payload bytes", "7500");
             case 26 -> assertDetailValue(page, "Pub/Sub channel bytes", "49");
             case 27 -> assertThat(detailRow(page, "Migration version").locator("dd")).not().hasText("");
-            case 28 -> selectAndVerifyStored(page, "Refresh interval", "60", "refreshSeconds", 60);
-            case 29 -> selectAndVerifyStored(page, "Masked-value auto-hide", "120", "autoHideSeconds", 120);
+            case 28 -> {
+                selectAndVerifyStored(page, "Refresh interval", "15", "refreshSeconds", 15);
+                AtomicInteger overviewRequests = new AtomicInteger();
+                page.onRequest(request -> {
+                    if (java.net.URI.create(request.url()).getPath().endsWith("/overview")) {
+                        overviewRequests.incrementAndGet();
+                    }
+                });
+                open(page, "Overview");
+                page.waitForCondition(() -> overviewRequests.get() >= 2,
+                        new Page.WaitForConditionOptions().setTimeout(20_000));
+                assertTrue(overviewRequests.get() >= 2,
+                        "The selected refresh interval must schedule a second Overview request");
+            }
+            case 29 -> {
+                selectAndVerifyStored(page, "Masked-value auto-hide", "30", "autoHideSeconds", 30);
+                open(page, "Namespaces");
+                page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions()
+                        .setName(ManagementConsolePostgresFixture.NAMESPACE).setExact(true)).click();
+                page.getByRole(AriaRole.TAB, new Page.GetByRoleOptions().setName("Entries")).click();
+                page.getByRole(AriaRole.LINK,
+                        new Page.GetByRoleOptions().setName("customer:1").setExact(true)).click();
+                page.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("Reveal value")).click();
+                assertThat(page.getByText("stored-value", exact())).isVisible();
+                assertThat(page.getByText("Value hidden", exact()))
+                        .isVisible(new com.microsoft.playwright.assertions.LocatorAssertions.IsVisibleOptions()
+                                .setTimeout(35_000));
+                assertThat(page.getByText("stored-value", exact())).hasCount(0);
+            }
             case 30 -> {
                 selectAndVerifyStored(page, "Timezone", "UTC", "timezone", "UTC");
+                selectAndVerifyStored(page, "Byte display", "DECIMAL", "byteUnits", "DECIMAL");
                 String storage = (String) page.evaluate(
                         "localStorage.getItem('peegeeq.management.preferences')");
                 assertFalse(storage.contains(ManagementConsolePostgresFixture.DATABASE_PASSWORD));
                 assertFalse(storage.contains("bootstrap"));
+                open(page, "Setups");
+                Locator row = page.getByRole(AriaRole.ROW).filter(
+                        new Locator.FilterOptions().setHasText(ManagementConsolePostgresFixture.SETUP_NAME));
+                row.getByRole(AriaRole.BUTTON,
+                        new Locator.GetByRoleOptions().setName("Details")).click();
+                Locator dialog = page.getByRole(AriaRole.DIALOG,
+                        new Page.GetByRoleOptions().setName("Setup details"));
+                assertThat(dialog.getByText("Loading details…")).hasCount(0);
+                assertThat(dialog).containsText("UTC");
+                assertThat(dialog).containsText("10 MB");
             }
             case 31 -> assertThat(page.getByText(
                     "Only display preferences are stored. Credentials, revealed values, owner tokens, payloads, setup secrets, and live notifications are never persisted.",

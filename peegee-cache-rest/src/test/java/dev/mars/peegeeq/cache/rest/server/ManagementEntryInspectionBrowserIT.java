@@ -86,13 +86,18 @@ class ManagementEntryInspectionBrowserIT {
 
     static List<ManagementBrowserCase> scenarios() {
         return java.util.stream.IntStream.range(0, ACTIONS.size()).mapToObj(index -> {
-            List<String> operations = index < 28 ? List.of("listEntries")
-                    : index < 34 ? List.of("getEntry")
-                    : index == 53 ? List.of("revealEntryValue", "deleteLocalSession")
-                    : List.of("revealEntryValue");
+            List<String> operations = index < 28
+                    ? List.of("listNamespaces", "getNamespace", "listEntries")
+                    : index < 34
+                    ? List.of("listNamespaces", "getNamespace", "listEntries", "getEntry")
+                    : index == 53
+                    ? List.of("listNamespaces", "getNamespace", "listEntries", "getEntry",
+                    "revealEntryValue", "deleteLocalSession")
+                    : List.of("listNamespaces", "getNamespace", "listEntries", "getEntry", "revealEntryValue");
             Set<ManagementBrowserEvidence> evidence = index >= 34
                     ? Set.of(ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION,
-                    ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.SENSITIVE_STATE,
+                    ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT,
+                    ManagementBrowserEvidence.SENSITIVE_STATE,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP)
                     : Set.of(ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP);
@@ -110,7 +115,7 @@ class ManagementEntryInspectionBrowserIT {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("scenarios")
+    @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#entryInspectionScenarios")
     void entryInspectionScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 3;
         ManagementConsolePostgresFixture.run(

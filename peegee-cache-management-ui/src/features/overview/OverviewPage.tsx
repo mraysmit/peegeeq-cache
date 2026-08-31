@@ -15,6 +15,7 @@ import type {
   RuntimeMonitoring,
 } from '../../api/inspection-schemas';
 import { ManagementClientError } from '../../api/session-client';
+import { formatDisplayBytes } from '../../presentation/display-bytes';
 import { formatDisplayInstant } from '../../presentation/display-time';
 import { loadPreferences } from '../../state/preferences';
 import { OverviewMonitoring } from './OverviewMonitoring';
@@ -156,7 +157,7 @@ export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
         <Metric label="Active locks" value={formatDecimal(snapshot.totals.activeLockCount)} />
         <Metric label="Expired rows awaiting cleanup" value={formatDecimal(snapshot.totals.expiredEntryCount)} />
         {snapshot.totals.schemaBytes.availability === 'AVAILABLE'
-          ? <Metric label="Cache schema storage" value={formatBytes(snapshot.totals.schemaBytes.value)} />
+          ? <Metric label="Cache schema storage" value={formatDisplayBytes(snapshot.totals.schemaBytes.value)} />
           : <Metric label="Cache schema storage" value="Unavailable" detail={snapshot.totals.schemaBytes.reason} />}
       </div>
 
@@ -196,7 +197,7 @@ export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
         {snapshot.topNamespaces.length === 0 ? (
           <p>No namespaces were observed in this database snapshot.</p>
         ) : (
-          <div className="table-scroll" tabIndex={0}>
+          <div aria-label="Namespace overview results" className="table-scroll" role="region" tabIndex={0}>
             <table className="data-table">
               <thead><tr><th>Namespace</th><th>Live entries</th><th>Counters</th><th>Locks</th><th>Expired</th><th>Storage</th></tr></thead>
               <tbody>
@@ -207,7 +208,7 @@ export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
                     <td>{formatDecimal(namespace.liveCounterCount)}</td>
                     <td>{formatDecimal(namespace.activeLockCount)}</td>
                     <td>{formatDecimal(namespace.expiredEntryCount)}</td>
-                    <td>{formatBytes(namespace.estimatedStorageBytes)}</td>
+                    <td>{formatDisplayBytes(namespace.estimatedStorageBytes)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -260,21 +261,6 @@ function asClientError(failure: unknown): ManagementClientError {
 
 function formatDecimal(value: string): string {
   return BigInt(value).toLocaleString('en-US');
-}
-
-function formatBytes(value: string): string {
-  const bytes = BigInt(value);
-  if (bytes < 1_024n) return `${formatDecimal(value)} B`;
-  const units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB'];
-  let divisor = 1_024n;
-  let unit = 0;
-  while (bytes >= divisor * 1_024n && unit < units.length - 1) {
-    divisor *= 1_024n;
-    unit += 1;
-  }
-  const whole = bytes / divisor;
-  const tenths = (bytes % divisor) * 10n / divisor;
-  return `${whole}${whole < 10n && tenths > 0n ? `.${tenths}` : ''} ${units[unit]}`;
 }
 
 function formatDuration(milliseconds: number): string {

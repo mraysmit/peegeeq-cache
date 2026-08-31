@@ -7,7 +7,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -15,6 +14,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -38,7 +38,7 @@ class ManagementPrivacyBrowserIT {
             "keep session credentials out of script-readable cookies",
             "remove revealed values from the accessibility tree",
             "remove revealed values from serialized page markup",
-            "keep revealed values out of a post-hide screenshot artifact",
+            "restore the masked value panel pixel-for-pixel after explicit hide",
             "keep revealed values and credentials out of durable audit text",
             "keep setup passwords out of the rendered document",
             "remove the one-time bootstrap token after authentication",
@@ -61,13 +61,14 @@ class ManagementPrivacyBrowserIT {
                                 ManagementBrowserEvidence.VISIBLE_RESULT,
                                 ManagementBrowserEvidence.HTTP_OPERATION,
                                 ManagementBrowserEvidence.DATABASE,
+                                ManagementBrowserEvidence.DURABLE_AUDIT,
                                 ManagementBrowserEvidence.SENSITIVE_STATE,
                                 ManagementBrowserEvidence.RESOURCE_CLEANUP)))
                 .toList();
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("scenarios")
+    @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#privacyScenarios")
     void privacyScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 1;
         ManagementConsolePostgresFixture.run(
@@ -79,15 +80,23 @@ class ManagementPrivacyBrowserIT {
                     ManagementConsolePostgresFixture.authenticate(context);
                     ManagementConsolePostgresFixture.registerSetup(context);
                     openEntry(context.page());
+                    if (index == 9) {
+                        context.page().getByLabel("Reveal reason (optional)")
+                                .fill("privacy verification");
+                        context.page().evaluate("document.activeElement.blur()");
+                    }
+                    byte[] maskedScreenshot = index == 9
+                            ? context.page().locator(".value-panel").screenshot()
+                            : null;
                     reveal(context.page());
-                    verify(index, context, temporaryDirectory);
+                    verify(index, context, maskedScreenshot);
                 });
     }
 
     private static void verify(
             int index,
             ManagementConsolePostgresFixture.Context context,
-            Path evidenceDirectory) throws Exception {
+            byte[] maskedScreenshot) throws Exception {
         Page page = context.page();
         if (index == 0) {
             assertThat(page.getByText(SECRET, exact())).isVisible();
@@ -108,10 +117,10 @@ class ManagementPrivacyBrowserIT {
             case 7 -> assertFalse(page.locator("body").ariaSnapshot().contains(SECRET));
             case 8 -> assertFalse(page.content().contains(SECRET));
             case 9 -> {
-                Path screenshot = evidenceDirectory.resolve("privacy-clean.png");
-                page.screenshot(new Page.ScreenshotOptions().setFullPage(true).setPath(screenshot));
-                String bytes = new String(Files.readAllBytes(screenshot), StandardCharsets.ISO_8859_1);
-                assertFalse(bytes.contains(SECRET));
+                page.evaluate("document.activeElement.blur()");
+                byte[] afterHide = page.locator(".value-panel").screenshot();
+                assertArrayEquals(maskedScreenshot, afterHide,
+                        "The sensitive panel must return to its exact masked visual state");
             }
             case 10 -> {
                 String audit = Files.readString(context.auditPath());

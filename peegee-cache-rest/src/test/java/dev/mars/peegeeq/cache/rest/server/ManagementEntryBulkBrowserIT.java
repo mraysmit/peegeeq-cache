@@ -60,11 +60,17 @@ class ManagementEntryBulkBrowserIT {
 
     static List<ManagementBrowserCase> scenarios() {
         return java.util.stream.IntStream.range(0, ACTIONS.size()).mapToObj(index -> {
-            List<String> operations = index < 3 ? List.of("listEntries")
+            List<String> operations = index < 3
+                    ? List.of("listNamespaces", "getNamespace", "listEntries")
                     : index == 16 || index == 22 || index == 23 || index == 24
-                    ? List.of("previewEntryBulkDelete", "executeEntryBulkDelete")
-                    : List.of("previewEntryBulkDelete");
+                    ? List.of("listNamespaces", "getNamespace", "listEntries",
+                    "previewEntryBulkDelete", "executeEntryBulkDelete")
+                    : List.of("listNamespaces", "getNamespace", "listEntries", "previewEntryBulkDelete");
             Set<ManagementBrowserEvidence> evidence = operations.contains("executeEntryBulkDelete")
+                    ? Set.of(ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION,
+                    ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT,
+                    ManagementBrowserEvidence.RESOURCE_CLEANUP)
+                    : operations.contains("previewEntryBulkDelete")
                     ? Set.of(ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP)
@@ -84,11 +90,13 @@ class ManagementEntryBulkBrowserIT {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("scenarios")
+    @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#entryBulkScenarios")
     void entryBulkScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 107;
         ManagementConsolePostgresFixture.run(
                 temporaryDirectory, POSTGRES.postgres(), true, scenario.operations(), context -> {
+                    if (index == 24) context.diagnostics().expectFailedResponse(409,
+                            "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute");
                     ManagementConsolePostgresFixture.authenticate(context);
                     ManagementConsolePostgresFixture.registerSetup(context);
                     openEntries(context.page());
@@ -115,14 +123,14 @@ class ManagementEntryBulkBrowserIT {
             case 13 -> { Locator dialog = selectedPreview(page, "customer:1"); dialog.getByLabel("Type confirmation phrase").fill(phrase(dialog)); assertThat(deleteButton(dialog)).isEnabled(); }
             case 14 -> { Locator dialog = selectedPreview(page, "customer:1"); dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Cancel")).click(); assertThat(dialog).hasCount(0); assertThat(link(page, "customer:1")).isVisible(); }
             case 15 -> { Locator dialog = selectedPreview(page, "customer:1"); page.keyboard().press("Escape"); assertThat(dialog).hasCount(0); assertThat(link(page, "customer:1")).isVisible(); }
-            case 16 -> { Locator dialog = selectedPreview(page, "customer:1"); execute(dialog); assertThat(page.getByRole(AriaRole.STATUS)).containsText("Deleted 1 of 1"); assertThat(link(page, "customer:1")).hasCount(0); }
+            case 16 -> { Locator dialog = selectedPreview(page, "customer:1"); execute(dialog); assertThat(page.getByRole(AriaRole.STATUS)).containsText("Deleted 1 of 1"); assertThat(link(page, "customer:1")).hasCount(0); assertEquals("0", scalar(context, "SELECT count(*) FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 17 -> { select(page, "customer:1"); select(page, "json-record"); selectedPreviewButton(page).click(); assertThat(bulkDialog(page)).containsText("Resolved 2 entries"); assertThat(bulkDialog(page)).containsText("customer:1"); assertThat(bulkDialog(page)).containsText("json-record"); }
             case 18 -> { matchingPreview(page); assertThat(bulkDialog(page)).containsText("Resolved 4 entries"); }
             case 19 -> { filter(page, "customer", "ALL", "ALL_LIVE"); matchingPreview(page); assertThat(bulkDialog(page)).containsText("Resolved 1 entries"); assertThat(bulkDialog(page)).containsText("customer:1"); }
             case 20 -> { filter(page, "", "JSON", "ALL_LIVE"); matchingPreview(page); assertThat(bulkDialog(page)).containsText("Resolved 1 entries"); assertThat(bulkDialog(page)).containsText("json-record"); }
             case 21 -> { filter(page, "", "ALL", "PERSISTENT"); matchingPreview(page); assertThat(bulkDialog(page)).containsText("Resolved 4 entries"); }
-            case 22 -> { matchingPreview(page); execute(bulkDialog(page)); assertThat(page.getByRole(AriaRole.STATUS)).containsText("Deleted 4 of 4"); assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("No entries matched"))).isVisible(); }
-            case 23 -> { select(page, "customer:1"); select(page, "json-record"); selectedPreviewButton(page).click(); ManagementConsolePostgresFixture.execute(context.postgres(), "UPDATE peegee_cache.cache_entries SET version=version+1 WHERE namespace='logical-orders' AND cache_key='customer:1'"); execute(bulkDialog(page)); assertThat(page.getByRole(AriaRole.STATUS)).containsText("Deleted 1 of 2"); assertThat(page.getByRole(AriaRole.STATUS)).containsText("conflicts 1"); assertThat(link(page, "customer:1")).isVisible(); }
+            case 22 -> { matchingPreview(page); execute(bulkDialog(page)); assertThat(page.getByRole(AriaRole.STATUS)).containsText("Deleted 4 of 4"); assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("No entries matched"))).isVisible(); assertEquals("0", scalar(context, "SELECT count(*) FROM peegee_cache.cache_entries WHERE namespace='logical-orders'")); }
+            case 23 -> { select(page, "customer:1"); select(page, "json-record"); selectedPreviewButton(page).click(); ManagementConsolePostgresFixture.execute(context.postgres(), "UPDATE peegee_cache.cache_entries SET version=version+1 WHERE namespace='logical-orders' AND cache_key='customer:1'"); execute(bulkDialog(page)); assertThat(page.getByRole(AriaRole.STATUS)).containsText("Deleted 1 of 2"); assertThat(page.getByRole(AriaRole.STATUS)).containsText("conflicts 1"); assertThat(link(page, "customer:1")).isVisible(); assertEquals("1", scalar(context, "SELECT count(*) FROM peegee_cache.cache_entries WHERE cache_key IN ('customer:1','json-record')")); }
             case 24 -> assertReplayRejected(page);
             case 25 -> assertPreviewStateIsSecretFree(page);
             default -> throw new IllegalArgumentException("Unknown scenario " + index);
@@ -174,4 +182,5 @@ class ManagementEntryBulkBrowserIT {
     private static Locator link(Page page, String key) { return page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName(key).setExact(true)); }
     private static Locator row(Page page, String key) { return page.getByRole(AriaRole.ROW).filter(new Locator.FilterOptions().setHasText(key)); }
     private static void filter(Page page, String prefix, String type, String ttl) { page.getByLabel("Key prefix").fill(prefix); page.locator("#entry-value-type").selectOption(type); page.locator("#entry-ttl-state").selectOption(ttl); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Apply filters")).click(); }
+    private static String scalar(ManagementConsolePostgresFixture.Context context, String sql) throws Exception { return ManagementConsolePostgresFixture.queryScalar(context.postgres(), sql); }
 }

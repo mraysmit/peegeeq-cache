@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useParams } from 'react-router-dom';
 
 import type { BrowserSession, ManagementClientError, SessionClient } from '../api/session-client';
@@ -20,7 +20,7 @@ import { PubSubPage } from '../features/pubsub/PubSubPage';
 import { MonitoringPage } from '../features/monitoring/MonitoringPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { useSetupScopeStore } from '../state/scope-store';
-import { loadPreferences, savePreferences } from '../state/preferences';
+import { loadPreferences, PREFERENCES_CHANGED_EVENT, savePreferences } from '../state/preferences';
 import { BrowserMonitoringSocket, type MonitoringConnectionState, type MonitoringEnvelope } from '../api/monitoring-live';
 import { formatDisplayInstant } from '../presentation/display-time';
 
@@ -63,6 +63,12 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
   const monitoringSocket = useMemo(() => new BrowserMonitoringSocket(), []);
   const isOperator = session.roles.includes('operator');
 
+  useEffect(() => {
+    const applyPreferences = () => setTheme(loadPreferences().theme);
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, applyPreferences);
+    return () => window.removeEventListener(PREFERENCES_CHANGED_EVENT, applyPreferences);
+  }, []);
+
   const selectSetup = (setupId: string | undefined, capabilities?: SetupCapabilities) => {
     if (setupId === undefined) {
       clearStoredSetup();
@@ -92,16 +98,30 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
     return () => { live.stop(); setNotifications([]); };
   }, [monitoringSocket, notificationsOpen, selectedSetupId]);
 
+  const capabilityForPath = (path: string): keyof SetupCapabilities['capabilities'] | undefined => {
+    if (path === '/namespaces' || path === '/keys') return 'namespaceInspection';
+    if (path === '/counters') return 'counterInspection';
+    if (path === '/locks') return 'lockInspection';
+    if (path === '/pubsub') return 'pubSub';
+    return undefined;
+  };
   const visibleSections = sections.filter((section) => {
-    if (selectedCapabilities === undefined) return true;
-    if (section.path === '/namespaces' || section.path === '/keys') {
-      return selectedCapabilities.capabilities.namespaceInspection;
-    }
-    if (section.path === '/counters') return selectedCapabilities.capabilities.counterInspection;
-    if (section.path === '/locks') return selectedCapabilities.capabilities.lockInspection;
-    if (section.path === '/pubsub') return selectedCapabilities.capabilities.pubSub;
-    return true;
+    const capability = capabilityForPath(section.path);
+    if (capability === undefined || selectedSetupId === undefined) return true;
+    return selectedCapabilities?.capabilities[capability] === true;
   });
+  const gated = (
+    capability: keyof SetupCapabilities['capabilities'],
+    label: string,
+    description: string,
+    content: ReactNode,
+  ) => {
+    if (selectedSetupId === undefined) return content;
+    if (selectedCapabilities === undefined) return <CapabilityPending label={label} />;
+    return selectedCapabilities.capabilities[capability]
+      ? content
+      : <CapabilityUnavailable description={description} label={label} />;
+  };
 
   const endSession = async () => {
     setEndingSession(true);
@@ -186,17 +206,17 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
             path="/"
           />
           <Route
-            element={<NamespacesPage client={inspectionClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />}
+            element={gated('namespaceInspection', 'Namespaces', 'namespace inspection', <NamespacesPage client={inspectionClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)}
             path="/namespaces"
           />
           <Route
-            element={(
+            element={gated('namespaceInspection', 'Namespaces', 'namespace inspection', (
               <NamespaceDetailsRoute
                 client={inspectionClient}
                 onSelectNamespace={selectNamespace}
                 selectedSetupId={selectedSetupId}
               />
-            )}
+            ))}
             path="/namespaces/:encodedNamespace"
           />
           <Route
@@ -211,16 +231,16 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
             path="/setups"
           />
           <Route
-            element={<EntriesPage administrationClient={entryAdministrationClient} canOperate={isOperator} client={inspectionClient} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />}
+            element={gated('namespaceInspection', 'Keys', 'namespace and entry inspection', <EntriesPage administrationClient={entryAdministrationClient} canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkEntryDelete === true} canInspectExpired={selectedCapabilities?.capabilities.expiredEntryInspection === true} canOperate={isOperator} client={inspectionClient} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />)}
             path="/keys"
           />
           <Route
-            element={<EntryDetailsRoute administrationClient={entryAdministrationClient} canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.sensitiveValueReveal === true} client={inspectionClient} selectedSetupId={selectedSetupId} />}
+            element={gated('namespaceInspection', 'Keys', 'namespace and entry inspection', <EntryDetailsRoute administrationClient={entryAdministrationClient} canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.entryValueReveal === true} client={inspectionClient} selectedSetupId={selectedSetupId} />)}
             path="/keys/:encodedNamespace/:encodedKey"
           />
-          <Route element={<CountersPage canOperate={isOperator} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/counters" />
-          <Route element={<LocksPage canOperate={isOperator && selectedCapabilities?.capabilities.forcedLockRelease === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.sensitiveValueReveal === true} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/locks" />
-          <Route element={<PubSubPage canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.sensitiveValueReveal === true} client={pubSubClient} key={selectedSetupId ?? 'no-setup'} maximumChannelBytes={selectedCapabilities?.limits.pubSubChannelMaxBytes ?? 63} maximumPayloadBytes={selectedCapabilities?.limits.pubSubPayloadMaxBytes ?? 7_500} selectedSetupId={selectedSetupId} />} path="/pubsub" />
+          <Route element={gated('counterInspection', 'Counters', 'counter inspection', <CountersPage canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkCounterDelete === true} canOperate={isOperator} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/counters" />
+          <Route element={gated('lockInspection', 'Locks', 'lock inspection', <LocksPage canOperate={isOperator && selectedCapabilities?.capabilities.forcedLockRelease === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.lockOwnerReveal === true} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/locks" />
+          <Route element={gated('pubSub', 'Pub/Sub', 'Pub/Sub', <PubSubPage canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.pubSubPayloadReveal === true} client={pubSubClient} key={selectedSetupId ?? 'no-setup'} maximumChannelBytes={selectedCapabilities?.limits.pubSubChannelMaxBytes ?? 63} maximumPayloadBytes={selectedCapabilities?.limits.pubSubPayloadMaxBytes ?? 7_500} selectedSetupId={selectedSetupId} />)} path="/pubsub" />
           <Route element={<MonitoringPage client={inspectionClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/monitoring" />
           <Route element={<SettingsPage capabilities={selectedCapabilities} selectedSetupId={selectedSetupId} session={session} />} path="/settings" />
           {sections.filter((section) => !['/setups', '/', '/namespaces', '/keys', '/counters', '/locks', '/pubsub', '/monitoring', '/settings'].includes(section.path)).map((section) => (
@@ -251,6 +271,14 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
       )}
     </div>
   );
+}
+
+function CapabilityPending({ label }: { readonly label: string }) {
+  return <section aria-labelledby="capability-pending-title" className="workspace"><h1 id="capability-pending-title">Loading {label}</h1><p aria-busy="true">Loading setup capabilities…</p></section>;
+}
+
+function CapabilityUnavailable({ description, label }: { readonly description: string; readonly label: string }) {
+  return <section aria-labelledby="capability-unavailable-title" className="workspace"><h1 id="capability-unavailable-title">{label} unavailable</h1><p>The active setup does not provide {description}.</p></section>;
 }
 
 function EntryDetailsRoute({ administrationClient, canOperate, canReveal, client, selectedSetupId }: {

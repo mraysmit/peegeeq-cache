@@ -1,5 +1,6 @@
 package dev.mars.peegeeq.cache.rest.server;
 
+import dev.mars.peegeeq.cache.api.management.AdminCapabilities;
 import dev.mars.peegeeq.cache.api.management.ManagementSecretProvider;
 import dev.mars.peegeeq.cache.api.management.ManagementService;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +32,7 @@ public final class SetupRegistry {
     private final ManagementSecretProvider secretProvider;
     private final Clock clock;
     private final ManagementRuntimeMonitor runtimeMonitor;
+    private final Function<AdminCapabilities, SetupCapabilities> capabilityMapper;
     private final Map<String, Entry> entries = new HashMap<>();
     private final Set<String> pendingRegistrations = new HashSet<>();
     private final List<SetupScopeLifecycle> scopeLifecycles = new ArrayList<>();
@@ -37,21 +40,21 @@ public final class SetupRegistry {
     private Future<Void> closing;
 
     public SetupRegistry(SetupRuntimeFactory runtimeFactory, ManagementSecretProvider secretProvider) {
-        this(runtimeFactory, secretProvider, Clock.systemUTC(), null);
+        this(runtimeFactory, secretProvider, Clock.systemUTC(), null, SetupCapabilities::from);
     }
 
     public SetupRegistry(
             SetupRuntimeFactory runtimeFactory,
             ManagementSecretProvider secretProvider,
             ManagementRuntimeMonitor runtimeMonitor) {
-        this(runtimeFactory, secretProvider, Clock.systemUTC(), runtimeMonitor);
+        this(runtimeFactory, secretProvider, Clock.systemUTC(), runtimeMonitor, SetupCapabilities::from);
     }
 
     SetupRegistry(
             SetupRuntimeFactory runtimeFactory,
             ManagementSecretProvider secretProvider,
             Clock clock) {
-        this(runtimeFactory, secretProvider, clock, null);
+        this(runtimeFactory, secretProvider, clock, null, SetupCapabilities::from);
     }
 
     SetupRegistry(
@@ -59,10 +62,20 @@ public final class SetupRegistry {
             ManagementSecretProvider secretProvider,
             Clock clock,
             ManagementRuntimeMonitor runtimeMonitor) {
+        this(runtimeFactory, secretProvider, clock, runtimeMonitor, SetupCapabilities::from);
+    }
+
+    SetupRegistry(
+            SetupRuntimeFactory runtimeFactory,
+            ManagementSecretProvider secretProvider,
+            Clock clock,
+            ManagementRuntimeMonitor runtimeMonitor,
+            Function<AdminCapabilities, SetupCapabilities> capabilityMapper) {
         this.runtimeFactory = Objects.requireNonNull(runtimeFactory, "runtimeFactory");
         this.secretProvider = Objects.requireNonNull(secretProvider, "secretProvider");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.runtimeMonitor = runtimeMonitor;
+        this.capabilityMapper = Objects.requireNonNull(capabilityMapper, "capabilityMapper");
     }
 
     public Future<SetupConnectionTest> test(SetupDefinition definition, SetupSecret suppliedSecret) {
@@ -86,8 +99,9 @@ public final class SetupRegistry {
         try {
             operation = runtimeFactory.create(definition, secret)
                     .compose(runtime -> runtime.verifyReady()
-                            .compose(ignored -> runtime.closeAsync())
-                            .map(ignored -> connectionTest(started))
+                            .map(ignored -> capabilityMapper.apply(runtime.management().capabilities()))
+                            .compose(capabilities -> runtime.closeAsync().map(capabilities))
+                            .map(capabilities -> connectionTest(started, capabilities))
                             .recover(failure -> runtime.closeAsync()
                                     .recover(closeFailure -> Future.succeededFuture())
                                     .compose(ignored -> Future.failedFuture(failure))));
@@ -102,8 +116,7 @@ public final class SetupRegistry {
         });
     }
 
-    private static SetupConnectionTest connectionTest(long started) {
-        SetupCapabilities supported = SetupCapabilities.allSupported();
+    private static SetupConnectionTest connectionTest(long started, SetupCapabilities supported) {
         return new SetupConnectionTest(
                 true,
                 SetupSchemaState.READY,
@@ -243,8 +256,14 @@ public final class SetupRegistry {
     }
 
     public synchronized SetupCapabilities capabilities(String setupId) {
-        requireEntry(setupId);
-        return SetupCapabilities.allSupported();
+        Entry entry = requireEntry(setupId);
+        synchronized (entry) {
+            if (entry.runtime == null) {
+                throw new SetupRegistryException(
+                        409, "SETUP_NOT_CONNECTED", "Setup is not connected");
+            }
+            return capabilityMapper.apply(entry.runtime.management().capabilities());
+        }
     }
 
     public ManagementService management(String setupId) {

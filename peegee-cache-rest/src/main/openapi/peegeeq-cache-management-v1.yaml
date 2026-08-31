@@ -1758,7 +1758,7 @@ components:
         capabilities:
           type: object
           additionalProperties: false
-          required: [namespaceInspection, expiredEntryInspection, counterInspection, lockInspection, forcedLockRelease, bulkEntryDelete, bulkCounterDelete, pubSub, databaseStatistics, sensitiveValueReveal]
+          required: [namespaceInspection, expiredEntryInspection, counterInspection, lockInspection, forcedLockRelease, bulkEntryDelete, bulkCounterDelete, pubSub, databaseStatistics, entryValueReveal, lockOwnerReveal, pubSubPayloadReveal]
           properties:
             namespaceInspection: {type: boolean}
             expiredEntryInspection: {type: boolean}
@@ -1769,7 +1769,9 @@ components:
             bulkCounterDelete: {type: boolean}
             pubSub: {type: boolean}
             databaseStatistics: {type: boolean}
-            sensitiveValueReveal: {type: boolean}
+            entryValueReveal: {type: boolean}
+            lockOwnerReveal: {type: boolean}
+            pubSubPayloadReveal: {type: boolean}
         limits:
           type: object
           additionalProperties: false

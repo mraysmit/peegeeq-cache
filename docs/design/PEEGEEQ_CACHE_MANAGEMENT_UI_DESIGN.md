@@ -23,7 +23,7 @@ The corresponding interactive screen designs are available in [the management UI
 
 Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
-As of 30 August 2026, the implemented production boundary includes the complete Maven-packaged React console: both authentication modes; setup lifecycle and capability-aware scope; Overview and namespace inspection; safe entry browsing/reveal and guarded administration; precision-safe counters; masked/version-checked locks; bounded non-durable Pub/Sub; strict SSE/WebSocket transports; monitoring, activity, notifications, and harmless settings; accessible focus behavior; route-wide mobile/desktop axe and viewport containment plus six-viewport populated-workflow coverage; screenshot inspection; and cross-surface privacy checks. The complete local reactor is green with 513 Surefire, 21 Failsafe, and 112 Vitest tests. The 19 Java Playwright browser tests include 16 independent journey owners and 12 isolated packaged Chromium journeys against real TLS PostgreSQL, with no product-request interception; two additional Failsafe tests validate the runnable artifact. The refreshed complete reactor passes PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+As of 31 August 2026, the implemented production boundary includes the complete Maven-packaged React console: both authentication modes; setup lifecycle and capability-aware scope; Overview and namespace inspection; safe entry browsing/reveal and guarded administration; precision-safe counters; masked/version-checked locks; bounded non-durable Pub/Sub; strict SSE/WebSocket transports; monitoring, activity, notifications, and effective harmless settings; role/capability-aware routes and actions; accessible focus behavior; route-wide mobile/desktop axe, zoom, long-content, and viewport containment; screenshot inspection; and cross-surface privacy checks. The complete local reactor is green with 547 Surefire, 559 Failsafe, and 123 Vitest tests. The Playwright catalogue contains exactly 557 independently identified browser scenarios, including 16 canonical operation-owning journeys and 12 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception; two additional Failsafe tests validate the runnable artifact. The U10 pre-expansion reactor passed PostgreSQL 15.17, 16.13, 17.11, and 18.3; the expanded 557-scenario catalogue is currently cumulatively verified on PostgreSQL 18.3, with PostgreSQL 15-17 reruns retained as release validation.
 
 ## 2. Fixed decisions
 
@@ -590,7 +590,9 @@ Capability response:
   "bulkCounterDelete": true,
   "pubSub": true,
   "databaseStatistics": true,
-  "sensitiveValueReveal": true
+  "entryValueReveal": true,
+  "lockOwnerReveal": true,
+  "pubSubPayloadReveal": true
 }
 ```
 

@@ -56,7 +56,7 @@ class ManagementPackagingBrowserIT {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("scenarios")
+    @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#packagingScenarios")
     void packagingScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 1;
         ManagementConsolePostgresFixture.run(
@@ -64,7 +64,11 @@ class ManagementPackagingBrowserIT {
                 POSTGRES.postgres(),
                 false,
                 scenario.operations(),
-                context -> verify(index, context.page(), context.origin()));
+                context -> {
+                    if (index == 10) context.diagnostics().expectFailedResponse(404, "/ui/assets/not-present.js");
+                    if (index == 11) context.diagnostics().expectFailedResponse(404, "/pom.xml");
+                    verify(index, context.page(), context.origin());
+                });
     }
 
     private static void verify(int index, Page page, String origin) {

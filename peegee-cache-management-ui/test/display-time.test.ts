@@ -1,18 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { formatDisplayInstant } from '@src/presentation/display-time';
+import { defaultPreferences, savePreferences } from '@src/state/preferences';
 
 describe('shared display-time preference formatter', () => {
-  it('renders protocol UTC instants deterministically in the default UTC preference', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('renders protocol UTC instants according to the persisted UTC preference', () => {
+    savePreferences({ ...defaultPreferences, timezone: 'UTC' });
     expect(formatDisplayInstant('2026-08-26T10:15:30Z')).toBe('26 Aug 2026, 10:15:30 UTC');
   });
 
-  it('supports the browser-local preference through the same boundary', () => {
+  it('uses the persisted browser-local preference when callers omit an override', () => {
     const value = '2026-08-26T10:15:30Z';
+    savePreferences({ ...defaultPreferences, timezone: 'LOCAL' });
     const expected = new Intl.DateTimeFormat('en-GB', {
       dateStyle: 'medium',
       timeStyle: 'medium',
     }).format(new Date(value));
-    expect(formatDisplayInstant(value, 'BROWSER_LOCAL')).toBe(expected);
+    expect(formatDisplayInstant(value)).toBe(expected);
   });
 });

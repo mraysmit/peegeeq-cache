@@ -431,7 +431,9 @@ public final class SetupMutationRoutes implements ManagementRequestRouter {
         node.put("bulkCounterDelete", features.bulkCounterDelete());
         node.put("pubSub", features.pubSub());
         node.put("databaseStatistics", features.databaseStatistics());
-        node.put("sensitiveValueReveal", features.sensitiveValueReveal());
+        node.put("entryValueReveal", features.entryValueReveal());
+        node.put("lockOwnerReveal", features.lockOwnerReveal());
+        node.put("pubSubPayloadReveal", features.pubSubPayloadReveal());
     }
 
     private SetupPayload parsePayload(byte[] body, boolean registration) {

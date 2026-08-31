@@ -33,6 +33,35 @@ class LocksFake implements LockClientPort {
 }
 
 describe('U6 counter and lock pages', () => {
+  it('keeps viewer counter and lock surfaces read-only and owner-masked', async () => {
+    render(<CountersPage canOperate={false} client={new CountersFake()} selectedSetupId="primary-cache" />);
+    expect(await screen.findByText('9,223,372,036,854,775,807')).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Counters results' })).toHaveAttribute('tabindex', '0');
+    expect(screen.queryByRole('button', { name: 'Create counter' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage total' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Select orders/total')).not.toBeInTheDocument();
+
+    render(<LocksPage canOperate={false} canReveal={false} client={new LocksFake()} selectedSetupId="primary-cache" />);
+    expect((await screen.findAllByText('Masked')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Manage processor' })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('sensitive-owner');
+  });
+
+  it('degrades bulk-delete and forced-release capabilities independently', async () => {
+    const counters = render(<CountersPage canBulkDelete={false} canOperate client={new CountersFake()} selectedSetupId="primary-cache" />);
+    expect(await screen.findByRole('button', { name: 'Create counter' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Manage total' })).toBeVisible();
+    expect(screen.queryByLabelText('Select orders/total')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Preview selected counter deletion' })).not.toBeInTheDocument();
+    counters.unmount();
+
+    render(<LocksPage canOperate={false} canReveal client={new LocksFake()} selectedSetupId="primary-cache" />);
+    expect(await screen.findByRole('button', { name: 'Manage processor' })).toBeVisible();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Manage processor' }));
+    expect(screen.getByRole('button', { name: 'Reveal owner' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Force release' })).not.toBeInTheDocument();
+  });
+
   it('renders exact 64-bit values and only presents a committed adjustment result', async () => {
     const client = new CountersFake();
     const user = userEvent.setup();
@@ -68,6 +97,7 @@ describe('U6 counter and lock pages', () => {
     const user = userEvent.setup();
     render(<LocksPage canOperate canReveal client={client} selectedSetupId="primary-cache" />);
     expect(await screen.findByText('Masked')).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Active locks results' })).toHaveAttribute('tabindex', '0');
     expect(document.body).not.toHaveTextContent('sensitive-owner');
     await user.click(screen.getByRole('button', { name: 'Manage processor' }));
     await user.click(screen.getByRole('button', { name: 'Reveal owner' }));

@@ -35,6 +35,21 @@ class SetupRegistryTest {
     }
 
     @Test
+    void connectionTestReportsCapabilitiesFromTheTemporaryRuntime() throws Exception {
+        RecordingFactory factory = new RecordingFactory();
+        SetupRegistry registry = new SetupRegistry(factory, reference -> bytes("configured-secret"));
+
+        SetupConnectionTest result = await(registry.test(
+                definition("candidate"), SetupSecret.owned(bytes("ui-secret"))));
+
+        assertFalse(result.capabilities().namespaceInspection());
+        assertFalse(result.capabilities().entryValueReveal());
+        assertFalse(result.capabilities().lockOwnerReveal());
+        assertTrue(result.capabilities().pubSubPayloadReveal());
+        assertEquals(10_485_760, result.limits().maximumValueBytes());
+    }
+
+    @Test
     void failedRegistrationClosesRuntimeClearsSecretAndLeavesNoEntry() {
         RecordingFactory factory = new RecordingFactory();
         factory.failReadiness = true;

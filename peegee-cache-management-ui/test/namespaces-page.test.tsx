@@ -71,6 +71,7 @@ describe('U3 namespace inspection pages', () => {
     const client = new FakeNamespaceClient();
     render(<MemoryRouter><NamespacesPage client={client} selectedSetupId="primary-cache" /></MemoryRouter>);
     await screen.findByText('orders/eu');
+    expect(screen.getByRole('region', { name: 'Namespace results' })).toHaveAttribute('tabindex', '0');
 
     await user.type(screen.getByLabelText('Namespace prefix'), 'orders');
     await user.click(screen.getByRole('button', { name: 'Apply filters' }));

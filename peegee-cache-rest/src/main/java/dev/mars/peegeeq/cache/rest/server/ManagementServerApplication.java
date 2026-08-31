@@ -3,6 +3,7 @@ package dev.mars.peegeeq.cache.rest.server;
 import dev.mars.peegeeq.cache.api.management.ManagementAuditFingerprinter;
 import dev.mars.peegeeq.cache.api.management.ManagementAuditQueueState;
 import dev.mars.peegeeq.cache.api.management.ManagementAuditSink;
+import dev.mars.peegeeq.cache.api.management.AdminCapabilities;
 import dev.mars.peegeeq.cache.api.management.ManagementSecretProvider;
 import dev.mars.peegeeq.cache.rest.audit.DurableManagementAuditSink;
 import dev.mars.peegeeq.cache.rest.security.BrowserRequestSecurity;
@@ -29,6 +30,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 /** Production composition root for the complete management HTTP runtime. */
 public final class ManagementServerApplication {
@@ -66,12 +68,25 @@ public final class ManagementServerApplication {
             TrustProfileCertificateResolver trustProfiles,
             MeterRegistry meterRegistry,
             Clock clock) {
+        return start(configuration, secrets, targetResolver, trustProfiles, meterRegistry, clock,
+                SetupCapabilities::from);
+    }
+
+    static Future<ManagementServerApplication> start(
+            ManagementServerConfiguration configuration,
+            ManagementSecretProvider secrets,
+            TargetAddressResolver targetResolver,
+            TrustProfileCertificateResolver trustProfiles,
+            MeterRegistry meterRegistry,
+            Clock clock,
+            Function<AdminCapabilities, SetupCapabilities> capabilityMapper) {
         Objects.requireNonNull(configuration, "configuration");
         Objects.requireNonNull(secrets, "secrets");
         Objects.requireNonNull(targetResolver, "targetResolver");
         Objects.requireNonNull(trustProfiles, "trustProfiles");
         Objects.requireNonNull(meterRegistry, "meterRegistry");
         Objects.requireNonNull(clock, "clock");
+        Objects.requireNonNull(capabilityMapper, "capabilityMapper");
 
         ManagementRuntimeMonitor runtimeMonitor = new ManagementRuntimeMonitor(clock, System::nanoTime);
         MicrometerManagementTelemetry telemetry = new MicrometerManagementTelemetry(
@@ -99,7 +114,8 @@ public final class ManagementServerApplication {
                         durable,
                         telemetry,
                         runtimeMonitor,
-                        clock))
+                        clock,
+                        capabilityMapper))
                 .recover(failure -> vertx.close()
                         .recover(ignored -> Future.succeededFuture())
                         .compose(ignored -> Future.failedFuture(failure)));
@@ -129,7 +145,8 @@ public final class ManagementServerApplication {
             DurableManagementAuditSink durable,
             MicrometerManagementTelemetry telemetry,
             ManagementRuntimeMonitor runtimeMonitor,
-            Clock clock) {
+            Clock clock,
+            Function<AdminCapabilities, SetupCapabilities> capabilityMapper) {
         try {
             ManagementActivityStore activity = new ManagementActivityStore(ACTIVITY_CAPACITY);
             ManagementLiveEventHub liveEvents = new ManagementLiveEventHub(
@@ -145,7 +162,8 @@ public final class ManagementServerApplication {
                     fingerprinter,
                     clock,
                     () -> UUID.randomUUID().toString());
-            SetupRegistry registry = new SetupRegistry(runtimeFactory, secrets, clock, runtimeMonitor);
+            SetupRegistry registry = new SetupRegistry(
+                    runtimeFactory, secrets, clock, runtimeMonitor, capabilityMapper);
             BrowserRequestSecurity browserSecurity = new BrowserRequestSecurity(
                     configuration.originPolicy());
             ManagementRateLimiter rateLimiter = defaultRateLimiter(clock, telemetry);

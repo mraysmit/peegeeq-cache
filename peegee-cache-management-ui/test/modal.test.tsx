@@ -39,4 +39,22 @@ describe('accessible modal focus lifecycle', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
+
+  it('dismisses with Escape when asynchronous work has moved focus outside the dialog', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: 'Open action' });
+
+    await user.click(trigger);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Async modal actions can re-render surrounding content and move focus outside
+    // the dialog. Escape must remain a document-level modal dismissal contract.
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
 });

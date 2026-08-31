@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 
 interface ModalProps {
   readonly children: ReactNode;
@@ -20,7 +20,7 @@ const focusableSelector = [
 export function Modal({ children, className = 'modal modal--compact', labelId, onDismiss }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     const dialog = dialogRef.current;
     const first = dialog?.querySelector<HTMLElement>('[data-autofocus], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])');
@@ -28,18 +28,21 @@ export function Modal({ children, className = 'modal modal--compact', labelId, o
     return () => previouslyFocused?.focus();
   }, []);
 
-  useEffect(() => {
-    if (onDismiss === undefined) return undefined;
-    const dismissOnEscape = (event: globalThis.KeyboardEvent) => {
+  useLayoutEffect(() => {
+    if (onDismiss === undefined) return;
+    const dismissTopmostModal = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]');
+      if (dialogs.item(dialogs.length - 1) !== dialogRef.current) return;
       event.preventDefault();
+      event.stopPropagation();
       onDismiss();
     };
-    document.addEventListener('keydown', dismissOnEscape);
-    return () => document.removeEventListener('keydown', dismissOnEscape);
+    document.addEventListener('keydown', dismissTopmostModal);
+    return () => document.removeEventListener('keydown', dismissTopmostModal);
   }, [onDismiss]);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Tab') return;
     const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])];
     if (focusable.length === 0) {

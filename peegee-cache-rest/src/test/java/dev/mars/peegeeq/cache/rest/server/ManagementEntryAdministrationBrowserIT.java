@@ -84,7 +84,8 @@ class ManagementEntryAdministrationBrowserIT {
             Set<ManagementBrowserEvidence> evidence = operations.stream().anyMatch(op -> Set.of(
                     "setEntry", "deleteEntry", "expireEntry", "persistEntry", "touchEntry").contains(op))
                     ? Set.of(ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION,
-                    ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP)
+                    ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT,
+                    ManagementBrowserEvidence.RESOURCE_CLEANUP)
                     : Set.of(ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION,
                     ManagementBrowserEvidence.RESOURCE_CLEANUP);
             return new ManagementBrowserCase(
@@ -101,11 +102,19 @@ class ManagementEntryAdministrationBrowserIT {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("scenarios")
+    @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#entryAdministrationScenarios")
     void entryAdministrationScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 57;
         ManagementConsolePostgresFixture.run(
                 temporaryDirectory, POSTGRES.postgres(), true, scenario.operations(), context -> {
+                    if (index == 23 || index == 42) context.diagnostics().expectFailedResponse(409,
+                            "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
+                    if (index == 43) context.diagnostics().expectFailedResponse(412,
+                            "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
+                    if (index == 45) {
+                        ManagementConsolePostgresFixture.execute(context.postgres(),
+                                "UPDATE peegee_cache.cache_entries SET expires_at=clock_timestamp()+interval '5 minutes' WHERE cache_key='customer:1'");
+                    }
                     ManagementConsolePostgresFixture.authenticate(context);
                     ManagementConsolePostgresFixture.registerSetup(context);
                     openEntries(context.page());
@@ -114,18 +123,25 @@ class ManagementEntryAdministrationBrowserIT {
     }
 
     private static List<String> operations(int index) {
-        if (index < 16 || index >= 24 && index <= 27) return List.of("listEntries");
-        if (index <= 23) return List.of("setEntry");
-        if (index < 39) return List.of("getEntry");
-        if (index <= 43) return List.of("setEntry");
+        if (index < 16 || index >= 24 && index <= 27) return entryOperations();
+        if (index <= 23) return entryOperations("setEntry");
+        if (index < 39) return entryOperations("getEntry");
+        if (index <= 43) return entryOperations("getEntry", "setEntry");
         return switch (index) {
-            case 44 -> List.of("expireEntry");
-            case 45 -> List.of("persistEntry");
-            case 46, 47 -> List.of("touchEntry");
-            case 48 -> List.of("getEntry");
-            case 49 -> List.of("deleteEntry");
+            case 44 -> entryOperations("getEntry", "expireEntry");
+            case 45 -> entryOperations("getEntry", "persistEntry");
+            case 46, 47 -> entryOperations("getEntry", "touchEntry");
+            case 48 -> entryOperations("getEntry");
+            case 49 -> entryOperations("getEntry", "deleteEntry");
             default -> throw new IllegalArgumentException("Unknown scenario " + index);
         };
+    }
+
+    private static List<String> entryOperations(String... additional) {
+        List<String> operations = new java.util.ArrayList<>(
+                List.of("listNamespaces", "getNamespace", "listEntries"));
+        operations.addAll(List.of(additional));
+        return List.copyOf(operations);
     }
 
     private static void verify(int index, ManagementConsolePostgresFixture.Context context) throws Exception {
@@ -147,13 +163,13 @@ class ManagementEntryAdministrationBrowserIT {
             case 13 -> assertThat(page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Create entry").setExact(true))).isVisible();
             case 14 -> assertThat(page.getByLabel("Select customer:1")).isVisible();
             case 15 -> assertFalse(page.content().contains("stored-value"));
-            case 16 -> createEntry(page, "created-string", "STRING", "created-value", "");
-            case 17 -> createEntry(page, "created-ttl", "STRING", "temporary", "60000");
-            case 18 -> createEntry(page, "created-json", "JSON", "{\"ok\":true}", "");
-            case 19 -> createEntry(page, "created-max", "LONG", "9223372036854775807", "");
-            case 20 -> createEntry(page, "created-min", "LONG", "-9223372036854775808", "");
-            case 21 -> createEntry(page, "created-bytes", "BYTES", "AP9B", "");
-            case 22 -> createEntry(page, "客户:🚀", "STRING", "缓存值", "");
+            case 16 -> { createEntry(page, "created-string", "STRING", "created-value", ""); assertEntryExists(context, "created-string", "STRING"); }
+            case 17 -> { createEntry(page, "created-ttl", "STRING", "temporary", "60000"); assertEntryExists(context, "created-ttl", "STRING"); assertEquals("true", scalar(context, "SELECT expires_at IS NOT NULL FROM peegee_cache.cache_entries WHERE cache_key='created-ttl'")); }
+            case 18 -> { createEntry(page, "created-json", "JSON", "{\"ok\":true}", ""); assertEntryExists(context, "created-json", "JSON"); }
+            case 19 -> { createEntry(page, "created-max", "LONG", "9223372036854775807", ""); assertEntryExists(context, "created-max", "LONG"); }
+            case 20 -> { createEntry(page, "created-min", "LONG", "-9223372036854775808", ""); assertEntryExists(context, "created-min", "LONG"); }
+            case 21 -> { createEntry(page, "created-bytes", "BYTES", "AP9B", ""); assertEntryExists(context, "created-bytes", "BYTES"); }
+            case 22 -> { createEntry(page, "客户:🚀", "STRING", "缓存值", ""); assertEntryExists(context, "客户:🚀", "STRING"); }
             case 23 -> { fillCreate(page, "customer:1", "STRING", "duplicate", ""); submitCreate(page); assertThat(page.getByRole(AriaRole.ALERT)).isVisible(); assertThat(createDialog(page)).isVisible(); }
             case 24 -> { fillCreate(page, "bad-json", "JSON", "{bad", ""); submitCreate(page); assertThat(page.getByRole(AriaRole.ALERT)).containsText("JSON_VALUE_INVALID"); }
             case 25 -> { fillCreate(page, "bad-long", "LONG", "1.5", ""); submitCreate(page); assertThat(page.getByRole(AriaRole.ALERT)).containsText("VALUE_TYPE_MISMATCH"); }
@@ -170,22 +186,24 @@ class ManagementEntryAdministrationBrowserIT {
             case 36 -> { openEdit(page); page.locator("#entry-ttl-mode").selectOption("REPLACE"); assertThat(page.locator("#entry-edit-ttl")).hasAttribute("required", ""); }
             case 37 -> { openEdit(page); assertThat(page.getByLabel("Entry value")).hasAttribute("required", ""); }
             case 38 -> { openEdit(page); assertThat(page.locator("#entry-set-mode")).hasValue("ONLY_IF_VERSION_MATCHES"); }
-            case 39 -> save(page, "updated-exact", null);
-            case 40 -> save(page, "updated-upsert", "UPSERT");
-            case 41 -> save(page, "updated-present", "ONLY_IF_PRESENT");
+            case 39 -> { save(page, "updated-exact", null); assertEquals("updated-exact", scalar(context, "SELECT convert_from(value_bytes,'UTF8') FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
+            case 40 -> { save(page, "updated-upsert", "UPSERT"); assertEquals("updated-upsert", scalar(context, "SELECT convert_from(value_bytes,'UTF8') FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
+            case 41 -> { save(page, "updated-present", "ONLY_IF_PRESENT"); assertEquals("updated-present", scalar(context, "SELECT convert_from(value_bytes,'UTF8') FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 42 -> { openEdit(page); page.locator("#entry-set-mode").selectOption("ONLY_IF_ABSENT"); page.getByLabel("Entry value").fill("must-not-write"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Save entry")).click(); assertThat(page.getByRole(AriaRole.ALERT)).isVisible(); assertThat(page.getByLabel("Entry value")).hasValue("must-not-write"); }
             case 43 -> { openEdit(page); page.getByLabel("Entry value").fill("conflicting-value"); ManagementConsolePostgresFixture.execute(context.postgres(), "UPDATE peegee_cache.cache_entries SET version=version+1 WHERE namespace='logical-orders' AND cache_key='customer:1'"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Save entry")).click(); assertThat(page.getByRole(AriaRole.ALERT)).containsText("VERSION_MISMATCH"); assertThat(page.getByLabel("Entry value")).hasValue("conflicting-value"); }
-            case 44 -> { openDetail(page); page.getByLabel("TTL milliseconds", new Page.GetByLabelOptions().setExact(true)).fill("60000"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Set TTL")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("TTL updated"); }
-            case 45 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Make persistent")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("persistent"); }
-            case 46 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Touch entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("authoritative metadata"); }
-            case 47 -> { openDetail(page); page.getByLabel("Refresh TTL milliseconds (optional)").fill("45000"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Touch entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("authoritative metadata"); assertThat(details(page)).containsText("45 s"); }
+            case 44 -> { openDetail(page); page.getByLabel("TTL milliseconds", new Page.GetByLabelOptions().setExact(true)).fill("60000"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Set TTL")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("TTL updated"); assertEquals("true", scalar(context, "SELECT expires_at IS NOT NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
+            case 45 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Make persistent")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("persistent"); assertEquals("true", scalar(context, "SELECT expires_at IS NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
+            case 46 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Touch entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("authoritative metadata"); assertEquals("true", scalar(context, "SELECT last_accessed_at IS NOT NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
+            case 47 -> { openDetail(page); page.getByLabel("Refresh TTL milliseconds (optional)").fill("45000"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Touch entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("authoritative metadata"); assertThat(details(page)).containsText("45 s"); assertEquals("true", scalar(context, "SELECT expires_at IS NOT NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 48 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Delete entry")).click(); Locator dialog = page.getByRole(AriaRole.DIALOG, new Page.GetByRoleOptions().setName("Delete customer:1?")); assertThat(dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Confirm delete"))).isDisabled(); dialog.getByLabel("Confirm entry key").fill("wrong"); assertThat(dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Confirm delete"))).isDisabled(); }
-            case 49 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Delete entry")).click(); Locator dialog = page.getByRole(AriaRole.DIALOG, new Page.GetByRoleOptions().setName("Delete customer:1?")); dialog.getByLabel("Confirm entry key").fill("customer:1"); dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Confirm delete")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("deleted"); }
+            case 49 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Delete entry")).click(); Locator dialog = page.getByRole(AriaRole.DIALOG, new Page.GetByRoleOptions().setName("Delete customer:1?")); dialog.getByLabel("Confirm entry key").fill("customer:1"); dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Confirm delete")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("deleted"); assertEquals("0", scalar(context, "SELECT count(*) FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             default -> throw new IllegalArgumentException("Unknown scenario " + index);
         }
     }
 
     private static Locator create(Page page) { page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Create entry").setExact(true)).click(); return createDialog(page); }
+    private static String scalar(ManagementConsolePostgresFixture.Context context, String sql) throws Exception { return ManagementConsolePostgresFixture.queryScalar(context.postgres(), sql); }
+    private static void assertEntryExists(ManagementConsolePostgresFixture.Context context, String key, String type) throws Exception { assertEquals(type, scalar(context, "SELECT value_type FROM peegee_cache.cache_entries WHERE cache_key='" + key.replace("'", "''") + "'")); }
     private static Locator createDialog(Page page) { return page.getByRole(AriaRole.DIALOG, new Page.GetByRoleOptions().setName("Create entry")); }
     private static void fillCreate(Page page, String key, String type, String value, String ttl) { Locator dialog = create(page); dialog.getByLabel("Key").fill(key); dialog.locator("#new-entry-type").selectOption(type); dialog.locator("#new-entry-value").fill(value); if (!ttl.isEmpty()) dialog.getByLabel("TTL milliseconds (blank for persistent)").fill(ttl); }
     private static void submitCreate(Page page) { createDialog(page).getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Create entry").setExact(true)).click(); }

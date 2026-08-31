@@ -296,7 +296,7 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-037", requirement = "Management API: a policy-allowed TLS connection can be tested before registration", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.CRITICAL, action = "Fill the reviewed PostgreSQL target and activate Test connection", expectedResult = "The real TLS database test succeeds visibly", cleanup = "Close the tested form and reset PostgreSQL", operations = {"listSetups", "testUnregisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-037", requirement = "Management API: a policy-allowed TLS connection can be tested before registration", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.CRITICAL, action = "Fill the reviewed PostgreSQL target and activate Test connection", expectedResult = "The real TLS database test succeeds visibly", cleanup = "Close the tested form and reset PostgreSQL", operations = {"listSetups", "testUnregisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void allowedTlsTargetPassesPreRegistrationTest() throws Exception {
         unregistered(context -> {
@@ -307,7 +307,7 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-038", requirement = "Management API: connection test reports migrated schema readiness", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Test the migrated PostgreSQL target", expectedResult = "The visible result reports schema ready", cleanup = "Close the tested form and reset PostgreSQL", operations = {"listSetups", "testUnregisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-038", requirement = "Management API: connection test reports migrated schema readiness", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Test the migrated PostgreSQL target", expectedResult = "The visible result reports schema ready", cleanup = "Close the tested form and reset PostgreSQL", operations = {"listSetups", "testUnregisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void connectionTestReportsReadySchema() throws Exception {
         unregistered(context -> {
@@ -318,7 +318,7 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-039", requirement = "UI design: successful connection testing preserves entered registration data", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Test a valid target and inspect the still-open form", expectedResult = "The setup identifier and password remain available for the explicit registration step", cleanup = "Close the secret-bearing form context", operations = {"listSetups", "testUnregisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.SENSITIVE_STATE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-039", requirement = "UI design: successful connection testing preserves entered registration data", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Test a valid target and inspect the still-open form", expectedResult = "The setup identifier and password remain available for the explicit registration step", cleanup = "Close the secret-bearing form context", operations = {"listSetups", "testUnregisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT, ManagementBrowserEvidence.SENSITIVE_STATE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void successfulConnectionTestPreservesRegistrationFields() throws Exception {
         unregistered(context -> {
@@ -330,7 +330,7 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-040", requirement = "UI design: testing a target does not implicitly register it", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.CRITICAL, action = "Test a valid target and close registration", expectedResult = "The page returns to an empty registry", cleanup = "Close the context and reset PostgreSQL", operations = {"listSetups", "testUnregisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-040", requirement = "UI design: testing a target does not implicitly register it", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.CRITICAL, action = "Test a valid target and close registration", expectedResult = "The page returns to an empty registry", cleanup = "Close the context and reset PostgreSQL", operations = {"listSetups", "testUnregisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void connectionTestDoesNotImplicitlyRegisterSetup() throws Exception {
         unregistered(context -> {
@@ -409,14 +409,14 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-049", requirement = "UI design: setup details preserve the pinned host and port", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Host", expectedResult = "The reviewed host and mapped PostgreSQL port are exact", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-049", requirement = "UI design: setup details preserve the pinned host and port", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Host", expectedResult = "The reviewed host and mapped PostgreSQL port are exact", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void detailsShowsPinnedHostAndPort() throws Exception {
         registered(context -> assertThat(details(context.page())).containsText(
                 "db.internal.example:" + context.postgres().getMappedPort(5432)));
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-050", requirement = "UI design: setup details identify database and schema independently", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect database scope", expectedResult = "Database peegeeq and schema peegee_cache are visible", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-050", requirement = "UI design: setup details identify database and schema independently", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect database scope", expectedResult = "Database peegeeq and schema peegee_cache are visible", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void detailsShowsDatabaseAndSchema() throws Exception {
         registered(context -> {
@@ -428,13 +428,13 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-051", requirement = "UI design: setup details expose installed migration version", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Migration", expectedResult = "A numeric migration version is displayed", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-051", requirement = "UI design: setup details expose installed migration version", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Migration", expectedResult = "A numeric migration version is displayed", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void detailsShowsMigrationVersion() throws Exception {
         registered(context -> assertThat(details(context.page()).locator("dl").first()).containsText("Migration"));
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-052", requirement = "UI design: setup details expose effective runtime pool size", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Pool size", expectedResult = "The configured pool size 3 is displayed", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-052", requirement = "UI design: setup details expose effective runtime pool size", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Pool size", expectedResult = "The configured pool size 3 is displayed", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void detailsShowsConfiguredPoolSize() throws Exception {
         registered(context -> {
@@ -444,7 +444,7 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-053", requirement = "Management API: setup health proves the migrated database is ready", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.CRITICAL, action = "Open setup details and inspect Database health", expectedResult = "Health is Up with Schema ready", cleanup = "Close details and reset PostgreSQL", operations = {"getSetupHealth"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-053", requirement = "Management API: setup health proves the migrated database is ready", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.CRITICAL, action = "Open setup details and inspect Database health", expectedResult = "Health is Up with Schema ready", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void detailsShowsUpAndSchemaReadyHealth() throws Exception {
         registered(context -> {
@@ -454,7 +454,7 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-054", requirement = "Management API: setup details expose effective capability flags", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect capabilities", expectedResult = "Namespace inspection, counters, locks, Pub/Sub, and sensitive reveal are available", cleanup = "Close details and reset PostgreSQL", operations = {"getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-054", requirement = "Management API: setup details expose effective capability flags", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect capabilities", expectedResult = "Namespace inspection, counters, locks, Pub/Sub, and each sensitive reveal capability are available", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void detailsShowsEffectiveCapabilityFlags() throws Exception {
         registered(context -> {
@@ -463,11 +463,13 @@ class ManagementSetupBrowserIT {
             assertThat(dialog).containsText("Counter inspection");
             assertThat(dialog).containsText("Lock inspection");
             assertThat(dialog).containsText("Pub sub");
-            assertThat(dialog).containsText("Sensitive value reveal");
+            assertThat(dialog).containsText("Entry value reveal");
+            assertThat(dialog).containsText("Lock owner reveal");
+            assertThat(dialog).containsText("Pub sub payload reveal");
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-055", requirement = "Management API: setup details expose effective payload and value limits", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Effective limits", expectedResult = "Maximum value and Pub/Sub byte limits are visible", cleanup = "Close details and reset PostgreSQL", operations = {"getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-055", requirement = "Management API: setup details expose effective payload and value limits", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Effective limits", expectedResult = "Maximum value and Pub/Sub byte limits are visible", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void detailsShowsEffectiveByteLimits() throws Exception {
         registered(context -> {
@@ -478,7 +480,7 @@ class ManagementSetupBrowserIT {
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-056", requirement = "Management API: a registered target can be retested without changing scope", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Activate Test on the connected setup row", expectedResult = "A notice reports response latency and ready schema while scope remains selected", cleanup = "Close the registered context and reset PostgreSQL", operations = {"listSetups", "testRegisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-056", requirement = "Management API: a registered target can be retested without changing scope", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Activate Test on the connected setup row", expectedResult = "A notice reports response latency and ready schema while scope remains selected", cleanup = "Close the registered context and reset PostgreSQL", operations = {"listSetups", "testRegisteredSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.DURABLE_AUDIT, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void registeredSetupCanBeRetestedWithoutScopeChange() throws Exception {
         registered(context -> {
