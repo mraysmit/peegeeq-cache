@@ -42,7 +42,11 @@ class ManagementCapabilityBrowserIT {
             "remove expired-entry status selection when expired-entry inspection is unavailable",
             "hide Keys navigation and block its direct route when entry inspection is unavailable",
             "remove entry mutation controls while retaining entry inspection",
-            "remove counter mutation controls while retaining counter inspection");
+            "remove counter mutation controls while retaining counter inspection",
+            "remove batch panels while retaining other advanced operations",
+            "remove value scanning while retaining entry existence checks",
+            "remove core metrics while retaining other advanced operations",
+            "remove owner lock operations while retaining other advanced operations");
 
     static List<ManagementBrowserCase> scenarios() {
         return IntStream.range(0, ACTIONS.size())
@@ -197,6 +201,36 @@ class ManagementCapabilityBrowserIT {
                 assertThat(page.getByRole(AriaRole.BUTTON,
                         new Page.GetByRoleOptions().setName("Manage count"))).hasCount(0);
             }
+            case 14 -> {
+                openAdvanced(page);
+                assertThat(page.getByRole(AriaRole.HEADING,
+                        new Page.GetByRoleOptions().setName("Batch get").setExact(true))).hasCount(0);
+                assertThat(page.getByRole(AriaRole.HEADING,
+                        new Page.GetByRoleOptions().setName("Batch set").setExact(true))).hasCount(0);
+                assertThat(page.getByRole(AriaRole.HEADING,
+                        new Page.GetByRoleOptions().setName("Exact core metrics").setExact(true))).isVisible();
+            }
+            case 15 -> {
+                openAdvanced(page);
+                assertThat(page.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("Run backend scan").setExact(true))).hasCount(0);
+                assertThat(page.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("Check entry existence").setExact(true))).isVisible();
+            }
+            case 16 -> {
+                openAdvanced(page);
+                assertThat(page.getByRole(AriaRole.HEADING,
+                        new Page.GetByRoleOptions().setName("Exact core metrics").setExact(true))).hasCount(0);
+                assertThat(page.getByRole(AriaRole.HEADING,
+                        new Page.GetByRoleOptions().setName("Batch get").setExact(true))).isVisible();
+            }
+            case 17 -> {
+                openAdvanced(page);
+                assertThat(page.getByRole(AriaRole.HEADING,
+                        new Page.GetByRoleOptions().setName("Owner lock lifecycle").setExact(true))).hasCount(0);
+                assertThat(page.getByRole(AriaRole.HEADING,
+                        new Page.GetByRoleOptions().setName("Batch get").setExact(true))).isVisible();
+            }
             default -> throw new IllegalArgumentException("Unknown capability scenario " + index);
         }
     }
@@ -213,6 +247,11 @@ class ManagementCapabilityBrowserIT {
                 new Page.GetByRoleOptions().setName(ManagementConsolePostgresFixture.NAMESPACE).setExact(true)).click();
         page.getByRole(AriaRole.TAB, new Page.GetByRoleOptions().setName("Entries")).click();
         heading(page, "Key Browser");
+    }
+
+    private static void openAdvanced(Page page) {
+        navigation(page, "Advanced").click();
+        heading(page, "Advanced operations");
     }
 
     private static Locator openLock(Page page) {
@@ -246,6 +285,10 @@ class ManagementCapabilityBrowserIT {
                     : EnumSet.copyOf(source.management().supported());
             boolean pubSub = source.pubSub();
             boolean pubSubPayloadReveal = source.pubSubPayloadReveal();
+            boolean batchEntryOperations = source.batchEntryOperations();
+            boolean valueScan = source.valueScan();
+            boolean cacheMetrics = source.cacheMetrics();
+            boolean ownerLockOperations = source.ownerLockOperations();
             switch (index) {
                 case 0 -> supported.remove(ManagementCapability.COUNTER_INSPECTION);
                 case 1 -> supported.remove(ManagementCapability.LOCK_INSPECTION);
@@ -261,6 +304,10 @@ class ManagementCapabilityBrowserIT {
                 case 11 -> supported.remove(ManagementCapability.ENTRY_INSPECTION);
                 case 12 -> supported.remove(ManagementCapability.ENTRY_MUTATION);
                 case 13 -> supported.remove(ManagementCapability.COUNTER_MUTATION);
+                case 14 -> batchEntryOperations = false;
+                case 15 -> valueScan = false;
+                case 16 -> cacheMetrics = false;
+                case 17 -> ownerLockOperations = false;
                 default -> throw new IllegalArgumentException("Unknown capability scenario " + index);
             }
             AdminCapabilities management = new AdminCapabilities(
@@ -269,10 +316,10 @@ class ManagementCapabilityBrowserIT {
                     management,
                     pubSub,
                     pubSubPayloadReveal,
-                    source.batchEntryOperations(),
-                    source.valueScan(),
-                    source.cacheMetrics(),
-                    source.ownerLockOperations());
+                    batchEntryOperations,
+                    valueScan,
+                    cacheMetrics,
+                    ownerLockOperations);
         };
     }
 }

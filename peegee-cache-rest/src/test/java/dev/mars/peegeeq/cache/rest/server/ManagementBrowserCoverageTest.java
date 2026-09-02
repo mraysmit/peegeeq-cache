@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ManagementBrowserCoverageTest {
 
-    private static final int CURRENT_SCENARIO_COUNT = 553;
+    private static final int CURRENT_SCENARIO_COUNT = 557;
 
     private static final Set<String> REQUIRED_JOURNEYS = Set.of(
             "trusted-proxy-session",
