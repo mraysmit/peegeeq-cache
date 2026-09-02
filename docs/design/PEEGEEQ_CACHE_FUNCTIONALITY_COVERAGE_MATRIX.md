@@ -59,9 +59,9 @@ Strictly counting the 32 public data-service methods in `CacheService`, `Counter
 
 The percentages above are method-level traceability, not a weighted score. `BackendFunctionalityInventoryTest` independently reflects all seven public service contracts, asserts the exact 32-method inventory, and fails if any public method lacks a reviewed OpenAPI mapping.
 
-The 59 management operations are separately checked for OpenAPI ownership, production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The active desktop-only browser catalogue contains 550 scenarios, 17 named operation-owning journeys, and 13 isolated packaged Chromium/PostgreSQL journeys.
+The 59 management operations are separately checked for OpenAPI ownership, production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The active desktop-only browser catalogue contains 557 scenarios, 17 named operation-owning journeys, 18 independently degraded capability paths, and 13 isolated packaged Chromium/PostgreSQL journeys.
 
-Final verification on 2 September 2026 used a clean 11-module `mvn -o clean verify` run under OpenJDK 25 and PostgreSQL 18.3. It passed all modules in 31 minutes 13 seconds, including 129/129 Vitest tests, 162/162 REST Surefire tests, 550/550 packaged desktop-browser scenarios, and 3/3 additional runnable-artifact/evidence Failsafe checks. The generated `playwright-evidence.html` reports exactly 550 scenarios and 550 passes.
+Baseline verification on 2 September 2026 used a clean 11-module `mvn -o clean verify` run under OpenJDK 25 and PostgreSQL 18.3. It passed all modules in 31 minutes 13 seconds, including 129/129 Vitest tests, 162/162 REST Surefire tests, 550/550 packaged desktop-browser scenarios, and 3/3 additional runnable-artifact/evidence Failsafe checks. The active 557-scenario catalogue adds seven missing independent capability-degradation cases; all 18 capability scenarios pass their focused packaged Chromium/PostgreSQL gate, and the complete cumulative regate is in progress.
 
 ## 4. Source authorities
 
