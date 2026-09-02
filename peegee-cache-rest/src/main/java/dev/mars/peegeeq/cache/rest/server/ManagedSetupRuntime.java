@@ -41,6 +41,30 @@ public interface ManagedSetupRuntime {
         throw new SetupRegistryException(409, "SETUP_CACHE_UNAVAILABLE", "Setup cache is unavailable");
     }
 
+    default boolean supportsPubSub() {
+        return false;
+    }
+
+    default boolean supportsPubSubPayloadReveal() {
+        return false;
+    }
+
+    default boolean supportsBatchEntryOperations() {
+        return false;
+    }
+
+    default boolean supportsValueScan() {
+        return false;
+    }
+
+    default boolean supportsCacheMetrics() {
+        return false;
+    }
+
+    default boolean supportsOwnerLockOperations() {
+        return false;
+    }
+
     Future<Void> closeAsync();
 
     private static long elapsedMillis(long started) {

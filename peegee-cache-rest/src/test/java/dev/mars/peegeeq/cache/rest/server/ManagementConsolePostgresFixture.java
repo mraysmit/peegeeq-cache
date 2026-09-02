@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -130,11 +131,11 @@ final class ManagementConsolePostgresFixture {
             Path temporaryDirectory,
             PostgreSQLContainer postgres,
             boolean seed,
-            SetupCapabilities advertisedCapabilities,
+            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter,
             List<String> expectedOperations,
             Journey journey) throws Exception {
         run(temporaryDirectory, postgres, seed, Clock.systemUTC(), expectedOperations,
-                java.util.Objects.requireNonNull(advertisedCapabilities, "advertisedCapabilities"),
+                java.util.Objects.requireNonNull(capabilitySourceFilter, "capabilitySourceFilter"),
                 Map.of(), journey);
     }
 
@@ -156,7 +157,7 @@ final class ManagementConsolePostgresFixture {
             boolean seed,
             Clock clock,
             List<String> expectedOperations,
-            SetupCapabilities advertisedCapabilities,
+            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter,
             Map<String, String> trustedProxyHeaders,
             Journey journey) throws Exception {
         if (!postgres.isRunning()) {
@@ -194,7 +195,7 @@ final class ManagementConsolePostgresFixture {
                     "127.0.0.1", managementPort, origin, targetPolicy, auditPath, auditKey);
             InetAddress databaseAddress = InetAddress.getByName(postgres.getHost());
             Buffer serverCertificate = certificate();
-            application = advertisedCapabilities == null
+            application = capabilitySourceFilter == null
                     ? await(ManagementServerApplication.start(
                     configuration,
                     reference -> reference.equals(auditKey) ? new byte[32] : null,
@@ -207,9 +208,9 @@ final class ManagementConsolePostgresFixture {
                     reference -> reference.equals(auditKey) ? new byte[32] : null,
                     ignored -> List.of(databaseAddress),
                     trustProfile -> trustProfile.equals("test-ca") ? serverCertificate : null,
-                    meters,
-                    clock,
-                    ignored -> advertisedCapabilities));
+                     meters,
+                     clock,
+                     capabilitySourceFilter));
 
             String bootstrapToken = trustedProxy
                     ? ""

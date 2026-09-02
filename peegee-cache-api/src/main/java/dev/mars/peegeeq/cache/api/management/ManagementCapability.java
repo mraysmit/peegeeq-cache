@@ -11,6 +11,9 @@ public enum ManagementCapability {
     LOCK_INSPECTION,
     LOCK_REVEAL,
     FORCE_LOCK_RELEASE,
+    ENTRY_BULK_DELETE,
+    COUNTER_BULK_DELETE,
+    /** Compatibility aggregate for adapters that cannot distinguish bulk resource types. */
     BULK_DELETE,
     DATABASE_MONITORING,
     EXPIRY_MONITORING

@@ -88,7 +88,8 @@ public final class PgManagementService implements ManagementService {
         supported.add(ManagementCapability.COUNTER_MUTATION);
         supported.add(ManagementCapability.LOCK_REVEAL);
         supported.add(ManagementCapability.FORCE_LOCK_RELEASE);
-        supported.add(ManagementCapability.BULK_DELETE);
+        supported.add(ManagementCapability.ENTRY_BULK_DELETE);
+        supported.add(ManagementCapability.COUNTER_BULK_DELETE);
         this.capabilities = new AdminCapabilities(supported, ManagementLimits.defaults());
     }
 
@@ -554,7 +555,7 @@ public final class PgManagementService implements ManagementService {
     public Future<BulkDeletePreview> previewEntryDelete(
             EntryDeleteFilter filter,
             ManagementActionContext context) {
-        if (bulkDeletes == null) return unavailable(ManagementCapability.BULK_DELETE);
+        if (bulkDeletes == null) return unavailable(ManagementCapability.ENTRY_BULK_DELETE);
         Objects.requireNonNull(filter, "filter");
         Objects.requireNonNull(context, "context");
         return auditedBulk(
@@ -569,7 +570,7 @@ public final class PgManagementService implements ManagementService {
     public Future<BulkDeleteResult> executeEntryDelete(
             ConfirmedEntryDelete request,
             ManagementActionContext context) {
-        if (bulkDeletes == null) return unavailable(ManagementCapability.BULK_DELETE);
+        if (bulkDeletes == null) return unavailable(ManagementCapability.ENTRY_BULK_DELETE);
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedBulk(
@@ -584,7 +585,7 @@ public final class PgManagementService implements ManagementService {
     public Future<BulkDeletePreview> previewCounterDelete(
             CounterDeleteSelection selection,
             ManagementActionContext context) {
-        if (bulkDeletes == null) return unavailable(ManagementCapability.BULK_DELETE);
+        if (bulkDeletes == null) return unavailable(ManagementCapability.COUNTER_BULK_DELETE);
         Objects.requireNonNull(selection, "selection");
         Objects.requireNonNull(context, "context");
         return auditedBulk(
@@ -599,7 +600,7 @@ public final class PgManagementService implements ManagementService {
     public Future<BulkDeleteResult> executeCounterDelete(
             ConfirmedCounterDelete request,
             ManagementActionContext context) {
-        if (bulkDeletes == null) return unavailable(ManagementCapability.BULK_DELETE);
+        if (bulkDeletes == null) return unavailable(ManagementCapability.COUNTER_BULK_DELETE);
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedBulk(

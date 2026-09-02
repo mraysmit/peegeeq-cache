@@ -3,14 +3,18 @@ package dev.mars.peegeeq.cache.rest.server;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.AriaRole;
+import dev.mars.peegeeq.cache.api.management.AdminCapabilities;
+import dev.mars.peegeeq.cache.api.management.ManagementCapability;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.file.Path;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 import java.util.stream.IntStream;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
@@ -35,7 +39,10 @@ class ManagementCapabilityBrowserIT {
             "remove entry value reveal while retaining lock owner reveal",
             "remove lock owner reveal while retaining entry value reveal",
             "remove Pub/Sub payload reveal while retaining masked live messages",
-            "remove expired-entry status selection when expired-entry inspection is unavailable");
+            "remove expired-entry status selection when expired-entry inspection is unavailable",
+            "hide Keys navigation and block its direct route when entry inspection is unavailable",
+            "remove entry mutation controls while retaining entry inspection",
+            "remove counter mutation controls while retaining counter inspection");
 
     static List<ManagementBrowserCase> scenarios() {
         return IntStream.range(0, ACTIONS.size())
@@ -65,8 +72,8 @@ class ManagementCapabilityBrowserIT {
 
     private static List<String> operations(int index) {
         return switch (index) {
-            case 4, 10 -> List.of("getSetupCapabilities", "listNamespaces", "getNamespace", "listEntries");
-            case 5 -> List.of("getSetupCapabilities", "listCounters");
+            case 4, 10, 12 -> List.of("getSetupCapabilities", "listNamespaces", "getNamespace", "listEntries");
+            case 5, 13 -> List.of("getSetupCapabilities", "listCounters");
             case 6 -> List.of("getSetupCapabilities", "listLocks", "getLock");
             case 7, 8 -> List.of(
                     "getSetupCapabilities", "listNamespaces", "getNamespace", "listEntries", "getEntry",
@@ -86,7 +93,7 @@ class ManagementCapabilityBrowserIT {
                 temporaryDirectory,
                 POSTGRES.postgres(),
                 true,
-                capabilities(index),
+                capabilitySourceFilter(index),
                 scenario.operations(),
                 context -> {
                     ManagementConsolePostgresFixture.authenticate(context);
@@ -102,11 +109,11 @@ class ManagementCapabilityBrowserIT {
             case 2 -> verifyUnavailableRoute(page, origin, "Pub/Sub", "/ui/pubsub");
             case 3 -> {
                 assertThat(navigation(page, "Namespaces")).hasCount(0);
-                assertThat(navigation(page, "Keys")).hasCount(0);
+                assertThat(navigation(page, "Keys")).isVisible();
                 page.navigate(origin + "/ui/namespaces");
                 heading(page, "Namespaces unavailable");
                 page.navigate(origin + "/ui/keys");
-                heading(page, "Keys unavailable");
+                heading(page, "Key Browser");
             }
             case 4 -> {
                 openEntries(page);
@@ -174,6 +181,22 @@ class ManagementCapabilityBrowserIT {
                 openEntries(page);
                 assertThat(page.locator("#entry-ttl-state option[value=INCLUDE_EXPIRED]")).hasCount(0);
             }
+            case 11 -> verifyUnavailableRoute(page, origin, "Keys", "/ui/keys");
+            case 12 -> {
+                openEntries(page);
+                assertThat(page.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("Create entry").setExact(true))).hasCount(0);
+                assertThat(page.getByRole(AriaRole.LINK,
+                        new Page.GetByRoleOptions().setName("customer:1").setExact(true))).isVisible();
+            }
+            case 13 -> {
+                navigation(page, "Counters").click();
+                heading(page, "Counters");
+                assertThat(page.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("Create counter").setExact(true))).hasCount(0);
+                assertThat(page.getByRole(AriaRole.BUTTON,
+                        new Page.GetByRoleOptions().setName("Manage count"))).hasCount(0);
+            }
             default -> throw new IllegalArgumentException("Unknown capability scenario " + index);
         }
     }
@@ -216,80 +239,40 @@ class ManagementCapabilityBrowserIT {
         return new Page.GetByTextOptions().setExact(true);
     }
 
-    private static SetupCapabilities capabilities(int index) {
-        SetupCapabilities.Features all = SetupCapabilities.allSupported().features();
-        SetupCapabilities.Features features = switch (index) {
-            case 0 -> copy(all, null, null, false, null, null, null, null, null, null, null, null, null);
-            case 1 -> copy(all, null, null, null, false, null, null, null, null, null, null, null, null);
-            case 2 -> copy(all, null, null, null, null, null, null, null, false, null, null, null, null);
-            case 3 -> withEntryInspection(
-                    copy(all, false, null, null, null, null, null, null, null, null, null, null, null),
-                    false);
-            case 4 -> copy(all, null, null, null, null, null, false, null, null, null, null, null, null);
-            case 5 -> copy(all, null, null, null, null, null, null, false, null, null, null, null, null);
-            case 6 -> copy(all, null, null, null, null, false, null, null, null, null, null, null, null);
-            case 7 -> copy(all, null, null, null, null, null, null, null, null, null, false, null, null);
-            case 8 -> copy(all, null, null, null, null, null, null, null, null, null, null, false, null);
-            case 9 -> copy(all, null, null, null, null, null, null, null, null, null, null, null, false);
-            case 10 -> copy(all, null, false, null, null, null, null, null, null, null, null, null, null);
-            default -> throw new IllegalArgumentException("Unknown capability scenario " + index);
+    private static UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter(int index) {
+        return source -> {
+            EnumSet<ManagementCapability> supported = source.management().supported().isEmpty()
+                    ? EnumSet.noneOf(ManagementCapability.class)
+                    : EnumSet.copyOf(source.management().supported());
+            boolean pubSub = source.pubSub();
+            boolean pubSubPayloadReveal = source.pubSubPayloadReveal();
+            switch (index) {
+                case 0 -> supported.remove(ManagementCapability.COUNTER_INSPECTION);
+                case 1 -> supported.remove(ManagementCapability.LOCK_INSPECTION);
+                case 2 -> { pubSub = false; pubSubPayloadReveal = false; }
+                case 3 -> supported.remove(ManagementCapability.NAMESPACE_INSPECTION);
+                case 4 -> supported.remove(ManagementCapability.ENTRY_BULK_DELETE);
+                case 5 -> supported.remove(ManagementCapability.COUNTER_BULK_DELETE);
+                case 6 -> supported.remove(ManagementCapability.FORCE_LOCK_RELEASE);
+                case 7 -> supported.remove(ManagementCapability.ENTRY_REVEAL);
+                case 8 -> supported.remove(ManagementCapability.LOCK_REVEAL);
+                case 9 -> pubSubPayloadReveal = false;
+                case 10 -> supported.remove(ManagementCapability.EXPIRY_MONITORING);
+                case 11 -> supported.remove(ManagementCapability.ENTRY_INSPECTION);
+                case 12 -> supported.remove(ManagementCapability.ENTRY_MUTATION);
+                case 13 -> supported.remove(ManagementCapability.COUNTER_MUTATION);
+                default -> throw new IllegalArgumentException("Unknown capability scenario " + index);
+            }
+            AdminCapabilities management = new AdminCapabilities(
+                    supported, source.management().limits());
+            return new SetupCapabilities.Source(
+                    management,
+                    pubSub,
+                    pubSubPayloadReveal,
+                    source.batchEntryOperations(),
+                    source.valueScan(),
+                    source.cacheMetrics(),
+                    source.ownerLockOperations());
         };
-        return new SetupCapabilities("1", features, SetupCapabilities.allSupported().limits());
-    }
-
-    private static SetupCapabilities.Features copy(
-            SetupCapabilities.Features source,
-            Boolean namespaceInspection,
-            Boolean expiredEntryInspection,
-            Boolean counterInspection,
-            Boolean lockInspection,
-            Boolean forcedLockRelease,
-            Boolean bulkEntryDelete,
-            Boolean bulkCounterDelete,
-            Boolean pubSub,
-            Boolean databaseStatistics,
-            Boolean entryValueReveal,
-            Boolean lockOwnerReveal,
-            Boolean pubSubPayloadReveal) {
-        return new SetupCapabilities.Features(
-                value(namespaceInspection, source.namespaceInspection()),
-                source.entryInspection(),
-                value(expiredEntryInspection, source.expiredEntryInspection()),
-                source.entryMutation(),
-                value(counterInspection, source.counterInspection()),
-                source.counterMutation(),
-                value(lockInspection, source.lockInspection()),
-                value(forcedLockRelease, source.forcedLockRelease()),
-                value(bulkEntryDelete, source.bulkEntryDelete()),
-                value(bulkCounterDelete, source.bulkCounterDelete()),
-                value(pubSub, source.pubSub()),
-                value(databaseStatistics, source.databaseStatistics()),
-                value(entryValueReveal, source.entryValueReveal()),
-                value(lockOwnerReveal, source.lockOwnerReveal()),
-                value(pubSubPayloadReveal, source.pubSubPayloadReveal()));
-    }
-
-    private static boolean value(Boolean override, boolean fallback) {
-        return override == null ? fallback : override;
-    }
-
-    private static SetupCapabilities.Features withEntryInspection(
-            SetupCapabilities.Features source, boolean entryInspection) {
-        return new SetupCapabilities.Features(
-                source.namespaceInspection(),
-                entryInspection,
-                source.expiredEntryInspection(),
-                source.entryMutation(),
-                source.counterInspection(),
-                source.counterMutation(),
-                source.lockInspection(),
-                source.forcedLockRelease(),
-                source.bulkEntryDelete(),
-                source.bulkCounterDelete(),
-                source.pubSub(),
-                source.databaseStatistics(),
-                source.entryValueReveal(),
-                source.lockOwnerReveal(),
-                source.pubSubPayloadReveal());
     }
 }

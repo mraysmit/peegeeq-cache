@@ -22,8 +22,14 @@ public record SetupCapabilities(String migrationVersion, Features features, Limi
     }
 
     public static SetupCapabilities from(AdminCapabilities capabilities) {
+        return from(new Source(capabilities, false, false, false, false, false, false));
+    }
+
+    public static SetupCapabilities from(Source source) {
+        Objects.requireNonNull(source, "source");
+        AdminCapabilities capabilities = source.management();
         Objects.requireNonNull(capabilities, "capabilities");
-        boolean bulkDelete = capabilities.supports(ManagementCapability.BULK_DELETE);
+        boolean legacyBulkDelete = capabilities.supports(ManagementCapability.BULK_DELETE);
         long maximumValueBytes = capabilities.limits().maximumValueBytes();
         if (maximumValueBytes > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("maximumValueBytes exceeds the management API integer limit");
@@ -39,18 +45,38 @@ public record SetupCapabilities(String migrationVersion, Features features, Limi
                         capabilities.supports(ManagementCapability.COUNTER_MUTATION),
                         capabilities.supports(ManagementCapability.LOCK_INSPECTION),
                         capabilities.supports(ManagementCapability.FORCE_LOCK_RELEASE),
-                        bulkDelete,
-                        bulkDelete,
-                        true,
+                        legacyBulkDelete || capabilities.supports(ManagementCapability.ENTRY_BULK_DELETE),
+                        legacyBulkDelete || capabilities.supports(ManagementCapability.COUNTER_BULK_DELETE),
+                        source.pubSub(),
                         capabilities.supports(ManagementCapability.DATABASE_MONITORING),
                         capabilities.supports(ManagementCapability.ENTRY_REVEAL),
                         capabilities.supports(ManagementCapability.LOCK_REVEAL),
-                        true,
-                        true,
-                        true,
-                        true,
-                        true),
+                        source.pubSubPayloadReveal(),
+                        source.batchEntryOperations(),
+                        source.valueScan(),
+                        source.cacheMetrics(),
+                        source.ownerLockOperations()),
                 new Limits(49, 7_500, (int) maximumValueBytes));
+    }
+
+    public record Source(
+            AdminCapabilities management,
+            boolean pubSub,
+            boolean pubSubPayloadReveal,
+            boolean batchEntryOperations,
+            boolean valueScan,
+            boolean cacheMetrics,
+            boolean ownerLockOperations) {
+        public Source(AdminCapabilities management, boolean pubSub, boolean pubSubPayloadReveal) {
+            this(management, pubSub, pubSubPayloadReveal, false, false, false, false);
+        }
+
+        public Source {
+            Objects.requireNonNull(management, "management");
+            if (pubSubPayloadReveal && !pubSub) {
+                throw new IllegalArgumentException("Pub/Sub payload reveal requires Pub/Sub");
+            }
+        }
     }
 
     public record Features(
