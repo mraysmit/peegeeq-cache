@@ -1,5 +1,8 @@
 package dev.mars.peegeeq.cache.test;
 
+import java.util.Objects;
+import java.util.Properties;
+
 /** Stable PostgreSQL defaults shared by peegee-cache integration suites. */
 public final class PostgreSQLTestConstants {
 
@@ -15,6 +18,12 @@ public final class PostgreSQLTestConstants {
 
     /** Returns the Testcontainers image selected for this verification run. */
     public static String postgresImage() {
-        return System.getProperty(POSTGRES_IMAGE_PROPERTY, DEFAULT_POSTGRES_IMAGE);
+        return postgresImage(System.getProperties());
+    }
+
+    /** Resolves the Testcontainers image from an isolated property set. */
+    public static String postgresImage(Properties properties) {
+        Objects.requireNonNull(properties, "properties");
+        return properties.getProperty(POSTGRES_IMAGE_PROPERTY, DEFAULT_POSTGRES_IMAGE);
     }
 }

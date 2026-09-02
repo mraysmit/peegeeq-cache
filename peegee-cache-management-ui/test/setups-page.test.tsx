@@ -53,8 +53,11 @@ const successfulTest: SetupConnectionTest = {
   latencyMillis: 8,
   capabilities: {
     namespaceInspection: true,
+    entryInspection: true,
     expiredEntryInspection: true,
+    entryMutation: true,
     counterInspection: true,
+    counterMutation: true,
     lockInspection: true,
     forcedLockRelease: true,
     bulkEntryDelete: true,
@@ -64,6 +67,10 @@ const successfulTest: SetupConnectionTest = {
     entryValueReveal: true,
     lockOwnerReveal: true,
     pubSubPayloadReveal: true,
+    batchEntryOperations: true,
+    valueScan: true,
+    cacheMetrics: true,
+    ownerLockOperations: true,
   },
   limits: { pubSubChannelMaxBytes: 63, pubSubPayloadMaxBytes: 8_000, maximumValueBytes: 1_000_000 },
 };
@@ -93,6 +100,16 @@ class FakeSetupClient implements SetupClientPort {
         expirySweeperEnabled: true,
         expirySweepIntervalMillis: 30_000,
         expirySweepBatchSize: 500,
+        writeBehindEnabled: false,
+        writeBehindFlushIntervalMillis: 500,
+        writeBehindMaxBufferSize: 10_000,
+        writeBehindFlushBatchSize: 500,
+        writeBehindMaxRetries: 3,
+        writeBehindShutdownDrainTimeoutMillis: 5_000,
+        pubSubChannelPrefix: 'peegee_cache',
+        pubSubEnabled: true,
+        schemaBootstrapMode: 'EXTERNAL',
+        telemetryMode: 'NOOP',
         poolMaxSize: 10,
       },
       registeredAt: '2099-01-01T00:00:00Z',
@@ -236,14 +253,30 @@ describe('functional setup management page', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Test connection' }));
     expect(await within(dialog).findByText(/Connection succeeded in 8 ms/u)).toBeVisible();
-    expect(client.connectionRequest).toMatchObject({ host: 'analytics.example.test', password: 'ephemeral-password' });
+    expect(client.connectionRequest).toMatchObject({
+      host: 'analytics.example.test',
+      password: 'ephemeral-password',
+      runtime: {
+        defaultTtlMillis: null,
+        expirySweeperEnabled: false,
+        writeBehindEnabled: false,
+        pubSubChannelPrefix: 'peegee_cache',
+        pubSubEnabled: true,
+        schemaBootstrapMode: 'EXTERNAL',
+        telemetryMode: 'NOOP',
+      },
+    });
 
     await user.click(within(dialog).getByRole('button', { name: 'Register setup' }));
     expect(await screen.findByText('Analytics cache')).toBeVisible();
-    expect(client.registration).toMatchObject({ setupId: 'analytics-cache', sslMode: 'VERIFY_FULL' });
+    expect(client.registration).toMatchObject({
+      setupId: 'analytics-cache',
+      sslMode: 'VERIFY_FULL',
+      runtime: { writeBehindMaxBufferSize: 10_000, writeBehindShutdownDrainTimeoutMillis: 5_000 },
+    });
     expect(selected).toContain('analytics-cache');
     expect(container).not.toHaveTextContent('ephemeral-password');
-  });
+  }, 10_000);
 
   it('confirms detach, clears selected scope, and renders the resulting connect action', async () => {
     const user = userEvent.setup();

@@ -3,6 +3,8 @@ package dev.mars.peegeeq.cache.benchmark;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Properties;
 
 /** Repeatable benchmark capacity, warm-up, duration, and acceptance thresholds. */
 public record BenchmarkConfig(int concurrency, int poolSize, Duration warmup, Duration duration, double minimumThroughput,
@@ -23,18 +25,55 @@ public record BenchmarkConfig(int concurrency, int poolSize, Duration warmup, Du
     }
 
     public static BenchmarkConfig fromSystemProperties() {
-        int concurrency = Integer.getInteger("peegeeq.benchmark.concurrency", 8);
+        return fromProperties(System.getProperties());
+    }
+
+    static BenchmarkConfig fromProperties(Properties properties) {
+        Objects.requireNonNull(properties, "properties");
+        int concurrency = integer(properties, "peegeeq.benchmark.concurrency", 8);
         return new BenchmarkConfig(
                 concurrency,
-                Integer.getInteger("peegeeq.benchmark.poolSize", concurrency + 4),
-                Duration.ofSeconds(Long.getLong("peegeeq.benchmark.warmupSeconds", 5)),
-                Duration.ofSeconds(Long.getLong("peegeeq.benchmark.durationSeconds", 30)),
-                Double.parseDouble(System.getProperty("peegeeq.benchmark.minimumThroughput", "50")),
-                Duration.ofMillis(Long.getLong("peegeeq.benchmark.maximumP99Millis", 1_000)),
-                Duration.ofMillis(Long.getLong("peegeeq.benchmark.maximumFailoverRecoveryMillis", 10_000)),
-                Duration.ofMillis(Long.getLong("peegeeq.benchmark.maximumExpiryLagMillis", 1_000)),
-                Double.parseDouble(System.getProperty(
-                        "peegeeq.benchmark.maximumTelemetryOverheadPercent", "100")));
+                integer(properties, "peegeeq.benchmark.poolSize", concurrency + 4),
+                Duration.ofSeconds(longValue(properties, "peegeeq.benchmark.warmupSeconds", 5)),
+                Duration.ofSeconds(longValue(properties, "peegeeq.benchmark.durationSeconds", 30)),
+                doubleValue(properties, "peegeeq.benchmark.minimumThroughput", 50),
+                Duration.ofMillis(longValue(properties, "peegeeq.benchmark.maximumP99Millis", 1_000)),
+                Duration.ofMillis(longValue(
+                        properties, "peegeeq.benchmark.maximumFailoverRecoveryMillis", 10_000)),
+                Duration.ofMillis(longValue(
+                        properties, "peegeeq.benchmark.maximumExpiryLagMillis", 1_000)),
+                doubleValue(properties,
+                        "peegeeq.benchmark.maximumTelemetryOverheadPercent", 100));
+    }
+
+    private static int integer(Properties properties, String name, int defaultValue) {
+        String value = properties.getProperty(name);
+        if (value == null) return defaultValue;
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException failure) {
+            throw new IllegalArgumentException(name + " must be an integer", failure);
+        }
+    }
+
+    private static long longValue(Properties properties, String name, long defaultValue) {
+        String value = properties.getProperty(name);
+        if (value == null) return defaultValue;
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException failure) {
+            throw new IllegalArgumentException(name + " must be an integer", failure);
+        }
+    }
+
+    private static double doubleValue(Properties properties, String name, double defaultValue) {
+        String value = properties.getProperty(name);
+        if (value == null) return defaultValue;
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException failure) {
+            throw new IllegalArgumentException(name + " must be numeric", failure);
+        }
     }
 
     Map<String, Object> toMap() {

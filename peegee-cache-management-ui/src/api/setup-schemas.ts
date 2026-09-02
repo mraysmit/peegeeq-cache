@@ -38,8 +38,11 @@ export const setupSummaryListSchema: z.ZodType<SetupSummaryListContract> = z.str
 
 const capabilityFlagsSchema = z.strictObject({
   namespaceInspection: z.boolean(),
+  entryInspection: z.boolean(),
   expiredEntryInspection: z.boolean(),
+  entryMutation: z.boolean(),
   counterInspection: z.boolean(),
+  counterMutation: z.boolean(),
   lockInspection: z.boolean(),
   forcedLockRelease: z.boolean(),
   bulkEntryDelete: z.boolean(),
@@ -49,6 +52,10 @@ const capabilityFlagsSchema = z.strictObject({
   entryValueReveal: z.boolean(),
   lockOwnerReveal: z.boolean(),
   pubSubPayloadReveal: z.boolean(),
+  batchEntryOperations: z.boolean(),
+  valueScan: z.boolean(),
+  cacheMetrics: z.boolean(),
+  ownerLockOperations: z.boolean(),
 });
 
 const capabilityLimitsSchema = z.strictObject({
@@ -80,6 +87,16 @@ export const setupDetailsSchema: z.ZodType<SetupDetailsContract> = z.strictObjec
     expirySweeperEnabled: z.boolean(),
     expirySweepIntervalMillis: z.number().int().min(1),
     expirySweepBatchSize: z.number().int().min(1),
+    writeBehindEnabled: z.boolean(),
+    writeBehindFlushIntervalMillis: z.number().int().min(1),
+    writeBehindMaxBufferSize: z.number().int().min(100),
+    writeBehindFlushBatchSize: z.number().int().min(1),
+    writeBehindMaxRetries: z.number().int().nonnegative(),
+    writeBehindShutdownDrainTimeoutMillis: z.number().int().min(1),
+    pubSubChannelPrefix: z.string().min(1).max(48),
+    pubSubEnabled: z.boolean(),
+    schemaBootstrapMode: z.enum(['EXTERNAL', 'APPLY']),
+    telemetryMode: z.literal('NOOP'),
     poolMaxSize: z.number().int().min(1),
   }),
   registeredAt: utcInstantSchema,

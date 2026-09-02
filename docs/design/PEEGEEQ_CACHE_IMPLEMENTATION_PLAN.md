@@ -584,7 +584,7 @@ Explicit non-goal unless strategy changes:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md)
 
-**Status:** **COMPLETE (M0–M10 COMPLETE)** — the management backend includes the complete typed/PostgreSQL REST surface, security and lifecycle, atomic administration, audited pub/sub, bounded live transports, mandatory bounded Micrometer/Prometheus telemetry, shared per-setup metrics sampling, both executable authentication configurations, a verified executable Java 21 artifact, operational guidance, and real-browser session acceptance. The current 11-module reactor passes 513 Surefire, 21 Failsafe, and 112 Vitest tests with zero failures, errors, or skips under OpenJDK 26.0.2, and complete-reactor verification passes PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+**Status:** **COMPLETE (M0–M11 COMPLETE)** — the management backend includes the complete typed/PostgreSQL REST surface, security and lifecycle, atomic administration, audited pub/sub, bounded live transports, mandatory bounded Micrometer/Prometheus telemetry, shared per-setup metrics sampling, both executable authentication configurations, a verified executable Java 21 artifact, operational guidance, complete runtime configuration, and full backend-facade REST parity. The clean 2 September 2026 PostgreSQL 18.3 reactor passed all 11 modules under OpenJDK 25 with 799 Surefire, 553 Failsafe, and 129 Vitest tests and zero failures, errors, or skips. The 553 Failsafe tests comprise 550 packaged desktop-browser scenarios and three runnable-artifact/evidence checks; the prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained.
 
 Scope:
 
@@ -607,7 +607,9 @@ Prerequisites:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md)
 
-**Status:** **COMPLETE (U0-U10)** — the production console implements the approved setup, overview, namespace, entry inspection/administration, counter, lock, Pub/Sub, monitoring, activity, settings, accessibility, responsive, and privacy surfaces. Strict runtime validation covers every consumed REST, SSE, and WebSocket payload. Java Playwright owns 16 independent packaged-application journeys; a separate executable accountability contract covers all 50 management operations, and runtime tracing verifies declared operations from observed browser requests and WebSocket openings. Twelve product journeys run against isolated real TLS PostgreSQL fixtures without request interception. The complete 11-module reactor is green under OpenJDK 26.0.2 with 513 Surefire, 21 Failsafe, and 112 Vitest tests, and the refreshed reactor matrix passes PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+**Backend-functionality coverage authority:** [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The matrix now maps all 32 public data-service methods to the 59 declared management operations and their production desktop workflows, with no open functionality gaps.
+
+**Status:** **COMPLETE (U0-U11)** — the desktop-only production console implements setup and complete runtime configuration, overview, namespace, entry inspection/administration, counters, locks, Pub/Sub, monitoring, activity, settings, privacy, and the Advanced operations facade-parity surface. Mobile and tablet behavior is outside the product boundary. Strict runtime validation covers every consumed REST, SSE, and WebSocket payload. Java Playwright owns 17 independent packaged-application journeys; a separate executable accountability contract covers all 59 management operations, and runtime tracing verifies declared operations from observed browser requests and WebSocket openings. Thirteen product journeys run against isolated real TLS PostgreSQL fixtures without request interception.
 
 Scope:
 
@@ -730,7 +732,7 @@ Criteria verdicts:
 
 ## 3.3 Management backend handover after M8
 
-M0–M10 are complete. M7 closed the complete read-route inventory, M8 closed reveal and administration, M9 closed audited pub/sub plus SSE/WebSocket transports, and M10 closed observability, packaging, operations, browser security acceptance, compatibility, and final verification.
+M0–M11 are complete. M7 closed the complete read-route inventory, M8 closed reveal and administration, M9 closed audited pub/sub plus SSE/WebSocket transports, M10 closed observability, packaging, operations, browser security acceptance, compatibility, and final verification, and M11 closed full backend-facade REST/UI parity plus complete runtime configuration.
 
 The implemented boundary is:
 
@@ -741,7 +743,7 @@ The implemented boundary is:
 - entry values, raw identifiers, credentials, cursor keys, and audit keys remain absent from ordinary logs and default authoritative audit intents;
 - No management-backend or management-UI implementation stage remains. Production deployment/topology validation and credentialed public publication are separate external release-readiness actions; Phase 8.3 U0-U10 is complete.
 
-Current management evidence includes a complete 11-module reactor with 513 Surefire, 21 Failsafe, and 112 Vitest tests under OpenJDK 26.0.2 and zero failures, errors, or skips. The completed backend and console pass the complete reactor on PostgreSQL 15.17, 16.13, 17.11, and 18.3. The authoritative behavior and evidence are in `PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md` and `PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`.
+Current management evidence includes the clean 2 September 2026 11-module PostgreSQL 18.3 reactor with 799 Surefire, 553 Failsafe, and 129 Vitest tests under OpenJDK 25 and zero failures, errors, or skips. The earlier complete-reactor PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained. The authoritative behavior and evidence are in `PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md` and `PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`.
 
 Completed M5 sequence:
 
@@ -755,11 +757,11 @@ Completed M5 sequence:
 
 U0-U4 are complete. U4 adds metadata-only filtered entry browsing/details, encoded arbitrary-identifier routes, safe type-specific value formatting, and role/feature/capability-gated non-cacheable reveal with component-only memory, explicit copy/hide, mandatory automatic cleanup, full regression, and packaged PostgreSQL console acceptance.
 
-U5-U10 are complete. The console provides observed-version entry CAS and guarded bulk deletion; precision-safe counters; masked, version-checked locks; bounded non-durable Pub/Sub; strict SSE/WebSocket clients; database/runtime monitoring; bounded activity and notifications; allowlisted preferences; accessible modal focus management; axe scanning; six-viewport responsive coverage; screenshot inspection; and cross-surface sensitive-state assertions. These slices have strict client/component tests, backend PostgreSQL/concurrency/audit/transport/telemetry coverage, and independent packaged Chromium journeys against real TLS PostgreSQL.
+U5-U10 are complete. The console provides observed-version entry CAS and guarded bulk deletion; precision-safe counters; masked, version-checked locks; bounded non-durable Pub/Sub; strict SSE/WebSocket clients; database/runtime monitoring; bounded activity and notifications; allowlisted preferences; accessible modal focus management; desktop axe scanning; screenshot inspection; and cross-surface sensitive-state assertions. These slices have strict client/component tests, backend PostgreSQL/concurrency/audit/transport/telemetry coverage, and independent packaged Chromium journeys against real TLS PostgreSQL.
 
 The implemented U1 boundary is:
 
-- `peegee-cache-management-ui` owns the production React shell, `/ui` routing, theme, responsive navigation, role and connection presentation, notifications, error containment, sanitized diagnostics, and runtime-validated session client;
+- `peegee-cache-management-ui` owns the production desktop React shell, `/ui` routing, theme, navigation, role and connection presentation, notifications, error containment, sanitized diagnostics, and runtime-validated session client;
 - local bootstrap tokens and CSRF proofs remain in memory only, token input is cleared after exchange, logout deletes the server session, and scheduled expiry clears client session state;
 - `peegee-cache-rest` consumes the UI JAR and serves exact fingerprinted assets with correct MIME and immutable caching while serving valid SPA routes as no-store entry points with CSP and browser security headers;
 - asset-like misses, traversal and encoded traversal are rejected, and UI fallback does not intercept API or WebSocket routes;
@@ -769,7 +771,7 @@ The implemented U1 boundary is:
 
 The delivered U2-U10 boundary builds on those controls without persisting credentials, CSRF material, or revealed values; weakening CSP/static routing; reconstructing server cursors; or duplicating the UI entry point. `ManagementConsoleProductJourneysIT` uses isolated TLS PostgreSQL fixtures and the real schema to verify the packaged U2-U9 console through Chromium, including administration, Pub/Sub and monitoring live transports, conflict recovery, accessibility, lifecycle, and leakage checks. Java Playwright is Maven/Failsafe-owned and does not intercept product requests; focused Java and frontend suites prove the corresponding concurrency, audit, protocol-validation, and cleanup semantics.
 
-No Phase 8.3 implementation or repository acceptance task remains. The final gate passes 513 Surefire, 21 Failsafe, and 112 Vitest tests with zero failures, errors, or skips; the Failsafe gate contains 19 Java Playwright browser tests plus two runnable-artifact tests. The complete reactor passes PostgreSQL 15.17, 16.13, 17.11, and 18.3. Production-topology benchmarking and credentialed Maven Central publication remain intentionally deferred release-readiness actions.
+No Phase 8.3 implementation task remains. The active desktop catalogue contains 550 independently reported scenarios and three runnable-artifact/evidence checks; the fresh full-reactor PostgreSQL 18.3 gate passed on 2 September 2026. The prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility evidence is retained, while a fresh cross-version parity regate remains release validation. Production-topology benchmarking and credentialed Maven Central publication remain intentionally deferred release-readiness actions.
 
 ## 4. Feature rollout by milestone
 
@@ -1090,5 +1092,5 @@ Current conclusion:
 - Phases 0–5 are complete
 - Phase 6 is complete
 - Phase 7 is complete
-- Phase 8.1 and management backend M0–M10 are complete
-- Phase 8.3 is complete under its approved strict-TDD plan; U0-U10, packaged Chromium/PostgreSQL acceptance, and the PostgreSQL 15-18 reactor matrix are green
+- Phase 8.1 and management backend M0–M11 are complete
+- Phase 8.3 is complete under its approved strict-TDD plan; U0-U11, packaged Chromium/PostgreSQL acceptance, the fresh PostgreSQL 18.3 cumulative gate, and the retained PostgreSQL 15-18 compatibility matrix are green

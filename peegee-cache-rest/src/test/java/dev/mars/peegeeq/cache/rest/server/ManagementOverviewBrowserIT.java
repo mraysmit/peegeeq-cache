@@ -90,10 +90,10 @@ class ManagementOverviewBrowserIT {
         overview(context -> assertThat(context.page().getByText("Values are database-wide unless a panel is explicitly labelled management-server-local.")).isVisible());
     }
 
-    @ManagementBrowserScenario(id = "PW-OVERVIEW-011", requirement = "Management API: overview reports effective sweeper ownership", area = ManagementBrowserArea.OVERVIEW, risk = ManagementBrowserRisk.HIGH, action = "Inspect Expiry and cleanup Sweeper", expectedResult = "The fixture reports Disabled", cleanup = "Close the scoped context and reset PostgreSQL", operations = {"getOverview", "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-OVERVIEW-011", requirement = "Management API: overview reports effective sweeper ownership", area = ManagementBrowserArea.OVERVIEW, risk = ManagementBrowserRisk.HIGH, action = "Inspect Expiry and cleanup Sweeper", expectedResult = "The fixture reports Enabled", cleanup = "Close the scoped context and reset PostgreSQL", operations = {"getOverview", "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
-    void overviewShowsSweeperDisabled() throws Exception {
-        overview(context -> assertThat(section(context.page(), "Expiry and cleanup")).containsText("SweeperDisabled"));
+    void overviewShowsSweeperEnabled() throws Exception {
+        overview(context -> assertThat(section(context.page(), "Expiry and cleanup")).containsText("SweeperEnabled"));
     }
 
     @ManagementBrowserScenario(id = "PW-OVERVIEW-012", requirement = "Management API: absent expiry backlog has an exact zero-duration value", area = ManagementBrowserArea.OVERVIEW, risk = ManagementBrowserRisk.MEDIUM, action = "Inspect Oldest backlog lag", expectedResult = "The value is 0 ms", cleanup = "Close the scoped context and reset PostgreSQL", operations = {"getOverview", "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})

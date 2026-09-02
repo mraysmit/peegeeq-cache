@@ -16,6 +16,10 @@ import dev.mars.peegeeq.cache.api.management.ManagementAuditSink;
 import dev.mars.peegeeq.cache.api.management.ManagementSecretReference;
 import dev.mars.peegeeq.cache.api.management.ManagementAuditTerminalOutcome;
 import dev.mars.peegeeq.cache.api.model.PubSubMessage;
+import dev.mars.peegeeq.cache.api.model.CacheKey;
+import dev.mars.peegeeq.cache.api.model.CacheSetRequest;
+import dev.mars.peegeeq.cache.api.model.CacheValue;
+import dev.mars.peegeeq.cache.api.model.SetMode;
 import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import dev.mars.peegeeq.cache.rest.protocol.ManagementIdentifierCodec;
 import dev.mars.peegeeq.cache.rest.security.AuthenticatedManagementIdentity;
@@ -29,6 +33,7 @@ import dev.mars.peegeeq.cache.rest.security.SetupTarget;
 import dev.mars.peegeeq.cache.rest.security.SetupTargetPolicy;
 import dev.mars.peegeeq.cache.rest.security.TlsMode;
 import dev.mars.peegeeq.cache.test.PostgreSQLTestConstants;
+import dev.mars.peegeeq.cache.runtime.bootstrap.SchemaBootstrapMode;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -66,6 +71,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PostgresSetupRuntimeFactoryTest {
@@ -114,6 +120,134 @@ class PostgresSetupRuntimeFactoryTest {
         if (postgres != null) {
             postgres.stop();
         }
+    }
+
+    @Test
+    void configuredRuntimeAffectsRealCacheAndCapabilities() throws Exception {
+        InetAddress pinnedAddress = InetAddress.getByName(postgres.getHost());
+        SetupTargetPolicy policy = new SetupTargetPolicy(
+                Set.of("internal.example"), Set.of("127.0.0.0/8"),
+                Set.of(postgres.getMappedPort(5432)), true, false, false, false, Set.of("test-ca"));
+        ManagementAuditFingerprinter fingerprinter = new ManagementAuditFingerprinter(
+                new ManagementSecretReference("test-audit-key"),
+                ignored -> new byte[32],
+                "test-audit-key",
+                128);
+        PostgresSetupRuntimeFactory factory = new PostgresSetupRuntimeFactory(
+                policy,
+                ignored -> List.of(pinnedAddress),
+                ignored -> serverCertificate,
+                Duration.ofSeconds(10),
+                new RecordingAuditSink(),
+                fingerprinter,
+                Clock.systemUTC(),
+                () -> UUID.randomUUID().toString());
+        SetupRegistry registry = new SetupRegistry(factory, ignored -> null);
+        SetupRuntimeConfiguration configuration = new SetupRuntimeConfiguration(
+                120_000L,
+                true,
+                12_000L,
+                321,
+                false,
+                250L,
+                1_200,
+                200,
+                4,
+                4_000L,
+                "configured_cache",
+                false,
+                SchemaBootstrapMode.EXTERNAL,
+                SetupRuntimeConfiguration.TelemetryMode.NOOP);
+        SetupDefinition definition = new SetupDefinition(
+                "configured-runtime",
+                "Configured runtime",
+                new SetupTarget("db.internal.example", postgres.getMappedPort(5432),
+                        "test-ca", TlsMode.VERIFY_FULL),
+                "peegeeq",
+                "peegee_cache",
+                "peegeeq",
+                3,
+                configuration,
+                SetupSource.UI_SESSION,
+                null);
+
+        try {
+            await(registry.register(definition, SetupSecret.owned(
+                    "test-password".getBytes(StandardCharsets.UTF_8))));
+            SetupRuntimeSummary configuredRuntime = registry.details("configured-runtime").runtime();
+            assertEquals(120_000L, configuredRuntime.defaultTtlMillis());
+            assertEquals(12_000L, configuredRuntime.expirySweepIntervalMillis());
+            assertEquals(321, configuredRuntime.expirySweepBatchSize());
+            assertEquals("configured_cache", configuredRuntime.pubSubChannelPrefix());
+            assertEquals("EXTERNAL", configuredRuntime.schemaBootstrapMode());
+            assertFalse(configuredRuntime.pubSubEnabled());
+            assertFalse(registry.capabilities("configured-runtime").features().pubSub());
+
+            CacheKey key = new CacheKey("runtime-config", "default-ttl");
+            java.time.Instant beforeSet = java.time.Instant.now();
+            assertTrue(await(registry.cache("configured-runtime").cache().set(new CacheSetRequest(
+                    key, CacheValue.ofString("configured"), null, SetMode.UPSERT, null, false))).applied());
+            var entry = await(registry.cache("configured-runtime").cache().get(key)).orElseThrow();
+            assertTrue(entry.expiresAt().isAfter(beforeSet.plusSeconds(115)));
+            assertTrue(entry.expiresAt().isBefore(beforeSet.plusSeconds(125)));
+            assertTrue(await(registry.cache("configured-runtime").cache().delete(key)));
+        } finally {
+            await(registry.closeAsync());
+        }
+        assertEquals(0, applicationConnectionCount("peegeeq-management-configured-runtime"));
+    }
+
+    @Test
+    void registeredApplyRuntimeCanBeRetestedWithoutStallingReadiness() throws Exception {
+        InetAddress pinnedAddress = InetAddress.getByName(postgres.getHost());
+        SetupTargetPolicy policy = new SetupTargetPolicy(
+                Set.of("internal.example"), Set.of("127.0.0.0/8"),
+                Set.of(postgres.getMappedPort(5432)), true, false, false, false, Set.of("test-ca"));
+        PostgresSetupRuntimeFactory factory = new PostgresSetupRuntimeFactory(
+                policy,
+                ignored -> List.of(pinnedAddress),
+                ignored -> serverCertificate,
+                Duration.ofSeconds(10));
+        SetupRegistry registry = new SetupRegistry(factory, ignored -> null);
+        SetupRuntimeConfiguration configuration = new SetupRuntimeConfiguration(
+                3_600_000L,
+                true,
+                30_000L,
+                500,
+                false,
+                500L,
+                10_000,
+                500,
+                3,
+                5_000L,
+                "retest_cache",
+                true,
+                SchemaBootstrapMode.APPLY,
+                SetupRuntimeConfiguration.TelemetryMode.NOOP);
+        SetupDefinition definition = new SetupDefinition(
+                "apply-retest",
+                "Apply retest",
+                new SetupTarget("db.internal.example", postgres.getMappedPort(5432),
+                        "test-ca", TlsMode.VERIFY_FULL),
+                "peegeeq",
+                "peegee_cache",
+                "peegeeq",
+                3,
+                configuration,
+                SetupSource.UI_SESSION,
+                null);
+
+        try {
+            await(registry.register(definition, SetupSecret.owned(
+                    "test-password".getBytes(StandardCharsets.UTF_8))));
+            SetupConnectionTest result = await(registry.testRegistered("apply-retest"));
+            assertTrue(result.databaseReachable());
+            assertEquals(SetupSchemaState.READY, result.schemaState());
+            assertEquals("1", result.migrationVersion());
+        } finally {
+            await(registry.closeAsync());
+        }
+        assertEquals(0, applicationConnectionCount("peegeeq-management-apply-retest"));
     }
 
     @Test

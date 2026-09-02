@@ -56,6 +56,16 @@ x-m9-operation-ids:
   - publishPubSubMessage
   - streamMetrics
   - monitoringWebSocket
+x-m11-operation-ids:
+  - checkEntryExists
+  - batchGetEntries
+  - batchSetEntries
+  - scanEntries
+  - acquireLock
+  - renewLock
+  - releaseLock
+  - checkLockOwnership
+  - getCacheMetrics
 paths:
   /api/v1/session:
     get:
@@ -394,6 +404,75 @@ paths:
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: revealEntryValue
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        '200':
+          $ref: '#/components/responses/EntryExistsResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: checkEntryExists
+  /api/v1/setups/{setupId}/entries/batch-get:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+    post:
+      x-security-profile: REVEAL
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/BatchGetEntriesRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/BatchGetEntriesResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: batchGetEntries
+  /api/v1/setups/{setupId}/entries/batch-set:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/BatchSetEntriesRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/BatchSetEntriesResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: batchSetEntries
+  /api/v1/setups/{setupId}/entries/scan:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+    post:
+      x-security-profile: REVEAL
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/ScanEntriesRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ScanEntriesResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: scanEntries
   /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/ttl:
     parameters:
       - $ref: '#/components/parameters/SetupId'
@@ -737,6 +816,86 @@ paths:
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: forceReleaseLock
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/acquire:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/AcquireLockRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/AcquireLockResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: acquireLock
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/renew:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/RenewLockRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/RenewLockResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: renewLock
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/release:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/LockOwnerRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ReleaseLockResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: releaseLock
+  /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/ownership:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+      - $ref: '#/components/parameters/EncodedNamespace'
+      - $ref: '#/components/parameters/EncodedKey'
+    post:
+      x-security-profile: REVEAL
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/LockOwnerRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/LockOwnershipResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: checkLockOwnership
   /api/v1/setups/{setupId}/pubsub/subscriptions:
     parameters:
       - $ref: '#/components/parameters/SetupId'
@@ -854,6 +1013,19 @@ paths:
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getRuntimeMonitoring
+  /api/v1/setups/{setupId}/cache-metrics:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+    get:
+      x-security-profile: VIEW
+      security:
+        - managementSession: []
+      responses:
+        '200':
+          $ref: '#/components/responses/CacheMetricsSnapshot'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: getCacheMetrics
   /api/v1/setups/{setupId}/sse/metrics:
     parameters:
       - $ref: '#/components/parameters/SetupId'
@@ -1216,6 +1388,48 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PublishRequest'
+    BatchGetEntriesRequest:
+      description: Bounded exact-key batch value retrieval with an audit reason.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BatchGetEntriesRequest'
+    BatchSetEntriesRequest:
+      description: Bounded batch of core cache set requests.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BatchSetEntriesRequest'
+    ScanEntriesRequest:
+      description: Core cache scan request, including optional values and expired entries.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ScanEntriesRequest'
+    AcquireLockRequest:
+      description: Owner-token lock acquisition request.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AcquireLockRequest'
+    RenewLockRequest:
+      description: Owner-token lock renewal request.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RenewLockRequest'
+    LockOwnerRequest:
+      description: Sensitive owner-token proof.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LockOwnerRequest'
   headers:
     XCorrelationID:
       description: Request correlation identifier echoed by the server.
@@ -1258,6 +1472,114 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ManagementProblem'
+    EntryExistsResult:
+      description: Dedicated cache existence result.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/EntryExistsResult'}
+    BatchGetEntriesResult:
+      description: Request-ordered batch hit/miss and value results.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BatchGetEntriesResult'}
+    BatchSetEntriesResult:
+      description: Request-ordered batch set results including requested previous entries.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BatchSetEntriesResult'}
+    ScanEntriesResult:
+      description: Core cache scan page.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ScanEntriesResult'}
+    AcquireLockResult:
+      description: Lock acquisition outcome and fencing state.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AcquireLockResult'}
+    RenewLockResult:
+      description: Lock renewal outcome.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RenewLockResult'}
+    ReleaseLockResult:
+      description: Owner release outcome.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ReleaseLockResult'}
+    LockOwnershipResult:
+      description: Non-disclosing owner-token match result.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/LockOwnershipResult'}
+    CacheMetricsSnapshot:
+      description: Exact core AdminService metrics snapshot.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CacheMetricsSnapshot'}
     CurrentSessionNoStore:
       description: Current authenticated management session.
       headers:
@@ -1697,6 +2019,7 @@ components:
         sslMode: {type: string, enum: [VERIFY_FULL]}
         trustProfileId: {type: string, minLength: 1, maxLength: 128}
         poolMaxSize: {type: integer, minimum: 1, maximum: 100}
+        runtime: {$ref: '#/components/schemas/SetupRuntimeConfiguration'}
     SetupRegistrationRequest:
       type: object
       additionalProperties: false
@@ -1713,6 +2036,26 @@ components:
         sslMode: {type: string, enum: [VERIFY_FULL]}
         trustProfileId: {type: string, minLength: 1, maxLength: 128}
         poolMaxSize: {type: integer, minimum: 1, maximum: 100}
+        runtime: {$ref: '#/components/schemas/SetupRuntimeConfiguration'}
+    SetupRuntimeConfiguration:
+      type: object
+      additionalProperties: false
+      required: [defaultTtlMillis, expirySweeperEnabled, expirySweepIntervalMillis, expirySweepBatchSize, writeBehindEnabled, writeBehindFlushIntervalMillis, writeBehindMaxBufferSize, writeBehindFlushBatchSize, writeBehindMaxRetries, writeBehindShutdownDrainTimeoutMillis, pubSubChannelPrefix, pubSubEnabled, schemaBootstrapMode, telemetryMode]
+      properties:
+        defaultTtlMillis: {type: [integer, 'null'], format: int64, minimum: 1}
+        expirySweeperEnabled: {type: boolean}
+        expirySweepIntervalMillis: {type: integer, format: int64, minimum: 1}
+        expirySweepBatchSize: {type: integer, minimum: 1}
+        writeBehindEnabled: {type: boolean}
+        writeBehindFlushIntervalMillis: {type: integer, format: int64, minimum: 1}
+        writeBehindMaxBufferSize: {type: integer, minimum: 100}
+        writeBehindFlushBatchSize: {type: integer, minimum: 1}
+        writeBehindMaxRetries: {type: integer, minimum: 0}
+        writeBehindShutdownDrainTimeoutMillis: {type: integer, format: int64, minimum: 1}
+        pubSubChannelPrefix: {type: string, minLength: 1, maxLength: 48}
+        pubSubEnabled: {type: boolean}
+        schemaBootstrapMode: {type: string, enum: [EXTERNAL, APPLY]}
+        telemetryMode: {type: string, enum: [NOOP]}
     SetupHealthSummary:
       type: object
       additionalProperties: false
@@ -1758,11 +2101,14 @@ components:
         capabilities:
           type: object
           additionalProperties: false
-          required: [namespaceInspection, expiredEntryInspection, counterInspection, lockInspection, forcedLockRelease, bulkEntryDelete, bulkCounterDelete, pubSub, databaseStatistics, entryValueReveal, lockOwnerReveal, pubSubPayloadReveal]
+          required: [namespaceInspection, entryInspection, expiredEntryInspection, entryMutation, counterInspection, counterMutation, lockInspection, forcedLockRelease, bulkEntryDelete, bulkCounterDelete, pubSub, databaseStatistics, entryValueReveal, lockOwnerReveal, pubSubPayloadReveal, batchEntryOperations, valueScan, cacheMetrics, ownerLockOperations]
           properties:
             namespaceInspection: {type: boolean}
+            entryInspection: {type: boolean}
             expiredEntryInspection: {type: boolean}
+            entryMutation: {type: boolean}
             counterInspection: {type: boolean}
+            counterMutation: {type: boolean}
             lockInspection: {type: boolean}
             forcedLockRelease: {type: boolean}
             bulkEntryDelete: {type: boolean}
@@ -1772,6 +2118,10 @@ components:
             entryValueReveal: {type: boolean}
             lockOwnerReveal: {type: boolean}
             pubSubPayloadReveal: {type: boolean}
+            batchEntryOperations: {type: boolean}
+            valueScan: {type: boolean}
+            cacheMetrics: {type: boolean}
+            ownerLockOperations: {type: boolean}
         limits:
           type: object
           additionalProperties: false
@@ -1801,12 +2151,22 @@ components:
         runtime:
           type: object
           additionalProperties: false
-          required: [defaultTtlMillis, expirySweeperEnabled, expirySweepIntervalMillis, expirySweepBatchSize, poolMaxSize]
+          required: [defaultTtlMillis, expirySweeperEnabled, expirySweepIntervalMillis, expirySweepBatchSize, writeBehindEnabled, writeBehindFlushIntervalMillis, writeBehindMaxBufferSize, writeBehindFlushBatchSize, writeBehindMaxRetries, writeBehindShutdownDrainTimeoutMillis, pubSubChannelPrefix, pubSubEnabled, schemaBootstrapMode, telemetryMode, poolMaxSize]
           properties:
             defaultTtlMillis: {type: [integer, 'null'], minimum: 1}
             expirySweeperEnabled: {type: boolean}
             expirySweepIntervalMillis: {type: integer, minimum: 1}
             expirySweepBatchSize: {type: integer, minimum: 1}
+            writeBehindEnabled: {type: boolean}
+            writeBehindFlushIntervalMillis: {type: integer, format: int64, minimum: 1}
+            writeBehindMaxBufferSize: {type: integer, minimum: 100}
+            writeBehindFlushBatchSize: {type: integer, minimum: 1}
+            writeBehindMaxRetries: {type: integer, minimum: 0}
+            writeBehindShutdownDrainTimeoutMillis: {type: integer, format: int64, minimum: 1}
+            pubSubChannelPrefix: {type: string, minLength: 1, maxLength: 48}
+            pubSubEnabled: {type: boolean}
+            schemaBootstrapMode: {type: string, enum: [EXTERNAL, APPLY]}
+            telemetryMode: {type: string, enum: [NOOP]}
             poolMaxSize: {type: integer, minimum: 1}
         registeredAt: {$ref: '#/components/schemas/UtcInstant'}
         connectedAt:
@@ -2028,6 +2388,148 @@ components:
         version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         updatedAt: {$ref: '#/components/schemas/UtcInstant'}
         ttl: {$ref: '#/components/schemas/TtlState'}
+    CacheKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [namespace, key]
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        key: {type: string, minLength: 1, maxLength: 1024}
+    CacheEntrySnapshot:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, version, createdAt, updatedAt, expiresAt, hitCount, lastAccessedAt, value]
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        key: {type: string, minLength: 1, maxLength: 1024}
+        version: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        createdAt: {$ref: '#/components/schemas/UtcInstant'}
+        updatedAt: {$ref: '#/components/schemas/UtcInstant'}
+        expiresAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+        hitCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        lastAccessedAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+        value:
+          oneOf:
+            - $ref: '#/components/schemas/CacheValue'
+            - type: 'null'
+    EntryExistsResult:
+      type: object
+      additionalProperties: false
+      required: [exists]
+      properties:
+        exists: {type: boolean}
+    BatchGetEntriesRequest:
+      type: object
+      additionalProperties: false
+      required: [keys, reason]
+      properties:
+        keys:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CacheKeyRequest'}
+        reason: {type: string, minLength: 3, maxLength: 240}
+    BatchGetEntryResult:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, found, entry]
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        key: {type: string, minLength: 1, maxLength: 1024}
+        found: {type: boolean}
+        entry:
+          oneOf:
+            - $ref: '#/components/schemas/CacheEntrySnapshot'
+            - type: 'null'
+    BatchGetEntriesResult:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/BatchGetEntryResult'}
+    CoreCacheSetRequest:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, value, ttlMillis, setMode, expectedVersion, returnPreviousValue]
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        key: {type: string, minLength: 1, maxLength: 1024}
+        value: {$ref: '#/components/schemas/CacheValue'}
+        ttlMillis: {type: [integer, 'null'], minimum: 1}
+        setMode: {type: string, enum: [UPSERT, ONLY_IF_ABSENT, ONLY_IF_PRESENT, ONLY_IF_VERSION_MATCHES]}
+        expectedVersion:
+          oneOf:
+            - $ref: '#/components/schemas/NonNegativeDecimalString'
+            - type: 'null'
+        returnPreviousValue: {type: boolean}
+    BatchSetEntriesRequest:
+      type: object
+      additionalProperties: false
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CoreCacheSetRequest'}
+    BatchSetEntryResult:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, applied, newVersion, previousEntry]
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        key: {type: string, minLength: 1, maxLength: 1024}
+        applied: {type: boolean}
+        newVersion: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        previousEntry:
+          oneOf:
+            - $ref: '#/components/schemas/CacheEntrySnapshot'
+            - type: 'null'
+    BatchSetEntriesResult:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/BatchSetEntryResult'}
+    ScanEntriesRequest:
+      type: object
+      additionalProperties: false
+      required: [namespace, prefix, cursor, limit, includeValues, includeExpired, reason]
+      properties:
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        prefix: {type: [string, 'null'], maxLength: 1024}
+        cursor: {type: [string, 'null'], maxLength: 4096}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        includeValues: {type: boolean}
+        includeExpired: {type: boolean}
+        reason: {type: string, minLength: 3, maxLength: 240}
+    ScanEntriesResult:
+      type: object
+      additionalProperties: false
+      required: [entries, nextCursor, hasMore]
+      properties:
+        entries:
+          type: array
+          maxItems: 200
+          items: {$ref: '#/components/schemas/CacheEntrySnapshot'}
+        nextCursor: {type: [string, 'null'], maxLength: 4096}
+        hasMore: {type: boolean}
     EntryTtlRequest:
       type: object
       additionalProperties: false
@@ -2227,6 +2729,63 @@ components:
       properties:
         confirmationKey: {type: string, minLength: 1, maxLength: 1024}
         reason: {type: string, minLength: 3, maxLength: 240}
+    LockOwnerRequest:
+      type: object
+      additionalProperties: false
+      required: [ownerToken]
+      properties:
+        ownerToken: {type: string, minLength: 1, maxLength: 4096}
+    AcquireLockRequest:
+      type: object
+      additionalProperties: false
+      required: [ownerToken, leaseTtlMillis, reentrantForSameOwner, issueFencingToken]
+      properties:
+        ownerToken: {type: string, minLength: 1, maxLength: 4096}
+        leaseTtlMillis: {type: integer, minimum: 1}
+        reentrantForSameOwner: {type: boolean}
+        issueFencingToken: {type: boolean}
+    AcquireLockResult:
+      type: object
+      additionalProperties: false
+      required: [acquired, namespace, key, ownerToken, fencingToken, leaseExpiresAt]
+      properties:
+        acquired: {type: boolean}
+        namespace: {type: string, minLength: 1, maxLength: 128}
+        key: {type: string, minLength: 1, maxLength: 1024}
+        ownerToken: {type: [string, 'null'], maxLength: 4096}
+        fencingToken:
+          oneOf:
+            - $ref: '#/components/schemas/NonNegativeDecimalString'
+            - type: 'null'
+        leaseExpiresAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcInstant'
+            - type: 'null'
+    RenewLockRequest:
+      type: object
+      additionalProperties: false
+      required: [ownerToken, leaseTtlMillis]
+      properties:
+        ownerToken: {type: string, minLength: 1, maxLength: 4096}
+        leaseTtlMillis: {type: integer, minimum: 1}
+    RenewLockResult:
+      type: object
+      additionalProperties: false
+      required: [renewed]
+      properties:
+        renewed: {type: boolean}
+    ReleaseLockResult:
+      type: object
+      additionalProperties: false
+      required: [released]
+      properties:
+        released: {type: boolean}
+    LockOwnershipResult:
+      type: object
+      additionalProperties: false
+      required: [heldByOwner]
+      properties:
+        heldByOwner: {type: boolean}
     CreateSubscriptionRequest:
       type: object
       additionalProperties: false
@@ -2370,6 +2929,26 @@ components:
         auditQueue: {$ref: '#/components/schemas/AuditQueueState'}
         expirySweeper: {$ref: '#/components/schemas/ExpirySweeperState'}
         operations: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/OperationAggregate'}}
+    CacheMetricsSnapshot:
+      type: object
+      additionalProperties: false
+      required: [cacheGets, cacheHits, cacheMisses, cacheSets, cacheSetsApplied, cacheDeletes, counterIncrements, counterSets, counterDeletes, lockAcquires, lockAcquiresGranted, lockRenewals, lockReleases, publishes, subscribes]
+      properties:
+        cacheGets: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        cacheHits: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        cacheMisses: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        cacheSets: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        cacheSetsApplied: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        cacheDeletes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        counterIncrements: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        counterSets: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        counterDeletes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        lockAcquires: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        lockAcquiresGranted: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        lockRenewals: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        lockReleases: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        publishes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        subscribes: {$ref: '#/components/schemas/NonNegativeDecimalString'}
     ActivityResource:
       type: object
       additionalProperties: false

@@ -198,6 +198,14 @@ public final class ManagementServerApplication {
                             clock,
                             activity),
                     new SetupReadRoutes(registry, authentication.requestAuthenticator()),
+                    new BackendCapabilityRoutes(
+                            registry,
+                            authentication.requestAuthenticator(),
+                            browserSecurity,
+                            liveAudit,
+                            fingerprinter,
+                            rateLimiter,
+                            clock),
                     new SetupAdministrationRoutes(
                             registry,
                             authentication.requestAuthenticator(),

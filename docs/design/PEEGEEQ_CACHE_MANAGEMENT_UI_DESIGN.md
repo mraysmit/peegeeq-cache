@@ -1,7 +1,7 @@
 # PeeGeeQ Cache Management UI
 
 **Author:** Mark A Ray-Smith Cityline Ltd  
-**Status:** Approved and implemented; Phase 8.3 U0-U10 complete
+**Status:** Approved and implemented; Phase 8.3 U0-U11 complete
 **Date:** August 2026  
 **Version:** 0.2
 
@@ -23,7 +23,7 @@ The corresponding interactive screen designs are available in [the management UI
 
 Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
-As of 31 August 2026, the implemented production boundary includes the complete Maven-packaged React console: both authentication modes; setup lifecycle and capability-aware scope; Overview and namespace inspection; safe entry browsing/reveal and guarded administration; precision-safe counters; masked/version-checked locks; bounded non-durable Pub/Sub; strict SSE/WebSocket transports; monitoring, activity, notifications, and effective harmless settings; role/capability-aware routes and actions; accessible focus behavior; route-wide mobile/desktop axe, zoom, long-content, and viewport containment; screenshot inspection; and cross-surface privacy checks. The complete local reactor is green with 547 Surefire, 559 Failsafe, and 123 Vitest tests. The Playwright catalogue contains exactly 557 independently identified browser scenarios, including 16 canonical operation-owning journeys and 12 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception; two additional Failsafe tests validate the runnable artifact. The U10 pre-expansion reactor passed PostgreSQL 15.17, 16.13, 17.11, and 18.3; the expanded 557-scenario catalogue is currently cumulatively verified on PostgreSQL 18.3, with PostgreSQL 15-17 reruns retained as release validation.
+The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The active Playwright catalogue contains 550 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. The earlier 559-scenario result is historical evidence from before ten unsupported mobile/narrow-viewport cases were removed and `PW-BACKEND-001` was added; the current desktop-only catalogue passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 2 September 2026.
 
 ## 2. Fixed decisions
 
@@ -32,7 +32,8 @@ The following decisions are part of the approved design:
 | Area | Decision |
 |---|---|
 | Deliverable | Full UX, API, backend, security, implementation, and test design |
-| Visual design | Match the PeeGeeQ Management UI shell and interaction conventions |
+| Visual design | Match the PeeGeeQ Management UI desktop shell and interaction conventions |
+| Supported client | Desktop browser at 1280 CSS pixels wide or greater; mobile and tablet are out of scope |
 | Connection model | Multiple registered cache setups |
 | Administration | Full guarded administration |
 | Authentication | Exactly one server mode: trusted-proxy identity or single-use loopback local-token bootstrap; both establish bounded management sessions |
@@ -46,7 +47,7 @@ The following decisions are part of the approved design:
 
 ### 3.1 Preserve PeeGeeQ family consistency
 
-The cache console must look and behave like the PeeGeeQ Management UI. It uses the same dark collapsible sidebar, light content area, page header, connection indicator, manual refresh control, notification drawer, Ant Design cards and tables, destructive confirmation patterns, setup scope selector, responsive breakpoints, and embedded `/ui/*` deployment shape.
+The cache console must look and behave like the desktop PeeGeeQ Management UI. It uses the same dark collapsible sidebar, light content area, page header, connection indicator, manual refresh control, notification drawer, Ant Design cards and tables, destructive confirmation patterns, setup scope selector, and embedded `/ui/*` deployment shape.
 
 Consistency does not require copying accidental implementation fragmentation. The cache console uses one clear owner for each class of state:
 
@@ -194,7 +195,7 @@ The shell is structurally identical to the PeeGeeQ Management UI:
 └──────────────────┴───────────────────────────────────────────────────────────┘
 ```
 
-The sidebar collapses to icons at the same breakpoint and width as the reference UI. The header remains visible while page content scrolls. The notification drawer opens from the header without navigation.
+The desktop sidebar may collapse to icons through its explicit control. The header remains visible while page content scrolls. The notification drawer opens from the header without navigation. Narrow-viewport breakpoint behavior is not a supported product contract.
 
 ### 6.2 Routes
 
@@ -775,7 +776,7 @@ Vitest and Testing Library cover:
 - formatter correctness;
 - conflict and validation presentation;
 - bulk confirmation phrase and token expiry;
-- responsive navigation and keyboard interaction.
+- desktop navigation and keyboard interaction.
 
 Purpose-built HTTP/SSE/WebSocket fixtures may be used for browser protocol states. They must behave like the real protocol and must not replace backend integration coverage.
 

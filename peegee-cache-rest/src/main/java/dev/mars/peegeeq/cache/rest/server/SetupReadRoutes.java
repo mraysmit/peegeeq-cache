@@ -88,6 +88,16 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
         runtime.put("expirySweeperEnabled", details.runtime().expirySweeperEnabled());
         runtime.put("expirySweepIntervalMillis", details.runtime().expirySweepIntervalMillis());
         runtime.put("expirySweepBatchSize", details.runtime().expirySweepBatchSize());
+        runtime.put("writeBehindEnabled", details.runtime().writeBehindEnabled());
+        runtime.put("writeBehindFlushIntervalMillis", details.runtime().writeBehindFlushIntervalMillis());
+        runtime.put("writeBehindMaxBufferSize", details.runtime().writeBehindMaxBufferSize());
+        runtime.put("writeBehindFlushBatchSize", details.runtime().writeBehindFlushBatchSize());
+        runtime.put("writeBehindMaxRetries", details.runtime().writeBehindMaxRetries());
+        runtime.put("writeBehindShutdownDrainTimeoutMillis", details.runtime().writeBehindShutdownDrainTimeoutMillis());
+        runtime.put("pubSubChannelPrefix", details.runtime().pubSubChannelPrefix());
+        runtime.put("pubSubEnabled", details.runtime().pubSubEnabled());
+        runtime.put("schemaBootstrapMode", details.runtime().schemaBootstrapMode());
+        runtime.put("telemetryMode", details.runtime().telemetryMode());
         runtime.put("poolMaxSize", details.runtime().poolMaxSize());
         node.put("registeredAt", details.registeredAt().toString());
         if (details.connectedAt() == null) {
@@ -113,8 +123,11 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
         node.put("migrationVersion", capabilities.migrationVersion());
         ObjectNode features = node.putObject("capabilities");
         features.put("namespaceInspection", capabilities.features().namespaceInspection());
+        features.put("entryInspection", capabilities.features().entryInspection());
         features.put("expiredEntryInspection", capabilities.features().expiredEntryInspection());
+        features.put("entryMutation", capabilities.features().entryMutation());
         features.put("counterInspection", capabilities.features().counterInspection());
+        features.put("counterMutation", capabilities.features().counterMutation());
         features.put("lockInspection", capabilities.features().lockInspection());
         features.put("forcedLockRelease", capabilities.features().forcedLockRelease());
         features.put("bulkEntryDelete", capabilities.features().bulkEntryDelete());
@@ -124,6 +137,10 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
         features.put("entryValueReveal", capabilities.features().entryValueReveal());
         features.put("lockOwnerReveal", capabilities.features().lockOwnerReveal());
         features.put("pubSubPayloadReveal", capabilities.features().pubSubPayloadReveal());
+        features.put("batchEntryOperations", capabilities.features().batchEntryOperations());
+        features.put("valueScan", capabilities.features().valueScan());
+        features.put("cacheMetrics", capabilities.features().cacheMetrics());
+        features.put("ownerLockOperations", capabilities.features().ownerLockOperations());
         ObjectNode limits = node.putObject("limits");
         limits.put("pubSubChannelMaxBytes", capabilities.limits().pubSubChannelMaxBytes());
         limits.put("pubSubPayloadMaxBytes", capabilities.limits().pubSubPayloadMaxBytes());

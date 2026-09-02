@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -26,7 +27,7 @@ class BenchmarkResultTest {
 
     @Test
     void benchmarkResultRequiresTheCompleteScenarioSet() {
-        BenchmarkConfig config = BenchmarkConfig.fromSystemProperties();
+        BenchmarkConfig config = BenchmarkConfig.fromProperties(new Properties());
         BenchmarkScenarioResult scenario = new BenchmarkScenarioResult(
                 "only-one", 1, 1.0, 1.0, 1.0, 1.0);
 

@@ -15,6 +15,7 @@ public record SetupDefinition(
         String schema,
         String username,
         int poolMaxSize,
+        SetupRuntimeConfiguration runtimeConfiguration,
         SetupSource source,
         ManagementSecretReference secretReference) {
 
@@ -28,6 +29,7 @@ public record SetupDefinition(
         database = requireBoundedText(database, "database", 128);
         schema = requireMatching(schema, "schema", SCHEMA);
         username = requireBoundedText(username, "username", 128);
+        runtimeConfiguration = Objects.requireNonNull(runtimeConfiguration, "runtimeConfiguration");
         source = Objects.requireNonNull(source, "source");
         if (poolMaxSize < 1 || poolMaxSize > 100) {
             throw new IllegalArgumentException("poolMaxSize must be between 1 and 100");
@@ -35,6 +37,20 @@ public record SetupDefinition(
         if ((source == SetupSource.CONFIGURED) != (secretReference != null)) {
             throw new IllegalArgumentException("Only configured setups use a secret reference");
         }
+    }
+
+    public SetupDefinition(
+            String setupId,
+            String displayName,
+            SetupTarget target,
+            String database,
+            String schema,
+            String username,
+            int poolMaxSize,
+            SetupSource source,
+            ManagementSecretReference secretReference) {
+        this(setupId, displayName, target, database, schema, username, poolMaxSize,
+                SetupRuntimeConfiguration.defaults(), source, secretReference);
     }
 
     private static String requireMatching(String value, String name, Pattern pattern) {

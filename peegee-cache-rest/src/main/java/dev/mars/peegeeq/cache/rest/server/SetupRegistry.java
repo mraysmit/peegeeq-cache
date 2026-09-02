@@ -3,6 +3,7 @@ package dev.mars.peegeeq.cache.rest.server;
 import dev.mars.peegeeq.cache.api.management.AdminCapabilities;
 import dev.mars.peegeeq.cache.api.management.ManagementSecretProvider;
 import dev.mars.peegeeq.cache.api.management.ManagementService;
+import dev.mars.peegeeq.cache.api.PeeGeeCache;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
@@ -99,7 +100,8 @@ public final class SetupRegistry {
         try {
             operation = runtimeFactory.create(definition, secret)
                     .compose(runtime -> runtime.verifyReady()
-                            .map(ignored -> capabilityMapper.apply(runtime.management().capabilities()))
+                            .map(ignored -> capabilityMapper.apply(runtime.management().capabilities())
+                                    .withRuntimeConfiguration(definition.runtimeConfiguration()))
                             .compose(capabilities -> runtime.closeAsync().map(capabilities))
                             .map(capabilities -> connectionTest(started, capabilities))
                             .recover(failure -> runtime.closeAsync()
@@ -262,7 +264,8 @@ public final class SetupRegistry {
                 throw new SetupRegistryException(
                         409, "SETUP_NOT_CONNECTED", "Setup is not connected");
             }
-            return capabilityMapper.apply(entry.runtime.management().capabilities());
+            return capabilityMapper.apply(entry.runtime.management().capabilities())
+                    .withRuntimeConfiguration(entry.definition.runtimeConfiguration());
         }
     }
 
@@ -285,6 +288,18 @@ public final class SetupRegistry {
                         409, "SETUP_NOT_CONNECTED", "Setup is not connected");
             }
             return entry.runtime.pubSub();
+        }
+    }
+
+    /** Returns the complete connected cache facade for backend-capability routes. */
+    public PeeGeeCache cache(String setupId) {
+        Entry entry = requireEntry(setupId);
+        synchronized (entry) {
+            if (entry.runtime == null) {
+                throw new SetupRegistryException(
+                        409, "SETUP_NOT_CONNECTED", "Setup is not connected");
+            }
+            return entry.runtime.cache();
         }
     }
 
@@ -542,7 +557,8 @@ public final class SetupRegistry {
             return new SetupDetails(
                     summary(),
                     "1",
-                    new SetupRuntimeSummary(null, false, 30_000, 500, definition.poolMaxSize()),
+                    SetupRuntimeSummary.from(
+                            definition.runtimeConfiguration(), definition.poolMaxSize()),
                     registeredAt,
                     connectedAt);
         }

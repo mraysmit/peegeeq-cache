@@ -30,7 +30,7 @@ export function Modal({ children, className = 'modal modal--compact', labelId, o
 
   useLayoutEffect(() => {
     if (onDismiss === undefined) return;
-    const dismissTopmostModal = (event: KeyboardEvent) => {
+    const dismissTopmostModal = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]');
       if (dialogs.item(dialogs.length - 1) !== dialogRef.current) return;

@@ -38,6 +38,7 @@ enum ManagementBrowserArea {
     ENTRY,
     COUNTER,
     LOCK,
+    BACKEND,
     PUBSUB,
     MONITORING,
     HARDENING

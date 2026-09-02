@@ -7,6 +7,7 @@ import { InspectionClient } from '../api/inspection-client';
 import { EntryAdministrationClient } from '../api/entry-administration-client';
 import { ResourceClient } from '../api/resource-client';
 import { PubSubClient } from '../api/pubsub-client';
+import { BackendCapabilityClient } from '../api/backend-capability-client';
 import type { SetupCapabilities } from '../api/setup-schemas';
 import { OverviewPage } from '../features/overview/OverviewPage';
 import { NamespaceDetailsPage } from '../features/namespaces/NamespaceDetailsPage';
@@ -19,6 +20,7 @@ import { LocksPage } from '../features/locks/LocksPage';
 import { PubSubPage } from '../features/pubsub/PubSubPage';
 import { MonitoringPage } from '../features/monitoring/MonitoringPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
+import { AdvancedOperationsPage } from '../features/advanced/AdvancedOperationsPage';
 import { useSetupScopeStore } from '../state/scope-store';
 import { loadPreferences, PREFERENCES_CHANGED_EVENT, savePreferences } from '../state/preferences';
 import { BrowserMonitoringSocket, type MonitoringConnectionState, type MonitoringEnvelope } from '../api/monitoring-live';
@@ -40,6 +42,7 @@ const sections = [
   { label: 'Locks', path: '/locks' },
   { label: 'Pub/Sub', path: '/pubsub' },
   { label: 'Monitoring', path: '/monitoring' },
+  { label: 'Advanced', path: '/advanced' },
   { label: 'Settings', path: '/settings' },
 ] as const;
 
@@ -60,6 +63,7 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
   const entryAdministrationClient = useMemo(() => new EntryAdministrationClient(sessionClient), [sessionClient]);
   const resourceClient = useMemo(() => new ResourceClient(sessionClient), [sessionClient]);
   const pubSubClient = useMemo(() => new PubSubClient(sessionClient), [sessionClient]);
+  const backendCapabilityClient = useMemo(() => new BackendCapabilityClient(sessionClient), [sessionClient]);
   const monitoringSocket = useMemo(() => new BrowserMonitoringSocket(), []);
   const isOperator = session.roles.includes('operator');
 
@@ -99,10 +103,12 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
   }, [monitoringSocket, notificationsOpen, selectedSetupId]);
 
   const capabilityForPath = (path: string): keyof SetupCapabilities['capabilities'] | undefined => {
-    if (path === '/namespaces' || path === '/keys') return 'namespaceInspection';
+    if (path === '/namespaces') return 'namespaceInspection';
+    if (path === '/keys') return 'entryInspection';
     if (path === '/counters') return 'counterInspection';
     if (path === '/locks') return 'lockInspection';
     if (path === '/pubsub') return 'pubSub';
+    if (path === '/advanced') return 'entryInspection';
     return undefined;
   };
   const visibleSections = sections.filter((section) => {
@@ -231,19 +237,20 @@ export function ManagementShell({ session, sessionClient, sessionProblem, onLogo
             path="/setups"
           />
           <Route
-            element={gated('namespaceInspection', 'Keys', 'namespace and entry inspection', <EntriesPage administrationClient={entryAdministrationClient} canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkEntryDelete === true} canInspectExpired={selectedCapabilities?.capabilities.expiredEntryInspection === true} canOperate={isOperator} client={inspectionClient} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />)}
+            element={gated('entryInspection', 'Keys', 'entry inspection', <EntriesPage administrationClient={entryAdministrationClient} canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkEntryDelete === true} canInspectExpired={selectedCapabilities?.capabilities.expiredEntryInspection === true} canOperate={isOperator && selectedCapabilities?.capabilities.entryMutation === true} client={inspectionClient} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />)}
             path="/keys"
           />
           <Route
-            element={gated('namespaceInspection', 'Keys', 'namespace and entry inspection', <EntryDetailsRoute administrationClient={entryAdministrationClient} canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.entryValueReveal === true} client={inspectionClient} selectedSetupId={selectedSetupId} />)}
+            element={gated('entryInspection', 'Keys', 'entry inspection', <EntryDetailsRoute administrationClient={entryAdministrationClient} canOperate={isOperator && selectedCapabilities?.capabilities.entryMutation === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.entryValueReveal === true} client={inspectionClient} selectedSetupId={selectedSetupId} />)}
             path="/keys/:encodedNamespace/:encodedKey"
           />
-          <Route element={gated('counterInspection', 'Counters', 'counter inspection', <CountersPage canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkCounterDelete === true} canOperate={isOperator} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/counters" />
+          <Route element={gated('counterInspection', 'Counters', 'counter inspection', <CountersPage canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkCounterDelete === true} canOperate={isOperator && selectedCapabilities?.capabilities.counterMutation === true} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/counters" />
           <Route element={gated('lockInspection', 'Locks', 'lock inspection', <LocksPage canOperate={isOperator && selectedCapabilities?.capabilities.forcedLockRelease === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.lockOwnerReveal === true} client={resourceClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/locks" />
           <Route element={gated('pubSub', 'Pub/Sub', 'Pub/Sub', <PubSubPage canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.pubSubPayloadReveal === true} client={pubSubClient} key={selectedSetupId ?? 'no-setup'} maximumChannelBytes={selectedCapabilities?.limits.pubSubChannelMaxBytes ?? 63} maximumPayloadBytes={selectedCapabilities?.limits.pubSubPayloadMaxBytes ?? 7_500} selectedSetupId={selectedSetupId} />)} path="/pubsub" />
           <Route element={<MonitoringPage client={inspectionClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/monitoring" />
+          <Route element={gated('entryInspection', 'Advanced operations', 'backend operations', <AdvancedOperationsPage canBatch={selectedCapabilities?.capabilities.batchEntryOperations === true} canMetrics={selectedCapabilities?.capabilities.cacheMetrics === true} canOperate={isOperator} canOwnLocks={selectedCapabilities?.capabilities.ownerLockOperations === true} canReveal={isOperator && session.features.sensitiveReveal} canScan={selectedCapabilities?.capabilities.valueScan === true} client={backendCapabilityClient} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/advanced" />
           <Route element={<SettingsPage capabilities={selectedCapabilities} selectedSetupId={selectedSetupId} session={session} />} path="/settings" />
-          {sections.filter((section) => !['/setups', '/', '/namespaces', '/keys', '/counters', '/locks', '/pubsub', '/monitoring', '/settings'].includes(section.path)).map((section) => (
+          {sections.filter((section) => !['/setups', '/', '/namespaces', '/keys', '/counters', '/locks', '/pubsub', '/monitoring', '/advanced', '/settings'].includes(section.path)).map((section) => (
             <Route
               element={<Section selectedSetupId={selectedSetupId} title={section.label} />}
               key={section.path}

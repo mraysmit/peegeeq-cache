@@ -4,7 +4,6 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -15,23 +14,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /** Real-browser canary for the opt-in headed observation presentation. */
 class ManagementPlaywrightObservationIT {
 
-    @AfterEach
-    void clearObservationProperties() {
-        System.clearProperty("peegeeq.playwright.headless");
-        System.clearProperty("peegeeq.playwright.pauseBetweenScenarios");
-    }
-
     @Test
     void scenarioOverlayCoversSetupNavigationsAndIsRemovedWhenTheFeatureIsReady() {
-        System.setProperty("peegeeq.playwright.headless", "false");
-        System.setProperty("peegeeq.playwright.pauseBetweenScenarios", "0");
         try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
                 .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
              Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
                      .setChannel("chrome").setHeadless(true))) {
             Page page = browser.newPage();
             ManagementPlaywright.ScenarioPresentation presentation =
-                    ManagementPlaywright.beginScenario(page);
+                    ManagementPlaywright.beginScenario(
+                            page, new ManagementPlaywright.Observation(false, 0, 0));
 
             page.navigate("data:text/html,<body><h1>Fixture login</h1></body>");
             assertThat(page.locator("#peegeeq-playwright-observation")).isVisible();

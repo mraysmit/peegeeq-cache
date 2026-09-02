@@ -423,8 +423,11 @@ public final class SetupMutationRoutes implements ManagementRequestRouter {
     private static void putFeatures(
             ObjectNode node, SetupCapabilities.Features features) {
         node.put("namespaceInspection", features.namespaceInspection());
+        node.put("entryInspection", features.entryInspection());
         node.put("expiredEntryInspection", features.expiredEntryInspection());
+        node.put("entryMutation", features.entryMutation());
         node.put("counterInspection", features.counterInspection());
+        node.put("counterMutation", features.counterMutation());
         node.put("lockInspection", features.lockInspection());
         node.put("forcedLockRelease", features.forcedLockRelease());
         node.put("bulkEntryDelete", features.bulkEntryDelete());
@@ -434,17 +437,25 @@ public final class SetupMutationRoutes implements ManagementRequestRouter {
         node.put("entryValueReveal", features.entryValueReveal());
         node.put("lockOwnerReveal", features.lockOwnerReveal());
         node.put("pubSubPayloadReveal", features.pubSubPayloadReveal());
+        node.put("batchEntryOperations", features.batchEntryOperations());
+        node.put("valueScan", features.valueScan());
+        node.put("cacheMetrics", features.cacheMetrics());
+        node.put("ownerLockOperations", features.ownerLockOperations());
     }
 
     private SetupPayload parsePayload(byte[] body, boolean registration) {
         try {
             JsonNode root = json.readTree(body);
-            Set<String> expected = registration
+            Set<String> baseExpected = registration
                     ? Set.of("setupId", "displayName", "host", "port", "database", "schema",
                             "username", "password", "sslMode", "trustProfileId", "poolMaxSize")
                     : Set.of("host", "port", "database", "schema", "username", "password",
                             "sslMode", "trustProfileId", "poolMaxSize");
-            if (root == null || !root.isObject() || fieldNames(root).equals(expected) == false) {
+            Set<String> actual = root == null || !root.isObject() ? Set.of() : fieldNames(root);
+            Set<String> withRuntime = new HashSet<>(baseExpected);
+            withRuntime.add("runtime");
+            if (root == null || !root.isObject()
+                    || (!actual.equals(baseExpected) && !actual.equals(withRuntime))) {
                 throw validationFailure();
             }
             String sslMode = requiredText(root, "sslMode");
@@ -467,6 +478,7 @@ public final class SetupMutationRoutes implements ManagementRequestRouter {
                     requiredText(root, "schema"),
                     requiredText(root, "username"),
                     requiredInt(root, "poolMaxSize"),
+                    parseRuntimeConfiguration(root.get("runtime")),
                     SetupSource.UI_SESSION,
                     null);
             return new SetupPayload(
@@ -477,6 +489,68 @@ public final class SetupMutationRoutes implements ManagementRequestRouter {
         } catch (Exception failure) {
             throw validationFailure();
         }
+    }
+
+    private static SetupRuntimeConfiguration parseRuntimeConfiguration(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return SetupRuntimeConfiguration.defaults();
+        }
+        requireFields(node, Set.of(
+                "defaultTtlMillis", "expirySweeperEnabled", "expirySweepIntervalMillis",
+                "expirySweepBatchSize", "writeBehindEnabled", "writeBehindFlushIntervalMillis",
+                "writeBehindMaxBufferSize", "writeBehindFlushBatchSize", "writeBehindMaxRetries",
+                "writeBehindShutdownDrainTimeoutMillis", "pubSubChannelPrefix", "pubSubEnabled",
+                "schemaBootstrapMode", "telemetryMode"));
+        JsonNode defaultTtl = node.get("defaultTtlMillis");
+        Long defaultTtlMillis = defaultTtl == null || defaultTtl.isNull()
+                ? null : requiredPositiveLong(defaultTtl);
+        return new SetupRuntimeConfiguration(
+                defaultTtlMillis,
+                requiredBoolean(node, "expirySweeperEnabled"),
+                requiredPositiveLong(node.get("expirySweepIntervalMillis")),
+                requiredPositiveInt(node.get("expirySweepBatchSize")),
+                requiredBoolean(node, "writeBehindEnabled"),
+                requiredPositiveLong(node.get("writeBehindFlushIntervalMillis")),
+                requiredPositiveInt(node.get("writeBehindMaxBufferSize")),
+                requiredPositiveInt(node.get("writeBehindFlushBatchSize")),
+                requiredNonNegativeInt(node.get("writeBehindMaxRetries")),
+                requiredPositiveLong(node.get("writeBehindShutdownDrainTimeoutMillis")),
+                requiredText(node, "pubSubChannelPrefix"),
+                requiredBoolean(node, "pubSubEnabled"),
+                dev.mars.peegeeq.cache.runtime.bootstrap.SchemaBootstrapMode.valueOf(
+                        requiredText(node, "schemaBootstrapMode")),
+                SetupRuntimeConfiguration.TelemetryMode.valueOf(
+                        requiredText(node, "telemetryMode")));
+    }
+
+    private static void requireFields(JsonNode node, Set<String> expected) {
+        if (node == null || !node.isObject() || !fieldNames(node).equals(expected)) {
+            throw validationFailure();
+        }
+    }
+
+    private static boolean requiredBoolean(JsonNode node, String name) {
+        JsonNode value = node.get(name);
+        if (value == null || !value.isBoolean()) throw validationFailure();
+        return value.booleanValue();
+    }
+
+    private static long requiredPositiveLong(JsonNode node) {
+        if (node == null || !node.isIntegralNumber() || !node.canConvertToLong()
+                || node.longValue() < 1) throw validationFailure();
+        return node.longValue();
+    }
+
+    private static int requiredPositiveInt(JsonNode node) {
+        int value = requiredNonNegativeInt(node);
+        if (value < 1) throw validationFailure();
+        return value;
+    }
+
+    private static int requiredNonNegativeInt(JsonNode node) {
+        if (node == null || !node.isIntegralNumber() || !node.canConvertToInt()
+                || node.intValue() < 0) throw validationFailure();
+        return node.intValue();
     }
 
     private static Set<String> fieldNames(JsonNode root) {

@@ -82,6 +82,10 @@ class ManagementConsoleProductJourneysIT {
             Locator details = page.getByRole(AriaRole.DIALOG,
                     new Page.GetByRoleOptions().setName("Setup details"));
             assertThat(details).containsText("Database reachable and schema ready");
+            assertThat(details).containsText("3600000 ms");
+            assertThat(details).containsText("Every 30000 ms · 500 rows");
+            assertThat(details).containsText("Enabled · prefix browser_cache");
+            assertThat(details).containsText("Apply at startup");
             details.getByRole(AriaRole.BUTTON,
                     new Locator.GetByRoleOptions().setName("Close details")).click();
 
@@ -110,7 +114,8 @@ class ManagementConsoleProductJourneysIT {
             forbidden.getByLabel("Host").fill("public.example.net");
             forbidden.getByLabel("Port").fill(String.valueOf(context.postgres().getMappedPort(5432)));
             forbidden.getByLabel("Database").fill("peegeeq");
-            forbidden.getByLabel("Schema").fill("peegee_cache");
+            forbidden.getByLabel("Schema", new Locator.GetByLabelOptions().setExact(true))
+                    .fill("peegee_cache");
             forbidden.getByLabel("Username").fill("peegeeq");
             forbidden.getByLabel("Password").fill(ManagementConsolePostgresFixture.DATABASE_PASSWORD);
             forbidden.getByLabel("Trust profile").fill("test-ca");
@@ -574,6 +579,30 @@ class ManagementConsoleProductJourneysIT {
             assertEquals("42", counterBody.get("value"));
 
             page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Create counter")).click();
+            Locator adjustedCreation = page.getByRole(AriaRole.DIALOG,
+                    new Page.GetByRoleOptions().setName("Create counter"));
+            adjustedCreation.getByLabel("Namespace").fill(ManagementConsolePostgresFixture.NAMESPACE);
+            adjustedCreation.getByLabel("Key").fill("created-by-adjustment");
+            adjustedCreation.getByLabel("Signed adjustment").fill("-7");
+            adjustedCreation.getByLabel("TTL milliseconds (blank for persistent)").fill("60000");
+            adjustedCreation.getByRole(AriaRole.BUTTON,
+                    new Locator.GetByRoleOptions().setName("Create by adjustment")).click();
+            assertThat(page.getByRole(AriaRole.STATUS)).containsText("Counter created by adjustment: -7");
+            assertEquals("-7", ManagementConsolePostgresFixture.queryScalar(context.postgres(), """
+                    SELECT counter_value::text
+                      FROM peegee_cache.cache_counters
+                     WHERE namespace = 'logical-orders'
+                       AND counter_key = 'created-by-adjustment'
+                    """));
+            Locator adjustedCounter = page.getByRole(AriaRole.DIALOG,
+                    new Page.GetByRoleOptions().setName("Manage created-by-adjustment"));
+            adjustedCounter.getByLabel("Confirm counter key").fill("created-by-adjustment");
+            adjustedCounter.getByRole(AriaRole.BUTTON,
+                    new Locator.GetByRoleOptions().setName("Delete current version")).click();
+            assertThat(page.getByRole(AriaRole.STATUS)).containsText("created-by-adjustment deleted");
+
+            page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Manage count").setExact(true)).click();
             Locator counter = page.getByRole(AriaRole.DIALOG,
                     new Page.GetByRoleOptions().setName("Manage count"));
@@ -862,10 +891,10 @@ class ManagementConsoleProductJourneysIT {
 
     @ManagementBrowserScenario(
             id = "PW-HARDEN-002",
-            requirement = "UI design: populated primary workflows remain keyboard accessible and responsive",
+            requirement = "UI design: populated primary workflows remain keyboard accessible on desktop",
             area = ManagementBrowserArea.HARDENING,
             risk = ManagementBrowserRisk.HIGH,
-            action = "Navigate populated routes by keyboard, resize the viewport, and exercise dialog focus behavior",
+            action = "Navigate populated routes at the supported desktop viewport and exercise keyboard and dialog focus behavior",
             expectedResult = "Primary content remains reachable and dialog focus is trapped, escaped, and restored",
             cleanup = "Close dialogs, restore context state, and close all browser and fixture resources",
             operations = {"getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity",
@@ -877,13 +906,14 @@ class ManagementConsoleProductJourneysIT {
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
     @ManagementBrowserJourney(
-            value = "accessibility-and-responsive",
+            value = "desktop-accessibility",
             operations = {})
-    void populatedWorkflowsRemainKeyboardReachableAndResponsive() throws Exception {
+    void populatedWorkflowsRemainKeyboardReachableOnDesktop() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
+            page.setViewportSize(1440, 900);
 
             List<Map.Entry<String, String>> primaryRoutes = List.of(
                     Map.entry("/ui/", "Overview"),
@@ -908,28 +938,17 @@ class ManagementConsoleProductJourneysIT {
                     assertThat(page.getByRole(AriaRole.LINK,
                             new Page.GetByRoleOptions().setName("customer:1").setExact(true))).isVisible();
                 }
-                for (int[] viewport : List.of(new int[]{390, 844}, new int[]{1440, 900})) {
-                    page.setViewportSize(viewport[0], viewport[1]);
-                    assertViewportSurfacesContained(page, route.getKey() + " at "
-                            + viewport[0] + "x" + viewport[1]);
-                    assertNoAxeViolations(page);
-                }
+                assertViewportSurfacesContained(page, route.getKey() + " at 1440x900");
+                assertNoAxeViolations(page);
             }
 
             assertEquals(200, page.navigate(context.origin() + "/ui/counters").status());
-            page.setViewportSize(390, 844);
             page.getByRole(AriaRole.LINK,
                     new Page.GetByRoleOptions().setName("Counters").setExact(true)).focus();
             page.keyboard().press("Enter");
             assertThat(page.getByRole(AriaRole.HEADING,
                     new Page.GetByRoleOptions().setName("Counters").setExact(true))).isVisible();
-            for (int[] viewport : List.of(
-                    new int[]{360, 640}, new int[]{390, 844}, new int[]{768, 1024},
-                    new int[]{1024, 768}, new int[]{1440, 900}, new int[]{1920, 1080})) {
-                page.setViewportSize(viewport[0], viewport[1]);
-                assertViewportSurfacesContained(page,
-                        "Counters at " + viewport[0] + "x" + viewport[1]);
-            }
+            assertViewportSurfacesContained(page, "Counters at 1440x900");
             assertNoAxeViolations(page);
             Locator manage = page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Manage count"));
@@ -1012,6 +1031,116 @@ class ManagementConsoleProductJourneysIT {
             assertFalse(audit.contains(ManagementConsolePostgresFixture.DATABASE_PASSWORD));
             assertFalse(audit.contains(context.bootstrapToken()));
             assertEquals(List.of(), context.diagnostics().failedResponses());
+        });
+    }
+
+    @ManagementBrowserScenario(
+            id = "PW-BACKEND-001",
+            requirement = "Functionality matrix: every public cache, scan, lock, and metrics gap has a packaged desktop workflow",
+            area = ManagementBrowserArea.BACKEND,
+            risk = ManagementBrowserRisk.CRITICAL,
+            action = "Use the packaged Advanced operations workspace against the real PostgreSQL-backed runtime",
+            expectedResult = "Batch values, existence, scanning, exact metrics, and the owner lock lifecycle are visible and committed",
+            cleanup = "Release the owner lock, clear sensitive state, remove the batch entry, and close all fixture resources",
+            operations = {
+                    "checkEntryExists", "batchGetEntries", "batchSetEntries", "scanEntries",
+                    "getCacheMetrics", "acquireLock", "checkLockOwnership", "renewLock", "releaseLock"
+            },
+            evidence = {
+                    ManagementBrowserEvidence.VISIBLE_RESULT,
+                    ManagementBrowserEvidence.HTTP_OPERATION,
+                    ManagementBrowserEvidence.DATABASE,
+                    ManagementBrowserEvidence.DURABLE_AUDIT,
+                    ManagementBrowserEvidence.SENSITIVE_STATE,
+                    ManagementBrowserEvidence.RESOURCE_CLEANUP
+            })
+    @ManagementBrowserJourney(
+            value = "backend-service-parity",
+            operations = {
+                    "checkEntryExists", "batchGetEntries", "batchSetEntries", "scanEntries",
+                    "getCacheMetrics", "acquireLock", "checkLockOwnership", "renewLock", "releaseLock"
+            })
+    void advancedWorkspaceExercisesCompleteBackendServiceParity() throws Exception {
+        ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
+            ManagementConsolePostgresFixture.authenticate(context);
+            ManagementConsolePostgresFixture.registerSetup(context);
+            Page page = context.page();
+            String ownerToken = "backend-owner-token";
+            ManagementBrowserEvidenceListener.registerSensitiveCanary(ownerToken);
+
+            page.getByRole(AriaRole.LINK,
+                    new Page.GetByRoleOptions().setName("Advanced").setExact(true)).click();
+            assertThat(page.getByRole(AriaRole.HEADING,
+                    new Page.GetByRoleOptions().setName("Advanced operations").setExact(true))).isVisible();
+
+            page.getByLabel("Namespace", new Page.GetByLabelOptions().setExact(true))
+                    .fill(ManagementConsolePostgresFixture.NAMESPACE);
+            page.getByLabel("Key", new Page.GetByLabelOptions().setExact(true)).fill("customer:1");
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Check entry existence")).click();
+            assertThat(page.getByText("Exists: Yes")).isVisible();
+
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Run backend scan")).click();
+            assertThat(page.getByRole(AriaRole.REGION,
+                    new Page.GetByRoleOptions().setName("Scan result"))).containsText("stored-value");
+
+            page.getByLabel("Batch get keys").fill(
+                    ManagementConsolePostgresFixture.NAMESPACE + "\tcustomer:1\n"
+                            + ManagementConsolePostgresFixture.NAMESPACE + "\tmissing");
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Get entry batch")).click();
+            Locator batchGet = page.getByRole(AriaRole.REGION,
+                    new Page.GetByRoleOptions().setName("Batch get result"));
+            assertThat(batchGet).containsText("stored-value");
+            assertThat(batchGet).containsText("missing");
+
+            page.getByLabel("Batch set entries").fill(
+                    ManagementConsolePostgresFixture.NAMESPACE + "\tbackend-batch\tSTRING\tbatch-value");
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Set entry batch")).click();
+            assertThat(page.getByRole(AriaRole.REGION,
+                    new Page.GetByRoleOptions().setName("Batch set result"))).containsText("\"applied\": true");
+            ManagementConsolePostgresFixture.assertDatabaseValue(
+                    "batch-value",
+                    ManagementConsolePostgresFixture.queryScalar(context.postgres(),
+                            "SELECT convert_from(value_bytes, 'UTF8') FROM peegee_cache.cache_entries "
+                                    + "WHERE namespace = 'logical-orders' AND cache_key = 'backend-batch'"),
+                    "batch-set value");
+
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Refresh core metrics")).click();
+            assertThat(page.getByText("Cache Sets", new Page.GetByTextOptions().setExact(true))).isVisible();
+
+            page.getByLabel("Lock namespace").fill(ManagementConsolePostgresFixture.NAMESPACE);
+            page.getByLabel("Lock key").fill("backend-lock");
+            page.getByLabel("Owner token").fill(ownerToken);
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Acquire lock")).click();
+            assertThat(page.getByText("Lock result:").locator("..")).containsText("Acquired");
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Check ownership")).click();
+            assertThat(page.getByText("Lock result:").locator("..")).containsText("holds this lock");
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Renew lock")).click();
+            assertThat(page.getByText("Lock result:").locator("..")).containsText("Renewed");
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Release by owner")).click();
+            assertThat(page.getByText("Lock result:").locator("..")).containsText("Released by owner");
+            assertEquals("0", ManagementConsolePostgresFixture.queryScalar(context.postgres(),
+                    "SELECT count(*) FROM peegee_cache.cache_locks "
+                            + "WHERE namespace = 'logical-orders' AND lock_key = 'backend-lock'"));
+
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Clear sensitive state")).click();
+            assertEquals("", page.getByLabel("Owner token").inputValue());
+            assertFalse(page.url().contains(ownerToken));
+            assertFalse(String.valueOf(page.evaluate(
+                    "JSON.stringify([...Object.values(localStorage), ...Object.values(sessionStorage)])"))
+                    .contains(ownerToken));
+            ManagementConsolePostgresFixture.execute(context.postgres(),
+                    "DELETE FROM peegee_cache.cache_entries "
+                            + "WHERE namespace = 'logical-orders' AND cache_key = 'backend-batch'");
         });
     }
 

@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,22 +31,21 @@ class ManagementBrowserEvidenceWriterTest {
     void aNewTestPlanRemovesStaleEvidenceBeforeExecution() throws Exception {
         Path report = temporaryDirectory.resolve("stale-evidence.html");
         Files.writeString(report, "stale");
-        String previous = System.getProperty("peegeeq.playwright.report");
-        System.setProperty("peegeeq.playwright.report", report.toString());
-        try {
-            new ManagementBrowserEvidenceListener().testPlanExecutionStarted(null);
-            assertFalse(Files.exists(report));
-        } finally {
-            if (previous == null) System.clearProperty("peegeeq.playwright.report");
-            else System.setProperty("peegeeq.playwright.report", previous);
-        }
+        Properties properties = new Properties();
+        properties.setProperty("peegeeq.playwright.report", report.toString());
+
+        new ManagementBrowserEvidenceListener(
+                ManagementBrowserRunConfig.fromProperties(properties))
+                .testPlanExecutionStarted(null);
+
+        assertFalse(Files.exists(report));
     }
 
     @Test
     void completeRunScenarioCountGateRejectsMissingEvidenceRows() {
-        assertDoesNotThrow(() -> ManagementBrowserEvidenceListener.assertExpectedScenarioCount(559, 559));
+        assertDoesNotThrow(() -> ManagementBrowserEvidenceListener.assertExpectedScenarioCount(549, 549));
         assertThrows(IllegalStateException.class,
-                () -> ManagementBrowserEvidenceListener.assertExpectedScenarioCount(559, 558));
+                () -> ManagementBrowserEvidenceListener.assertExpectedScenarioCount(549, 548));
     }
 
     @TempDir

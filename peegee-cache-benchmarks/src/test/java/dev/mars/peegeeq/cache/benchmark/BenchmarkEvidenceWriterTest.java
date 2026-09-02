@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,7 +21,7 @@ class BenchmarkEvidenceWriterTest {
 
     @Test
     void writesOneSelfContainedStructuredHtmlEvidenceFile() throws Exception {
-        BenchmarkConfig config = BenchmarkConfig.fromSystemProperties();
+        BenchmarkConfig config = BenchmarkConfig.fromProperties(new Properties());
         List<BenchmarkScenarioResult> scenarios = BenchmarkRunResult.REQUIRED_SCENARIOS.stream()
                 .map(name -> new BenchmarkScenarioResult(name, 100, 200.25, 1.0, 2.0, 3.0))
                 .toList();

@@ -18,7 +18,7 @@ class CountersFake implements CounterClientPort {
   async counters() { return { items: [counter], nextCursor: null, hasMore: false }; }
   async counter() { return counter; }
   async setCounter(_s: string, _n: string, _k: string, version: string | undefined, body: CounterSetBody) { return version === undefined ? { ...createdCounter, value: body.value } : { ...counter, value: body.value, version: '4' }; }
-  async adjustCounter(_s: string, _n: string, _k: string, _v: string | undefined, body: CounterAdjustBody) { this.adjustments.push(body); return { ...counter, value: '-9223372036854775808', version: '4' }; }
+  async adjustCounter(_s: string, _n: string, _k: string, _v: string | undefined, body: CounterAdjustBody) { this.adjustments.push(body); return body.createIfMissing ? { ...createdCounter, value: body.delta } : { ...counter, value: '-9223372036854775808', version: '4' }; }
   async expireCounter() { return counter; } async persistCounter() { return counter; } async deleteCounter(_s: string, _n: string, _k: string, version: string) { this.deleted.push(version); }
   async previewCounterBulkDelete(): Promise<BulkDeletePreview> { throw new Error('unused'); }
   async executeCounterBulkDelete(): Promise<BulkDeleteResult> { throw new Error('unused'); }
@@ -90,6 +90,33 @@ describe('U6 counter and lock pages', () => {
     await user.type(within(dialog).getByLabelText('Exact decimal value'), createdCounter.value);
     await user.click(within(dialog).getByRole('button', { name: 'Set exact value' }));
     expect(await screen.findByLabelText('Select logical-orders/bulk-counter')).toBeVisible();
+  });
+
+  it('creates a missing counter atomically from a signed adjustment', async () => {
+    const client = new CountersFake();
+    const user = userEvent.setup();
+    render(<CountersPage canOperate client={client} selectedSetupId="primary-cache" />);
+    await screen.findByText('9,223,372,036,854,775,807');
+    await user.click(screen.getByRole('button', { name: 'Create counter' }));
+    const dialog = screen.getByRole('dialog', { name: 'Create counter' });
+    await user.type(within(dialog).getByLabelText('Namespace'), createdCounter.namespace);
+    await user.type(within(dialog).getByLabelText('Key'), createdCounter.key);
+    await user.type(within(dialog).getByLabelText('Signed adjustment'), '-7');
+    await user.type(within(dialog).getByLabelText('TTL milliseconds (blank for persistent)'), '60000');
+    await user.click(within(dialog).getByRole('button', { name: 'Create by adjustment' }));
+
+    expect(client.adjustments).toEqual([{
+      delta: '-7',
+      createIfMissing: true,
+      ttlMode: 'REPLACE',
+      ttlMillis: 60_000,
+    }]);
+    expect(await screen.findByRole('status')).toHaveTextContent('Counter created by adjustment');
+    const managed = screen.getByRole('dialog', { name: 'Manage bulk-counter' });
+    await user.type(within(managed).getByLabelText('Confirm counter key'), createdCounter.key);
+    await user.click(within(managed).getByRole('button', { name: 'Delete current version' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(client.deleted).toEqual(['1']);
   });
 
   it('keeps owners masked, clears explicit reveal, and releases only the freshly loaded version', async () => {

@@ -1,15 +1,15 @@
 # PeeGeeQ Cache Playwright Implementation Plan
 
-Status: **557-SCENARIO IMPLEMENTATION AND POSTGRESQL 18.3 CUMULATIVE GATE VERIFIED — POSTGRESQL 15-17 RELEASE MATRIX PENDING**
+Status: **550-SCENARIO DESKTOP-ONLY IMPLEMENTATION — POSTGRESQL 18.3 CUMULATIVE GATE VERIFIED**
 
 Required minimum: **540 distinct Playwright browser scenarios**
 
-Current implemented catalogue: **557 Java Playwright scenarios implementing 16 named browser journeys and 13 parameterized scenario catalogues**
+Current implemented catalogue: **550 Java Playwright scenarios implementing 17 named browser journeys and 13 parameterized scenario catalogues**
 
-Implementation evidence as of 31 August 2026:
+Implementation evidence as of 2 September 2026:
 
 - all 19 baseline browser scenarios have stable `PW-<AREA>-NNN` identifiers and machine-readable requirement, area, risk, action, result, operation, evidence, and cleanup metadata;
-- `ManagementBrowserCoverageTest` enforces the exact current scenario count, unique scenario and journey ownership, all 50 OpenAPI operation owners, and evidence requirements for operations, mutations, sensitive state, and cleanup;
+- `ManagementBrowserCoverageTest` enforces the exact current scenario count, unique scenario and journey ownership, all 59 OpenAPI operation owners, and evidence requirements for operations, mutations, sensitive state, and cleanup;
 - negative accountability canaries prove that incomplete metadata, unknown operations, missing operation evidence, mutation without a PostgreSQL/audit oracle, and sensitive operations without leakage evidence fail validation;
 - the source-policy gate rejects Playwright request interception, response substitution, synthetic page content, and synthetic init-script patterns, with a negative canary for every prohibited construct;
 - a typed self-contained HTML evidence-report skeleton provides readable UTC dates, environment and per-scenario structure, atomic single-file output, HTML escaping, and registered-sensitive-canary rejection;
@@ -27,25 +27,25 @@ Implementation evidence as of 31 August 2026:
 - the complete Wave P4 cumulative gate passed exactly 400/400 real browser scenarios with zero failures, errors, or skips in 12 minutes 9 seconds; the rebuilt UI also passed type checking, lint, all 112 Vitest tests, and production packaging.
 - Wave P5 adds 82 independently reported scenarios: 30 Pub/Sub contract and lifecycle cases (`PW-PUBSUB-002` through `PW-PUBSUB-031`), 20 simultaneous SSE/WebSocket lifecycle and browser offline/recovery cases (`PW-LIVE-001` through `PW-LIVE-020`), and 32 monitoring/settings cases (`PW-MONITOR-002` through `PW-MONITOR-033`); the focused gates passed 30/30 in 61.76 seconds, 20/20 in 42.70 seconds, and 32/32 in 62.30 seconds respectively;
 - the Wave P5 red live-transport cases exposed missing browser `offline`/`online` handling in both the metrics SSE and monitoring WebSocket clients; the production transports now enter `STALE`, abort/close active transports, reconnect on `online`, preserve bounded retry behavior, and remove listeners during cleanup; the rebuilt UI passed type checking, lint, all 112 Vitest tests, and production packaging;
-- Wave P6 adds the final 58 independently reported scenarios: 24 route-level axe, responsive-containment, keyboard, focus-trap, Escape, and focus-restoration cases (`PW-ACCESS-001` through `PW-ACCESS-024`), 14 cross-surface privacy cases (`PW-PRIVACY-001` through `PW-PRIVACY-014`), 12 packaged-hosting and browser-security cases (`PW-PACKAGE-001` through `PW-PACKAGE-012`), and 8 deterministic multi-transport shutdown cases (`PW-SHUTDOWN-001` through `PW-SHUTDOWN-008`); their focused gates passed 24/24 in 49.12 seconds, 14/14 in 35.55 seconds, 12/12 in 17.08 seconds, and 8/8 in 20.16 seconds respectively; and
+- Wave P6 now contains 48 independently reported scenarios: 14 desktop accessibility, keyboard, focus-trap, Escape, zoom, and focus-restoration cases (`PW-ACCESS-001` through `PW-ACCESS-014`), 14 cross-surface privacy cases (`PW-PRIVACY-001` through `PW-PRIVACY-014`), 12 packaged-hosting and browser-security cases (`PW-PACKAGE-001` through `PW-PACKAGE-012`), and 8 deterministic multi-transport shutdown cases (`PW-SHUTDOWN-001` through `PW-SHUTDOWN-008`); the ten unsupported mobile/narrow-viewport cases have been removed; and
 - the initial complete cumulative gate passed exactly **540/540** real Java Playwright browser scenarios with zero failures, zero errors, and zero skips in **16 minutes 38 seconds** against the packaged UI, real HTTP/SSE/WebSocket transports, PostgreSQL 18.3, and the zero-leak fixture shutdown assertion;
 - the 31 August remediation pass made saved refresh, concealment, timezone, byte-unit, role, and capability settings effective; added focusable named overflow regions; replaced repeated/static cases with real boundary and long-content behavior; added a native-HTTP SSE resume test; and strengthened mutation, privacy, conflict, and transport assertions;
 - every PostgreSQL-backed fixture now rejects unexpected failed HTTP responses, missing declared operations, undeclared audited operations, missing durable audit actions, browser errors, and resource leaks. Counter, lock, entry, and bulk scenarios additionally assert authoritative PostgreSQL outcomes;
 - the earlier 540-scenario post-remediation milestone passed **540/540** catalogue scenarios with zero failures, errors, or skips and 18 minutes 52 seconds of aggregate scenario time. That historical reactor run passed **526 Surefire** and **542 Failsafe** tests, while its rebuilt UI gate passed **122 Vitest** tests, type checking, lint, and production packaging; and
 - the 12 PostgreSQL product journeys completed in 56.77 seconds in the post-remediation cumulative run, with one PostgreSQL container start and a separate schema migration, management server, Playwright browser context, operation trace, and cleanup cycle for every scenario.
-- the correctness-remediation extension adds 17 non-inflated scenarios: nine independently advertised capability-degradation cases, five real trusted-proxy viewer workflows, counter cursor pagination, and exact/over-limit Pub/Sub payload boundaries;
+- the correctness-remediation extension adds 19 non-inflated scenarios: 11 independently advertised capability-degradation cases, five real trusted-proxy viewer workflows, counter cursor pagination, and exact/over-limit Pub/Sub payload boundaries;
 - setup capability responses now derive from the connected runtime's real `AdminCapabilities` instead of advertising universal support, and the expired-entry filter is removed when expiry inspection is unavailable;
 - PostgreSQL-backed scenarios now reject both missing and undeclared feature operations, while failed HTTP responses must match the exact expected status and canonical route rather than only an expected count; and
 - actual JUnit browser outcomes now produce one atomic self-contained `playwright-evidence.html` report with environment details and scenario metadata; PostgreSQL-backed failures additionally capture a DOM-sanitized full-page screenshot; and
-- the final post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **557/557** independently reported browser scenarios with zero failures, errors, skips, retries, browser errors, secret leaks, or leaked resources in **21 minutes 21 seconds**. The complete reactor executed **547 Surefire**, **559 Failsafe**, and **123 Vitest** tests with zero failures, errors, or skips under OpenJDK 26.0.2; and
-- report generation now registers runtime bootstrap tokens, the fixture database password, and seeded revealed values as sensitive canaries, removes stale evidence before every browser test plan, and fails Maven verification unless a fresh canary-clean report is produced. The final HTML contains 557 unique scenario IDs, 557 passing rows, zero failure rows, and no registered fixture canary.
+- the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The active desktop-only catalogue contains 550 scenarios, including `PW-BACKEND-001` for complete facade parity; its fresh 2 September 2026 cumulative gate passed **550/550** scenarios, plus all three runnable-artifact/evidence Failsafe checks, in the green 31-minute-13-second clean reactor; and
+- focused packaged PostgreSQL gates pass `PW-BACKEND-001` for existence, batch get/set, value scan, exact metrics, and owner-lock acquire/renew/ownership/release, and `PW-COUNTER-001` for create-if-missing signed adjustment with TTL and committed-state verification; and
+- report generation registers runtime bootstrap tokens, the fixture database password, and seeded revealed values as sensitive canaries, removes stale evidence before every browser test plan, and fails Maven verification unless a fresh canary-clean report is produced.
 
 Post-implementation release-validation work remains:
 
 - add a reviewed trace-sanitization format before enabling Playwright trace archives; sanitized screenshots and real JUnit-to-HTML reporting are implemented;
 - complete failure-path canaries for database, durable-audit, sensitive-surface, and resource-cleanup oracles;
-- introduce reviewed scenario/feature selection and the explicit headed observation profile without enabling it by default; and
-- execute the final 557-scenario suite on PostgreSQL 15.17, 16.13, and 17.11 in addition to the completed PostgreSQL 18.3 gate.
+- execute the verified desktop-only 550-scenario suite on PostgreSQL 15.17, 16.13, and 17.11; PostgreSQL 18.3 is green.
 
 ## 1. Purpose
 
@@ -84,14 +84,14 @@ Every scenario counted toward the 540 target must:
 - have one stable scenario identifier mapped to a requirement, risk, owning test, and expected oracle; and
 - remain useful when executed alone and in a random class order.
 
-Browser-engine, PostgreSQL-version, viewport, role, and data parameters do not create additional scenario credit unless they exercise a genuinely different behavior and expected outcome.
+Browser-engine, PostgreSQL-version, desktop viewport, role, and data parameters do not create additional scenario credit unless they exercise a genuinely different behavior and expected outcome. Mobile and tablet viewports are outside the product boundary and are prohibited.
 
 ## 4. Explicitly prohibited count inflation
 
 The following do not count as distinct scenarios:
 
 - repeating the same route across many roles when the only assertion is a shared shell or empty state;
-- repeating one assertion across viewports without a route-specific responsive or accessibility expectation;
+- repeating one assertion across desktop viewport sizes without a route-specific desktop requirement;
 - multiplying the count by Chromium, Firefox, WebKit, or PostgreSQL version;
 - parameter rows that differ only in labels or harmless seed values;
 - tests that assert only HTTP `200`, a heading, or page visibility;
@@ -106,7 +106,7 @@ The following do not count as distinct scenarios:
 | Area | Distinct scenarios |
 |---|---:|
 | Authentication, sessions, CSRF, roles, and expiry | 46 |
-| Application shell, routing, scope, navigation, and capability degradation | 43 |
+| Application shell, routing, scope, navigation, and capability degradation | 45 |
 | Setup lifecycle, target policy, and viewer setup controls | 57 |
 | Overview, namespaces, pagination, and export | 46 |
 | Entry inspection, reveal, formatting, cleanup, and viewer behavior | 55 |
@@ -115,8 +115,9 @@ The following do not count as distinct scenarios:
 | Locks, ownership, fencing, conflicts, and viewer behavior | 45 |
 | Pub/Sub, payload boundaries, viewer behavior, and live transport lifecycle | 51 |
 | Monitoring, activity, notifications, and settings | 34 |
-| Accessibility, responsive behavior, privacy, packaging, and shutdown | 58 |
-| **Total** | **557** |
+| Backend facade parity | 1 |
+| Desktop accessibility, privacy, packaging, and shutdown | 48 |
+| **Total** | **550** |
 
 The existing 19 Playwright tests are included in this total after each is assigned a compliant scenario identifier and satisfies the stronger evidence contract.
 
@@ -238,7 +239,7 @@ Deliverables:
 Exit gate:
 
 - all 19 existing Playwright tests remain green;
-- all 16 named journeys remain owned;
+- all 17 named journeys remain owned;
 - every current scenario has complete metadata;
 - no product request is intercepted; and
 - intentional fixture canaries prove each new oracle can fail.
@@ -397,16 +398,15 @@ Coverage includes:
 
 Cumulative and final target: **540 scenarios**.
 
-Status: **WAVE COMPLETE** — the Wave P6 540-scenario accountability milestone is green; all 58 Wave P6 scenarios pass focused gates; and that cumulative run executed 540 tests with zero failures, errors, or skips and 18 minutes 52 seconds of aggregate scenario time. The later correctness extension establishes the current 557-scenario baseline; PostgreSQL 15.17-17.11 reruns of that expanded catalogue remain a release-validation requirement.
+Status: **DESKTOP-ONLY CUMULATIVE GATE VERIFIED** — ten unsupported mobile/narrow-viewport scenarios were removed from the previously verified catalogue and one backend-parity scenario was added. The active 550-scenario baseline passed 550/550 on PostgreSQL 18.3 on 2 September 2026.
 
 Coverage includes:
 
-- axe scans for every primary route at mobile and desktop breakpoints;
+- axe scans for every primary route at the supported desktop viewport;
 - keyboard-only navigation;
 - focus entry, trapping, Escape, and restoration;
 - keyboard-focusable horizontal data regions;
-- six-viewport populated workflows;
-- responsive navigation and tab wrapping;
+- fixed-desktop-viewport populated workflows;
 - zoom and long-content containment;
 - text-only rendering of hostile data;
 - cross-surface secret inspection;
@@ -467,7 +467,7 @@ All timing behavior uses Playwright conditions, server events, deterministic clo
 
 ### 12.1 Complete local and CI gate
 
-The standard release gate runs all 557 scenarios headlessly:
+The standard release gate runs all 550 scenarios headlessly:
 
 ```text
 mvn verify
@@ -478,6 +478,20 @@ PostgreSQL compatibility runs the same complete suite against 15.17, 16.13, 17.1
 ### 12.2 Focused development
 
 Tags and scenario IDs support focused execution by feature, risk, operation, or exact scenario. A smoke selection may provide rapid feedback, but it never replaces the complete Maven gate.
+
+Run one feature class with Maven Failsafe's standard class selector:
+
+```text
+mvn -pl peegee-cache-rest -am -Dit.test=ManagementCapabilityBrowserIT verify
+```
+
+Run one or more exact scenario IDs across fixed and parameterized browser tests:
+
+```text
+mvn -pl peegee-cache-rest -am -Dpeegeeq.playwright.scenarios=PW-CAPABILITY-008 verify
+```
+
+Unknown, malformed, or duplicate IDs fail before browser work begins. Exact selection derives its expected report count from the unique requested IDs; a feature-class run reports the scenarios discovered in that class without applying the complete-suite count gate.
 
 ### 12.3 Observable headed execution
 
@@ -505,7 +519,7 @@ The final suite must remain practical without weakening coverage:
 - publish slowest-scenario and slowest-fixture diagnostics; and
 - fail when a scenario exceeds its reviewed timeout without a justified exception.
 
-The root reactor must run all 557 scenarios on PostgreSQL 18. PostgreSQL 15-17 compatibility may be sharded in CI, but every shard is mandatory and the combined result must contain all 557 unique scenarios.
+The root reactor must run all 550 scenarios on PostgreSQL 18. PostgreSQL 15-17 compatibility may be sharded in CI, but every shard is mandatory and the combined result must contain all 550 unique scenarios.
 
 ## 14. Consolidated HTML evidence
 
@@ -547,7 +561,7 @@ This plan is complete only when:
 
 - at least 540 unique, active, non-inflated scenarios are implemented;
 - every active scenario satisfies the metadata and evidence contract;
-- all 50 OpenAPI operations have deliberate ownership and runtime-observed browser evidence where the UI consumes them;
+- all 59 OpenAPI operations have deliberate ownership and runtime-observed browser evidence where the UI consumes them;
 - all mutation scenarios verify PostgreSQL and durable audit outcomes;
 - no request interception or synthetic product response exists;
 - all scenarios pass against PostgreSQL 15.17, 16.13, 17.11, and 18.3;

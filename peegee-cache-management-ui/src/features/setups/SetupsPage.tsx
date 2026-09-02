@@ -29,6 +29,7 @@ interface SetupsPageProps {
 }
 
 type ConfirmedAction = 'connect' | 'detach' | 'forget';
+type SetupRuntimeConfiguration = NonNullable<SetupRegistrationRequest['runtime']>;
 
 interface PendingAction {
   readonly action: ConfirmedAction;
@@ -47,6 +48,22 @@ const initialRegistration: SetupRegistrationRequest = {
   sslMode: 'VERIFY_FULL',
   trustProfileId: '',
   poolMaxSize: 10,
+  runtime: {
+    defaultTtlMillis: null,
+    expirySweeperEnabled: false,
+    expirySweepIntervalMillis: 30_000,
+    expirySweepBatchSize: 500,
+    writeBehindEnabled: false,
+    writeBehindFlushIntervalMillis: 500,
+    writeBehindMaxBufferSize: 10_000,
+    writeBehindFlushBatchSize: 500,
+    writeBehindMaxRetries: 3,
+    writeBehindShutdownDrainTimeoutMillis: 5_000,
+    pubSubChannelPrefix: 'peegee_cache',
+    pubSubEnabled: true,
+    schemaBootstrapMode: 'EXTERNAL',
+    telemetryMode: 'NOOP',
+  },
 };
 
 export function SetupsPage({
@@ -74,6 +91,13 @@ export function SetupsPage({
   const [selectingSetupId, setSelectingSetupId] = useState<string>();
   const isOperator = session.roles.includes('operator');
   const canRegister = isOperator && session.features.setupRegistration;
+  const updateRuntime = <K extends keyof SetupRuntimeConfiguration>(
+    name: K,
+    value: SetupRuntimeConfiguration[K],
+  ) => setRegistration((current) => ({
+    ...current,
+    runtime: { ...(current.runtime ?? initialRegistration.runtime as SetupRuntimeConfiguration), [name]: value },
+  }));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -199,6 +223,7 @@ export function SetupsPage({
     sslMode: registration.sslMode,
     trustProfileId: registration.trustProfileId,
     poolMaxSize: registration.poolMaxSize,
+    runtime: registration.runtime,
   });
 
   const testRegistration = async () => {
@@ -374,6 +399,26 @@ export function SetupsPage({
                 <Field label="Pool size"><input max={100} min={1} required type="number" value={registration.poolMaxSize} onChange={(event) => setRegistration({ ...registration, poolMaxSize: Number(event.target.value) })} /></Field>
                 <Field label="TLS mode"><input disabled value="VERIFY_FULL" /></Field>
               </div>
+              <fieldset className="details-section">
+                <legend>Runtime behavior</legend>
+                <p>These settings are applied when this setup connects.</p>
+                <div className="form-grid">
+                  <Field label="Default TTL milliseconds"><input min={1} placeholder="Persistent by default" type="number" value={registration.runtime?.defaultTtlMillis ?? ''} onChange={(event) => updateRuntime('defaultTtlMillis', event.target.value === '' ? null : Number(event.target.value))} /></Field>
+                  <Field label="Expiry sweep interval milliseconds"><input min={1} required type="number" value={registration.runtime?.expirySweepIntervalMillis} onChange={(event) => updateRuntime('expirySweepIntervalMillis', Number(event.target.value))} /></Field>
+                  <Field label="Expiry sweep batch size"><input min={1} required type="number" value={registration.runtime?.expirySweepBatchSize} onChange={(event) => updateRuntime('expirySweepBatchSize', Number(event.target.value))} /></Field>
+                  <Field label="Write-behind flush interval milliseconds"><input min={1} required type="number" value={registration.runtime?.writeBehindFlushIntervalMillis} onChange={(event) => updateRuntime('writeBehindFlushIntervalMillis', Number(event.target.value))} /></Field>
+                  <Field label="Write-behind maximum buffer"><input min={100} required type="number" value={registration.runtime?.writeBehindMaxBufferSize} onChange={(event) => updateRuntime('writeBehindMaxBufferSize', Number(event.target.value))} /></Field>
+                  <Field label="Write-behind flush batch size"><input min={1} required type="number" value={registration.runtime?.writeBehindFlushBatchSize} onChange={(event) => updateRuntime('writeBehindFlushBatchSize', Number(event.target.value))} /></Field>
+                  <Field label="Write-behind maximum retries"><input min={0} required type="number" value={registration.runtime?.writeBehindMaxRetries} onChange={(event) => updateRuntime('writeBehindMaxRetries', Number(event.target.value))} /></Field>
+                  <Field label="Shutdown drain timeout milliseconds"><input min={1} required type="number" value={registration.runtime?.writeBehindShutdownDrainTimeoutMillis} onChange={(event) => updateRuntime('writeBehindShutdownDrainTimeoutMillis', Number(event.target.value))} /></Field>
+                  <Field label="Pub/Sub channel prefix"><input maxLength={48} required value={registration.runtime?.pubSubChannelPrefix} onChange={(event) => updateRuntime('pubSubChannelPrefix', event.target.value)} /></Field>
+                  <label className="field" htmlFor="schema-bootstrap-mode">Schema bootstrap<select id="schema-bootstrap-mode" value={registration.runtime?.schemaBootstrapMode} onChange={(event) => updateRuntime('schemaBootstrapMode', event.target.value as 'EXTERNAL' | 'APPLY')}><option value="EXTERNAL">Provisioned externally</option><option value="APPLY">Apply bundled schema at startup</option></select></label>
+                  <Field label="Telemetry adapter"><input disabled value="Built-in metrics (vendor-neutral exporter disabled)" /></Field>
+                </div>
+                <label><input checked={registration.runtime?.expirySweeperEnabled ?? false} onChange={(event) => updateRuntime('expirySweeperEnabled', event.target.checked)} type="checkbox" /> Run the expiry sweeper</label>{' '}
+                <label><input checked={registration.runtime?.writeBehindEnabled ?? false} onChange={(event) => updateRuntime('writeBehindEnabled', event.target.checked)} type="checkbox" /> Enable write-behind buffering</label>{' '}
+                <label><input checked={registration.runtime?.pubSubEnabled ?? false} onChange={(event) => updateRuntime('pubSubEnabled', event.target.checked)} type="checkbox" /> Enable Pub/Sub</label>
+              </fieldset>
               {connectionTest !== undefined && (
                 <p className="notice" role="status">
                   Connection succeeded in {connectionTest.latencyMillis} ms; schema {connectionTest.schemaState.toLowerCase()}.
@@ -447,6 +492,12 @@ function SetupDetailsView({ details, health, capabilities }: {
     ['Schema', details.setup.schema],
     ['Migration', details.migrationVersion],
     ['Pool size', String(details.runtime.poolMaxSize)],
+    ['Default TTL', details.runtime.defaultTtlMillis === null ? 'Persistent' : `${details.runtime.defaultTtlMillis} ms`],
+    ['Expiry sweeper', details.runtime.expirySweeperEnabled ? `Every ${details.runtime.expirySweepIntervalMillis} ms · ${details.runtime.expirySweepBatchSize} rows` : 'Disabled'],
+    ['Write-behind', details.runtime.writeBehindEnabled ? `Every ${details.runtime.writeBehindFlushIntervalMillis} ms · buffer ${details.runtime.writeBehindMaxBufferSize}` : 'Disabled'],
+    ['Pub/Sub', details.runtime.pubSubEnabled ? `Enabled · prefix ${details.runtime.pubSubChannelPrefix}` : 'Disabled'],
+    ['Schema bootstrap', details.runtime.schemaBootstrapMode === 'APPLY' ? 'Apply at startup' : 'External'],
+    ['Telemetry adapter', details.runtime.telemetryMode],
     ['Registered', formatDisplayInstant(details.registeredAt)],
     ['Connected', details.connectedAt === null ? 'Not connected' : formatDisplayInstant(details.connectedAt)],
   ];

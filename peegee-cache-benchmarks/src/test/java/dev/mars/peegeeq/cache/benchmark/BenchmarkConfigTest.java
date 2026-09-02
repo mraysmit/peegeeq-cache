@@ -2,6 +2,8 @@ package dev.mars.peegeeq.cache.benchmark;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Properties;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -9,7 +11,7 @@ class BenchmarkConfigTest {
 
     @Test
     void loadsPositiveDefaults() {
-        BenchmarkConfig config = BenchmarkConfig.fromSystemProperties();
+        BenchmarkConfig config = BenchmarkConfig.fromProperties(new Properties());
         assertEquals(8, config.concurrency());
         assertEquals(12, config.poolSize());
         assertEquals(5, config.warmup().toSeconds());
@@ -18,8 +20,22 @@ class BenchmarkConfigTest {
     }
 
     @Test
+    void loadsOverridesFromAnIsolatedPropertySet() {
+        Properties properties = new Properties();
+        properties.setProperty("peegeeq.benchmark.concurrency", "16");
+        properties.setProperty("peegeeq.benchmark.poolSize", "20");
+        properties.setProperty("peegeeq.benchmark.durationSeconds", "45");
+
+        BenchmarkConfig config = BenchmarkConfig.fromProperties(properties);
+
+        assertEquals(16, config.concurrency());
+        assertEquals(20, config.poolSize());
+        assertEquals(45, config.duration().toSeconds());
+    }
+
+    @Test
     void rejectsNonPositiveValues() {
-        BenchmarkConfig defaults = BenchmarkConfig.fromSystemProperties();
+        BenchmarkConfig defaults = BenchmarkConfig.fromProperties(new Properties());
         assertThrows(IllegalArgumentException.class, () -> new BenchmarkConfig(
                 0, defaults.poolSize(), defaults.warmup(), defaults.duration(), defaults.minimumThroughput(), defaults.maximumP99(),
                 defaults.maximumFailoverRecovery(), defaults.maximumExpiryLag(),
@@ -36,7 +52,7 @@ class BenchmarkConfigTest {
 
     @Test
     void rejectsPoolWithoutForegroundAndBackgroundHeadroom() {
-        BenchmarkConfig defaults = BenchmarkConfig.fromSystemProperties();
+        BenchmarkConfig defaults = BenchmarkConfig.fromProperties(new Properties());
 
         assertThrows(IllegalArgumentException.class, () -> new BenchmarkConfig(
                 defaults.concurrency(), defaults.concurrency(), defaults.warmup(), defaults.duration(),

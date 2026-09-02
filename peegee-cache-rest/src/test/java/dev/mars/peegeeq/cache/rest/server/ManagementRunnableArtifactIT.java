@@ -31,7 +31,7 @@ class ManagementRunnableArtifactIT {
 
     @Test
     void runnableJarHasOneLoggingProviderAndOnlyProductionResources() throws Exception {
-        Path artifact = Path.of(System.getProperty("peegeeq.runnable.artifact"));
+        Path artifact = ManagementBrowserRunConfig.current().runnableArtifact();
         assertTrue(Files.isRegularFile(artifact), "runnable management artifact");
         try (JarFile jar = new JarFile(artifact.toFile())) {
             assertEquals(
@@ -71,7 +71,7 @@ class ManagementRunnableArtifactIT {
 
     @Test
     void shadedArtifactStartsAndExportsReadinessAndPrometheusMetrics() throws Exception {
-        Path artifact = Path.of(System.getProperty("peegeeq.runnable.artifact"));
+        Path artifact = ManagementBrowserRunConfig.current().runnableArtifact();
         int port = freePort();
         Path errorLog = temporaryDirectory.resolve("management-server.log");
         ProcessBuilder builder = new ProcessBuilder(

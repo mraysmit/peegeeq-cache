@@ -193,7 +193,7 @@ class ManagementMonitoringBrowserIT {
             case 23 -> assertDetailValue(page, "Active setup", ManagementConsolePostgresFixture.SETUP_ID);
             case 24 -> assertDetailValue(page, "Maximum value bytes", "10485760");
             case 25 -> assertDetailValue(page, "Pub/Sub payload bytes", "7500");
-            case 26 -> assertDetailValue(page, "Pub/Sub channel bytes", "49");
+            case 26 -> assertDetailValue(page, "Pub/Sub channel bytes", "48");
             case 27 -> assertThat(detailRow(page, "Migration version").locator("dd")).not().hasText("");
             case 28 -> {
                 selectAndVerifyStored(page, "Refresh interval", "15", "refreshSeconds", 15);

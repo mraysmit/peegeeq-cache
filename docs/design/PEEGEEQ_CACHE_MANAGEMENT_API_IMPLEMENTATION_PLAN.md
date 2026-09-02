@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management API Implementation Plan
 
-**Status:** Phases M0–M10 complete
+**Status:** Phases M0–M11 complete
 
 **Date:** 17 August 2026
 
@@ -20,7 +20,7 @@ It covers:
 - backend fixtures in `peegee-cache-test-support`;
 - OpenAPI and browser-facing compatibility gates consumed by `peegee-cache-management-ui`.
 
-Status changes require the evidence defined in this plan. M0–M10 are complete. M5 closed with real PostgreSQL/TLS chain, hostname, address-pinning, and reconnect evidence. M6 closed with deterministic registry/server lifecycle evidence against real PostgreSQL. M7 closed both session modes and the complete read surface. M8 closed all reveal, atomic administration, and scoped bulk operations. M9 closed audited publication/subscription/reveal, bounded retained payloads, resumable metadata-only pub/sub and metrics SSE, the monitoring WebSocket, durable-audit-to-live-event projection, health transitions, deterministic cleanup, and runtime gauges. M10 closed mandatory telemetry, shared sampling, runnable packaging, both executable authentication configurations, operational guidance, real-browser local-session security, the PostgreSQL 15–18 matrix, and the final verification ladder.
+Status changes require the evidence defined in this plan. M0–M11 are complete. M5 closed with real PostgreSQL/TLS chain, hostname, address-pinning, and reconnect evidence. M6 closed with deterministic registry/server lifecycle evidence against real PostgreSQL. M7 closed both session modes and the complete read surface. M8 closed all reveal, atomic administration, and scoped bulk operations. M9 closed audited publication/subscription/reveal, bounded retained payloads, resumable metadata-only pub/sub and metrics SSE, the monitoring WebSocket, durable-audit-to-live-event projection, health transitions, deterministic cleanup, and runtime gauges. M10 closed mandatory telemetry, shared sampling, runnable packaging, both executable authentication configurations, operational guidance, real-browser local-session security, the PostgreSQL 15–18 matrix, and the final verification ladder. M11 closed the independently inventoried 32-method backend facade through nine additional REST/UI operations and complete management-owned runtime configuration.
 
 ## 2. Authority and prerequisite documents
 
@@ -197,7 +197,7 @@ Objective: remove contradictory inputs before code or OpenAPI generation.
 Evidence artifacts:
 
 - [PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md](PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md) records the accepted sibling-module Maven topology and REST configuration/secret-reference invariants.
-- [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) closes all 50 exact V1 operations and their security, schema, status, header, error, capability, limit, audit, and retry contracts.
+- [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) closes all 59 exact V1 operations and their security, schema, status, header, error, capability, limit, audit, and retry contracts.
 
 Tasks:
 
@@ -220,7 +220,7 @@ Verification:
 
 Exit criteria: there is one non-contradictory contract and an accepted module/build shape.
 
-Status: **COMPLETE** — the UI design is synchronized with the API authority; all 50 exact operations are closed in the reviewed manifest; configuration and secret-reference shapes and the two-child-module build topology are accepted; both empty module boundaries are present in the 11-project root reactor; all local Markdown links under `docs/design` resolve; `mvn validate` succeeds for all 11 projects; and neither management module contains a Java implementation class.
+Status: **COMPLETE** — the UI design is synchronized with the API authority; all 59 exact operations are closed in the reviewed manifest; configuration and secret-reference shapes and the two-child-module build topology are accepted; both module boundaries are present in the 11-project root reactor; and all local Markdown links under `docs/design` resolve.
 
 ## 9. Phase M1 — OpenAPI baseline and protocol primitives
 
@@ -939,7 +939,7 @@ Phase gate:
 
 Objective: finish the backend as an operable product component rather than a collection of routes.
 
-Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts under OpenJDK 26.0.2 with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chrome verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, and static-route isolation. The current reactor passes 547 Surefire, 559 Failsafe, and 123 Vitest tests with zero failures, errors, or skips. The pre-expansion reactor passed PostgreSQL 15.17, 16.13, 17.11, and 18.3; the expanded 557-scenario Playwright catalogue is cumulatively green on PostgreSQL 18.3, with PostgreSQL 15-17 reruns retained as release validation.
+Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chromium verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, static-route isolation, and backend facade parity. The active Playwright catalogue contains 550 desktop-only scenarios; its PostgreSQL 18.3 cumulative gate passed 550/550 on 2 September 2026.
 
 ### M10.1 Mandatory observability
 
@@ -992,8 +992,8 @@ Final evidence under OpenJDK 26.0.2:
 | PostgreSQL 16.13 complete reactor | Green, 3:30 |
 | PostgreSQL 17.11 complete reactor | Green, 3:34 |
 | PostgreSQL 18.3 complete reactor | Green, 3:28 |
-| Final post-hardening complete reactor | 547 Surefire + 559 Failsafe + 123 Vitest; 0 failures/errors/skips; expanded 557-scenario Playwright catalogue green on PostgreSQL 18.3 |
-| Real-browser and runnable-artifact Failsafe gate | 19 Java Playwright tests + 2 runnable-artifact tests; 0 failures/errors/skips |
+| Historical post-hardening complete reactor | 547 Surefire + 562 Failsafe + 123 Vitest; 0 failures/errors/skips before unsupported mobile coverage was removed |
+| Real-browser and runnable-artifact Failsafe gate | 550/550 desktop-browser scenarios plus 3/3 runnable-artifact/evidence checks; PostgreSQL 18.3 clean cumulative gate green on 2 September 2026 |
 | Dependency/build contract | Maven Enforcer dependency convergence and duplicate-version rules green in every row |
 | Release artifacts | `-P release-artifacts -DskipTests package` green for all 11 modules; source and Javadoc jars generated |
 | Repository hygiene | `git diff --check` green; no generated targets, jars, classes, logs, or benchmark results in the change inventory |
@@ -1043,7 +1043,7 @@ Update rules:
 
 The management API backend is complete only when:
 
-1. M0–M10 are complete with recorded red/green evidence;
+1. M0–M11 are complete with recorded red/green evidence;
 2. OpenAPI declares every implemented REST operation and SSE/WebSocket schema, and route inventory has no drift;
 3. every versioned mutation returns an atomic typed outcome and correct resulting version without a follow-up diagnostic read;
 4. all database behavior passes on PostgreSQL 15–18;

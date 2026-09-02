@@ -6,6 +6,7 @@ public enum RateLimitAction {
     SETUP_REGISTER,
     SETUP_CONNECT,
     BULK_PREVIEW,
+    BACKEND_OPERATION,
     PUBLISH,
     SUBSCRIPTION_CREATE
 }

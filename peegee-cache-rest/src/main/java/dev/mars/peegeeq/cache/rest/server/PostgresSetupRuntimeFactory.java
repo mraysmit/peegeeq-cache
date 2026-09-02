@@ -128,12 +128,14 @@ public final class PostgresSetupRuntimeFactory implements SetupRuntimeFactory {
                 .setConnectionTimeout((int) connectTimeout.toMillis())
                 .setConnectionTimeoutUnit(TimeUnit.MILLISECONDS)
                 .setName("peegeeq-management-" + definition.setupId()));
+        SetupRuntimeConfiguration runtimeConfiguration = definition.runtimeConfiguration();
         PeeGeeCacheBootstrapOptions bootstrap = new PeeGeeCacheBootstrapOptions(
-                PeeGeeCacheConfig.defaults(),
-                new PgCacheStoreConfig(definition.schema(), "peegee_cache"),
-                connectOptions,
+                runtimeConfiguration.runtimeConfig(),
+                new PgCacheStoreConfig(
+                        definition.schema(), runtimeConfiguration.pubSubChannelPrefix()),
+                runtimeConfiguration.pubSubEnabled() ? connectOptions : null,
                 CacheTelemetry.noop(),
-                SchemaBootstrapMode.EXTERNAL);
+                runtimeConfiguration.schemaBootstrapMode());
 
         return PeeGeeCaches.create(runtime, pool, bootstrap)
                 .map(manager -> (ManagedSetupRuntime) (auditSink == null
@@ -142,6 +144,7 @@ public final class PostgresSetupRuntimeFactory implements SetupRuntimeFactory {
                                 pool,
                                 runtime,
                                 definition.schema(),
+                                runtimeConfiguration.schemaBootstrapMode(),
                                 definition.setupId(),
                                 cursorKey)
                         : new PostgresManagedSetupRuntime(
@@ -149,6 +152,7 @@ public final class PostgresSetupRuntimeFactory implements SetupRuntimeFactory {
                                 pool,
                                 runtime,
                                 definition.schema(),
+                                runtimeConfiguration.schemaBootstrapMode(),
                                 definition.setupId(),
                                 cursorKey,
                                 auditSink,

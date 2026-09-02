@@ -3,6 +3,7 @@ package dev.mars.peegeeq.cache.benchmark;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -19,7 +20,7 @@ class BenchmarkRuntimeLayoutTest {
 
     @Test
     void foregroundPoolUsesTheValidatedHeadroomConfiguration() {
-        BenchmarkConfig config = BenchmarkConfig.fromSystemProperties();
+        BenchmarkConfig config = BenchmarkConfig.fromProperties(new Properties());
 
         assertEquals(config.poolSize(), CacheBenchmarkMain.foregroundPoolOptions(config).getMaxSize());
     }

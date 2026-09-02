@@ -2,6 +2,7 @@ package dev.mars.peegeeq.cache.rest.server;
 
 import dev.mars.peegeeq.cache.api.management.ManagementService;
 import dev.mars.peegeeq.cache.api.management.UnsupportedManagementService;
+import dev.mars.peegeeq.cache.api.PeeGeeCache;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import io.vertx.core.Future;
 
@@ -33,6 +34,11 @@ public interface ManagedSetupRuntime {
 
     default PubSubService pubSub() {
         throw new SetupRegistryException(409, "SETUP_PUBSUB_UNAVAILABLE", "Setup pub/sub is unavailable");
+    }
+
+    /** Complete cache facade used by routes that expose the public backend service surface. */
+    default PeeGeeCache cache() {
+        throw new SetupRegistryException(409, "SETUP_CACHE_UNAVAILABLE", "Setup cache is unavailable");
     }
 
     Future<Void> closeAsync();

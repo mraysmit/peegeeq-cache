@@ -65,6 +65,15 @@ final class ManagementBrowserOperationTrace {
             entry("GET /api/v1/setups/{setupId}/monitoring/runtime", "getRuntimeMonitoring"),
             entry("GET /api/v1/setups/{setupId}/sse/metrics", "streamMetrics"),
             entry("GET /api/v1/setups/{setupId}/activity", "listActivity"),
+            entry("GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists", "checkEntryExists"),
+            entry("POST /api/v1/setups/{setupId}/entries/batch-get", "batchGetEntries"),
+            entry("POST /api/v1/setups/{setupId}/entries/batch-set", "batchSetEntries"),
+            entry("POST /api/v1/setups/{setupId}/entries/scan", "scanEntries"),
+            entry("GET /api/v1/setups/{setupId}/cache-metrics", "getCacheMetrics"),
+            entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/acquire", "acquireLock"),
+            entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/renew", "renewLock"),
+            entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/release", "releaseLock"),
+            entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/ownership", "checkLockOwnership"),
             entry("GET /ws/monitoring", "monitoringWebSocket"));
 
     private final Set<String> observed = new LinkedHashSet<>();

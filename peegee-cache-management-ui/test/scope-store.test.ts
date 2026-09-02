@@ -8,8 +8,11 @@ const capabilities: SetupCapabilities = {
   migrationVersion: '1',
   capabilities: {
     namespaceInspection: true,
+    entryInspection: true,
     expiredEntryInspection: true,
+    entryMutation: true,
     counterInspection: true,
+    counterMutation: true,
     lockInspection: true,
     forcedLockRelease: true,
     bulkEntryDelete: true,
@@ -19,6 +22,10 @@ const capabilities: SetupCapabilities = {
     entryValueReveal: true,
     lockOwnerReveal: true,
     pubSubPayloadReveal: true,
+    batchEntryOperations: true,
+    valueScan: true,
+    cacheMetrics: true,
+    ownerLockOperations: true,
   },
   limits: {
     pubSubChannelMaxBytes: 63,

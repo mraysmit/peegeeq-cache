@@ -43,6 +43,9 @@ class SetupRegistryTest {
                 definition("candidate"), SetupSecret.owned(bytes("ui-secret"))));
 
         assertFalse(result.capabilities().namespaceInspection());
+        assertFalse(result.capabilities().entryInspection());
+        assertFalse(result.capabilities().entryMutation());
+        assertFalse(result.capabilities().counterMutation());
         assertFalse(result.capabilities().entryValueReveal());
         assertFalse(result.capabilities().lockOwnerReveal());
         assertTrue(result.capabilities().pubSubPayloadReveal());

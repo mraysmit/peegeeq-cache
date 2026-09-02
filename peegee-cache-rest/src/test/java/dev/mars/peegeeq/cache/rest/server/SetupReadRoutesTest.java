@@ -98,6 +98,16 @@ class SetupReadRoutesTest {
             assertFalse(details.path("runtime").path("expirySweeperEnabled").asBoolean());
             assertEquals(30_000, details.path("runtime").path("expirySweepIntervalMillis").asInt());
             assertEquals(500, details.path("runtime").path("expirySweepBatchSize").asInt());
+            assertFalse(details.path("runtime").path("writeBehindEnabled").asBoolean());
+            assertEquals(500, details.path("runtime").path("writeBehindFlushIntervalMillis").asInt());
+            assertEquals(10_000, details.path("runtime").path("writeBehindMaxBufferSize").asInt());
+            assertEquals(500, details.path("runtime").path("writeBehindFlushBatchSize").asInt());
+            assertEquals(3, details.path("runtime").path("writeBehindMaxRetries").asInt());
+            assertEquals(5_000, details.path("runtime").path("writeBehindShutdownDrainTimeoutMillis").asInt());
+            assertEquals("peegee_cache", details.path("runtime").path("pubSubChannelPrefix").asText());
+            assertTrue(details.path("runtime").path("pubSubEnabled").asBoolean());
+            assertEquals("EXTERNAL", details.path("runtime").path("schemaBootstrapMode").asText());
+            assertEquals("NOOP", details.path("runtime").path("telemetryMode").asText());
             assertEquals(3, details.path("runtime").path("poolMaxSize").asInt());
             assertFalse(details.path("registeredAt").asText().isBlank());
             assertFalse(details.path("connectedAt").asText().isBlank());
@@ -121,7 +131,10 @@ class SetupReadRoutesTest {
                     port, "/api/v1/setups/alpha/capabilities", "role=viewer", null).body());
             assertEquals("1", capabilities.path("migrationVersion").asText());
             assertFalse(capabilities.path("capabilities").path("namespaceInspection").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("entryInspection").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("entryMutation").asBoolean());
             assertFalse(capabilities.path("capabilities").path("counterInspection").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("counterMutation").asBoolean());
             assertFalse(capabilities.path("capabilities").path("lockInspection").asBoolean());
             assertFalse(capabilities.path("capabilities").path("forcedLockRelease").asBoolean());
             assertFalse(capabilities.path("capabilities").path("entryValueReveal").asBoolean());

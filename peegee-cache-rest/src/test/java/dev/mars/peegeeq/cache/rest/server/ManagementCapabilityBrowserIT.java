@@ -222,7 +222,9 @@ class ManagementCapabilityBrowserIT {
             case 0 -> copy(all, null, null, false, null, null, null, null, null, null, null, null, null);
             case 1 -> copy(all, null, null, null, false, null, null, null, null, null, null, null, null);
             case 2 -> copy(all, null, null, null, null, null, null, null, false, null, null, null, null);
-            case 3 -> copy(all, false, null, null, null, null, null, null, null, null, null, null, null);
+            case 3 -> withEntryInspection(
+                    copy(all, false, null, null, null, null, null, null, null, null, null, null, null),
+                    false);
             case 4 -> copy(all, null, null, null, null, null, false, null, null, null, null, null, null);
             case 5 -> copy(all, null, null, null, null, null, null, false, null, null, null, null, null);
             case 6 -> copy(all, null, null, null, null, false, null, null, null, null, null, null, null);
@@ -251,8 +253,11 @@ class ManagementCapabilityBrowserIT {
             Boolean pubSubPayloadReveal) {
         return new SetupCapabilities.Features(
                 value(namespaceInspection, source.namespaceInspection()),
+                source.entryInspection(),
                 value(expiredEntryInspection, source.expiredEntryInspection()),
+                source.entryMutation(),
                 value(counterInspection, source.counterInspection()),
+                source.counterMutation(),
                 value(lockInspection, source.lockInspection()),
                 value(forcedLockRelease, source.forcedLockRelease()),
                 value(bulkEntryDelete, source.bulkEntryDelete()),
@@ -266,5 +271,25 @@ class ManagementCapabilityBrowserIT {
 
     private static boolean value(Boolean override, boolean fallback) {
         return override == null ? fallback : override;
+    }
+
+    private static SetupCapabilities.Features withEntryInspection(
+            SetupCapabilities.Features source, boolean entryInspection) {
+        return new SetupCapabilities.Features(
+                source.namespaceInspection(),
+                entryInspection,
+                source.expiredEntryInspection(),
+                source.entryMutation(),
+                source.counterInspection(),
+                source.counterMutation(),
+                source.lockInspection(),
+                source.forcedLockRelease(),
+                source.bulkEntryDelete(),
+                source.bulkCounterDelete(),
+                source.pubSub(),
+                source.databaseStatistics(),
+                source.entryValueReveal(),
+                source.lockOwnerReveal(),
+                source.pubSubPayloadReveal());
     }
 }

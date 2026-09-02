@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +34,15 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
     private static final List<ManagementBrowserEvidenceReport.ScenarioResult> RESULTS =
             java.util.Collections.synchronizedList(new ArrayList<>());
     private static volatile Instant runStartedAt = Instant.now();
+    private final ManagementBrowserRunConfig config;
+
+    public ManagementBrowserEvidenceListener() {
+        this(ManagementBrowserRunConfig.current());
+    }
+
+    ManagementBrowserEvidenceListener(ManagementBrowserRunConfig config) {
+        this.config = Objects.requireNonNull(config, "config");
+    }
 
     @Override
     public void testPlanExecutionStarted(TestPlan testPlan) {
@@ -87,8 +97,10 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
                     .sorted(Comparator.comparing(ManagementBrowserEvidenceReport.ScenarioResult::id))
                     .toList();
         }
-        int expectedScenarios = Integer.parseInt(System.getProperty(
-                "peegeeq.playwright.expectedScenarios", "0"));
+        Set<String> requested = config.requestedScenarioIds();
+        int expectedScenarios = !requested.isEmpty()
+                ? requested.size()
+                : config.focusedClassRun() ? 0 : config.expectedScenarios();
         if (expectedScenarios > 0) assertExpectedScenarioCount(expectedScenarios, results.size());
         Instant completedAt = Instant.now();
         ManagementBrowserEvidenceReport evidence = new ManagementBrowserEvidenceReport(
@@ -131,9 +143,8 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
         }
     }
 
-    private static Path reportPath() {
-        return Path.of(System.getProperty(
-                "peegeeq.playwright.report", "target/playwright-evidence.html"));
+    private Path reportPath() {
+        return config.reportPath();
     }
 
     private static Optional<ScenarioMetadata> metadata(TestIdentifier identifier) {
@@ -168,7 +179,7 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
         }
     }
 
-    private static ManagementBrowserEvidenceReport.Environment environment() {
+    private ManagementBrowserEvidenceReport.Environment environment() {
         java.lang.management.OperatingSystemMXBean operatingSystem =
                 ManagementFactory.getOperatingSystemMXBean();
         long memoryBytes = operatingSystem instanceof com.sun.management.OperatingSystemMXBean extended
@@ -181,7 +192,7 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
                 operatingSystem.getAvailableProcessors() + " logical processors",
                 memoryBytes + " bytes",
                 "Playwright 1.55.0 / Chromium",
-                System.getProperty("peegeeq.postgres.image", "postgres:18.3-alpine"),
+                config.postgresImage(),
                 gitCommit());
     }
 

@@ -3,6 +3,8 @@ package dev.mars.peegeeq.cache.rest.server;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 
+import java.util.Objects;
+import java.util.Properties;
 import java.util.function.Consumer;
 
 /** Shared browser launch policy: headless by default, opt-in headed mode for local observation. */
@@ -16,7 +18,7 @@ final class ManagementPlaywright {
     }
 
     static BrowserType.LaunchOptions launchOptions() {
-        Observation observation = observation();
+        Observation observation = ManagementBrowserRunConfig.current().observation();
         return new BrowserType.LaunchOptions()
                 .setChannel("chrome")
                 .setHeadless(observation.headless())
@@ -24,14 +26,19 @@ final class ManagementPlaywright {
     }
 
     static Observation observation() {
-        String configuredHeadless = System.getProperty(HEADLESS_PROPERTY, "true").trim();
+        return ManagementBrowserRunConfig.current().observation();
+    }
+
+    static Observation observation(Properties properties) {
+        Objects.requireNonNull(properties, "properties");
+        String configuredHeadless = properties.getProperty(HEADLESS_PROPERTY, "true").trim();
         if (!configuredHeadless.equalsIgnoreCase("true")
                 && !configuredHeadless.equalsIgnoreCase("false")) {
             throw new IllegalArgumentException(HEADLESS_PROPERTY + " must be true or false");
         }
         boolean headless = Boolean.parseBoolean(configuredHeadless);
-        double slowMotion = Double.parseDouble(System.getProperty(SLOW_MOTION_PROPERTY, "0"));
-        long pause = Long.parseLong(System.getProperty(PAUSE_PROPERTY, "0"));
+        double slowMotion = Double.parseDouble(properties.getProperty(SLOW_MOTION_PROPERTY, "0"));
+        long pause = Long.parseLong(properties.getProperty(PAUSE_PROPERTY, "0"));
         if (!Double.isFinite(slowMotion) || slowMotion < 0) {
             throw new IllegalArgumentException(SLOW_MOTION_PROPERTY + " must be finite and non-negative");
         }
@@ -40,7 +47,11 @@ final class ManagementPlaywright {
     }
 
     static ScenarioPresentation beginScenario(Page page) {
-        Observation observation = observation();
+        return beginScenario(page, ManagementBrowserRunConfig.current().observation());
+    }
+
+    static ScenarioPresentation beginScenario(Page page, Observation observation) {
+        Objects.requireNonNull(observation, "observation");
         if (observation.headless()) return ScenarioPresentation.none();
         String title = ManagementBrowserEvidenceListener.currentScenarioTitle();
         if (title.isBlank()) title = "Focused PeeGeeQ Cache browser scenario";

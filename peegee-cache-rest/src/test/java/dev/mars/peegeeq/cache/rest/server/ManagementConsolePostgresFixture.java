@@ -9,7 +9,6 @@ import dev.mars.peegeeq.cache.pg.bootstrap.PgSchemaMigrator;
 import dev.mars.peegeeq.cache.rest.security.BrowserOriginPolicy;
 import dev.mars.peegeeq.cache.rest.security.SetupTargetPolicy;
 import dev.mars.peegeeq.cache.rest.security.TrustedProxyAuthenticationConfig;
-import dev.mars.peegeeq.cache.test.PostgreSQLTestConstants;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.vertx.core.Future;
@@ -68,7 +67,14 @@ final class ManagementConsolePostgresFixture {
             Map.entry("createPubSubSubscription", "CREATE_PUBSUB_SUBSCRIPTION"),
             Map.entry("revealPubSubPayload", "REVEAL_PUBSUB_PAYLOAD"),
             Map.entry("deletePubSubSubscription", "DELETE_PUBSUB_SUBSCRIPTION"),
-            Map.entry("publishPubSubMessage", "PUBLISH_PUBSUB"));
+            Map.entry("publishPubSubMessage", "PUBLISH_PUBSUB"),
+            Map.entry("batchGetEntries", "BATCH_GET_ENTRIES"),
+            Map.entry("batchSetEntries", "BATCH_SET_ENTRIES"),
+            Map.entry("scanEntries", "SCAN_ENTRY_VALUES"),
+            Map.entry("acquireLock", "ACQUIRE_LOCK"),
+            Map.entry("renewLock", "RENEW_LOCK"),
+            Map.entry("releaseLock", "RELEASE_LOCK"),
+            Map.entry("checkLockOwnership", "CHECK_LOCK_OWNERSHIP"));
     private static final Set<String> FIXTURE_AUDITED_OPERATIONS = Set.of(
             "testUnregisteredSetup", "registerSetup");
     private static final Set<String> FIXTURE_OPERATIONS = Set.of(
@@ -297,16 +303,21 @@ final class ManagementConsolePostgresFixture {
         dialog.getByLabel("Host").fill("db.internal.example");
         dialog.getByLabel("Port").fill(String.valueOf(postgres.getMappedPort(5432)));
         dialog.getByLabel("Database").fill("peegeeq");
-        dialog.getByLabel("Schema").fill("peegee_cache");
+        dialog.getByLabel("Schema", new com.microsoft.playwright.Locator.GetByLabelOptions()
+                .setExact(true)).fill("peegee_cache");
         dialog.getByLabel("Username").fill("peegeeq");
         dialog.getByLabel("Password").fill(DATABASE_PASSWORD);
         dialog.getByLabel("Trust profile").fill("test-ca");
         dialog.getByLabel("Pool size").fill("3");
+        dialog.getByLabel("Default TTL milliseconds").fill("3600000");
+        dialog.getByLabel("Run the expiry sweeper").check();
+        dialog.getByLabel("Pub/Sub channel prefix").fill("browser_cache");
         dialog.getByRole(com.microsoft.playwright.options.AriaRole.BUTTON,
                 new com.microsoft.playwright.Locator.GetByRoleOptions().setName("Test connection")).click();
         com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(
                 dialog.getByRole(com.microsoft.playwright.options.AriaRole.STATUS))
                 .containsText("Connection succeeded");
+        dialog.getByLabel("Schema bootstrap").selectOption("APPLY");
         dialog.getByRole(com.microsoft.playwright.options.AriaRole.BUTTON,
                 new com.microsoft.playwright.Locator.GetByRoleOptions().setName("Register setup")).click();
         com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(page.getByTitle("Active setup scope"))
@@ -335,8 +346,7 @@ final class ManagementConsolePostgresFixture {
                         .forEach(element => { element.textContent = '[REDACTED]'; });
                     }
                     """);
-            Path directory = Path.of(System.getProperty(
-                    "peegeeq.playwright.artifacts", "target/playwright-artifacts"));
+            Path directory = ManagementBrowserRunConfig.current().artifactDirectory();
             Files.createDirectories(directory);
             Path screenshot = directory.resolve(
                     "failure-" + System.currentTimeMillis() + "-" + Thread.currentThread().threadId() + ".png");
@@ -445,8 +455,7 @@ final class ManagementConsolePostgresFixture {
     }
 
     static PostgreSQLContainer newPostgresWorkerContainer() {
-        String postgresImage = PostgreSQLTestConstants.postgresImage();
-        System.setProperty("peegeeq.postgres.image", postgresImage);
+        String postgresImage = ManagementBrowserRunConfig.current().postgresImage();
         return new PostgreSQLContainer(postgresImage)
                 .withDatabaseName("peegeeq")
                 .withUsername("peegeeq")

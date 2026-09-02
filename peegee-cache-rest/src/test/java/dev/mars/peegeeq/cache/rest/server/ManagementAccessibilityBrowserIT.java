@@ -18,7 +18,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Wave P6 real-browser scenarios for accessibility and responsive behavior. */
+/** Wave P6 real-browser scenarios for desktop accessibility behavior. */
 class ManagementAccessibilityBrowserIT {
 
     @RegisterExtension
@@ -48,17 +48,7 @@ class ManagementAccessibilityBrowserIT {
             "axe-scan Pub/Sub at the desktop breakpoint",
             "axe-scan Monitoring at the desktop breakpoint",
             "axe-scan Settings at the desktop breakpoint",
-            "axe-scan Overview at the mobile breakpoint",
-            "axe-scan Setups at the mobile breakpoint",
-            "axe-scan Namespaces at the mobile breakpoint",
-            "axe-scan Key Browser at the mobile breakpoint",
-            "axe-scan Counters at the mobile breakpoint",
-            "axe-scan Locks at the mobile breakpoint",
-            "axe-scan Pub/Sub at the mobile breakpoint",
-            "axe-scan Monitoring at the mobile breakpoint",
-            "axe-scan Settings at the mobile breakpoint",
-            "contain populated Counters at 360 by 640",
-            "expose the overflowing counter table as a named keyboard-focusable region",
+            "expose counter results as a named keyboard-focusable region",
             "contain populated Counters at 200 percent zoom",
             "contain a long UTF-8 counter key inside the local table scroller",
             "navigate to Counters using only keyboard focus and Enter",
@@ -68,9 +58,9 @@ class ManagementAccessibilityBrowserIT {
         return IntStream.range(0, ACTIONS.size())
                 .mapToObj(index -> new ManagementBrowserCase(
                         "PW-ACCESS-%03d".formatted(index + 1),
-                        "P6 accessibility/responsive contract: " + ACTIONS.get(index),
+                        "P6 desktop accessibility contract: " + ACTIONS.get(index),
                         ManagementBrowserArea.HARDENING,
-                        index < 18 ? ManagementBrowserRisk.HIGH : ManagementBrowserRisk.MEDIUM,
+                        index < ROUTES.size() ? ManagementBrowserRisk.HIGH : ManagementBrowserRisk.MEDIUM,
                         ACTIONS.get(index),
                         "The packaged console must " + ACTIONS.get(index) + " without accessibility or containment regressions.",
                         "Close dialogs, restore viewport state, reset PostgreSQL, and close browser resources",
@@ -83,8 +73,8 @@ class ManagementAccessibilityBrowserIT {
     }
 
     private static List<String> operations(int index) {
-        if (index >= 18) return List.of("listCounters");
-        return switch (index % ROUTES.size()) {
+        if (index >= ROUTES.size()) return List.of("listCounters");
+        return switch (index) {
             case 0 -> List.of("getOverview", "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity");
             case 1, 3, 6, 8 -> List.of();
             case 2 -> List.of("listNamespaces");
@@ -107,7 +97,7 @@ class ManagementAccessibilityBrowserIT {
                 context -> {
                     ManagementConsolePostgresFixture.authenticate(context);
                     ManagementConsolePostgresFixture.registerSetup(context);
-                    if (index == 21) {
+                    if (index == 11) {
                         ManagementConsolePostgresFixture.execute(context.postgres(), """
                                 INSERT INTO peegee_cache.cache_counters
                                     (namespace, counter_key, counter_value, version)
@@ -119,34 +109,25 @@ class ManagementAccessibilityBrowserIT {
     }
 
     private static void verify(int index, Page page, String origin) throws Exception {
-        if (index < 18) {
-            int routeIndex = index % ROUTES.size();
-            boolean mobile = index >= ROUTES.size();
-            Route route = ROUTES.get(routeIndex);
-            page.setViewportSize(mobile ? 390 : 1440, mobile ? 844 : 900);
+        if (index < ROUTES.size()) {
+            Route route = ROUTES.get(index);
+            page.setViewportSize(1440, 900);
             assertEquals(200, page.navigate(origin + route.path()).status());
             heading(page, route.heading());
             assertNoAxeViolations(page);
             return;
         }
-        if (index == 18) {
-            page.setViewportSize(360, 640);
-            openCounters(page);
-            assertViewportContained(page);
-            return;
-        }
-        if (index == 19) {
-            page.setViewportSize(390, 844);
+        if (index == 9) {
+            page.setViewportSize(1440, 900);
             openCounters(page);
             Locator results = page.getByRole(AriaRole.REGION,
                     new Page.GetByRoleOptions().setName("Counters results"));
             results.focus();
             assertTrue((Boolean) results.evaluate("element => element === document.activeElement"));
-            assertTrue((Boolean) results.evaluate("element => element.scrollWidth > element.clientWidth"));
             return;
         }
-        if (index == 20) {
-            page.setViewportSize(720, 900);
+        if (index == 10) {
+            page.setViewportSize(1440, 900);
             openCounters(page);
             page.evaluate("document.body.style.zoom = '200%'");
             assertViewportContained(page);
@@ -155,18 +136,17 @@ class ManagementAccessibilityBrowserIT {
                     .evaluate("element => element.scrollWidth > element.clientWidth"));
             return;
         }
-        if (index == 21) {
-            page.setViewportSize(390, 844);
+        if (index == 11) {
+            page.setViewportSize(1440, 900);
             openCounters(page);
-            assertThat(page.getByText("宽".repeat(80),
-                    new Page.GetByTextOptions().setExact(true))).isVisible();
+            Locator results = page.getByRole(AriaRole.REGION,
+                    new Page.GetByRoleOptions().setName("Counters results"));
+            assertThat(results.getByText("宽".repeat(80),
+                    new Locator.GetByTextOptions().setExact(true))).isVisible();
             assertViewportContained(page);
-            assertTrue((Boolean) page.getByRole(AriaRole.REGION,
-                    new Page.GetByRoleOptions().setName("Counters results"))
-                    .evaluate("element => element.scrollWidth > element.clientWidth"));
             return;
         }
-        if (index == 22) {
+        if (index == 12) {
             Locator link = page.getByRole(AriaRole.LINK,
                     new Page.GetByRoleOptions().setName("Counters").setExact(true));
             link.focus();

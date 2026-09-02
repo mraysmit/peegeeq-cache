@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ManagementBrowserCoverageTest {
 
-    private static final int CURRENT_SCENARIO_COUNT = 559;
+    private static final int CURRENT_SCENARIO_COUNT = 550;
 
     private static final Set<String> REQUIRED_JOURNEYS = Set.of(
             "trusted-proxy-session",
@@ -30,9 +30,10 @@ class ManagementBrowserCoverageTest {
             "pubsub-lifecycle",
             "live-recovery",
             "server-authorization",
-            "accessibility-and-responsive",
+            "desktop-accessibility",
             "packaged-hosting",
             "cross-surface-leakage",
+            "backend-service-parity",
             "deterministic-shutdown");
 
     private static final Set<String> REQUIRED_OPERATIONS = Set.of(
@@ -48,13 +49,17 @@ class ManagementBrowserCoverageTest {
             "getLock", "revealLockOwner", "forceReleaseLock", "createPubSubSubscription",
             "streamPubSubMessages", "revealPubSubPayload", "deletePubSubSubscription",
             "publishPubSubMessage", "getDatabaseMonitoring", "getRuntimeMonitoring",
-            "streamMetrics", "listActivity", "monitoringWebSocket");
+            "streamMetrics", "listActivity", "monitoringWebSocket",
+            "checkEntryExists", "batchGetEntries", "batchSetEntries", "scanEntries",
+            "getCacheMetrics", "acquireLock", "renewLock", "releaseLock",
+            "checkLockOwnership");
 
     private static final Set<String> DATABASE_MUTATION_OPERATIONS = Set.of(
             "setEntry", "deleteEntry", "expireEntry", "persistEntry", "touchEntry",
             "executeEntryBulkDelete", "setCounter", "adjustCounter", "expireCounter",
             "persistCounter", "deleteCounter", "executeCounterBulkDelete",
-            "forceReleaseLock");
+            "forceReleaseLock", "batchSetEntries", "acquireLock", "renewLock",
+            "releaseLock");
 
     private static final Set<String> AUDITED_OPERATIONS = Set.of(
             "testUnregisteredSetup", "registerSetup", "connectSetup", "testRegisteredSetup",
@@ -64,10 +69,13 @@ class ManagementBrowserCoverageTest {
             "persistCounter", "deleteCounter", "previewCounterBulkDelete",
             "executeCounterBulkDelete", "revealLockOwner", "forceReleaseLock",
             "createPubSubSubscription", "revealPubSubPayload", "deletePubSubSubscription",
-            "publishPubSubMessage");
+            "publishPubSubMessage", "batchGetEntries", "batchSetEntries", "scanEntries",
+            "acquireLock", "renewLock", "releaseLock", "checkLockOwnership");
 
     private static final Set<String> SENSITIVE_OPERATIONS = Set.of(
-            "exchangeLocalToken", "revealEntryValue", "revealLockOwner", "revealPubSubPayload");
+            "exchangeLocalToken", "revealEntryValue", "revealLockOwner", "revealPubSubPayload",
+            "batchGetEntries", "batchSetEntries", "scanEntries", "acquireLock", "renewLock",
+            "releaseLock", "checkLockOwnership");
 
     private static final List<Class<?>> BROWSER_TEST_TYPES = List.of(
             ManagementBrowserHarnessIT.class,

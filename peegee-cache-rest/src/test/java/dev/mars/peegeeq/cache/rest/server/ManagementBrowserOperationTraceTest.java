@@ -21,6 +21,31 @@ class ManagementBrowserOperationTraceTest {
     }
 
     @Test
+    void resolvesEveryBackendParityOperationFromConcreteBrowserPaths() {
+        ManagementBrowserOperationTrace trace = new ManagementBrowserOperationTrace();
+        trace.observe("GET", "/api/v1/setups/browser/namespaces/orders/entries/customer/exists");
+        trace.observe("POST", "/api/v1/setups/browser/entries/batch-get");
+        trace.observe("POST", "/api/v1/setups/browser/entries/batch-set");
+        trace.observe("POST", "/api/v1/setups/browser/entries/scan");
+        trace.observe("GET", "/api/v1/setups/browser/cache-metrics");
+        trace.observe("POST", "/api/v1/setups/browser/namespaces/orders/locks/customer/acquire");
+        trace.observe("POST", "/api/v1/setups/browser/namespaces/orders/locks/customer/renew");
+        trace.observe("POST", "/api/v1/setups/browser/namespaces/orders/locks/customer/ownership");
+        trace.observe("POST", "/api/v1/setups/browser/namespaces/orders/locks/customer/release");
+
+        assertDoesNotThrow(() -> trace.assertObservedExactly(List.of(
+                "checkEntryExists",
+                "batchGetEntries",
+                "batchSetEntries",
+                "scanEntries",
+                "getCacheMetrics",
+                "acquireLock",
+                "renewLock",
+                "checkLockOwnership",
+                "releaseLock"), Set.of()));
+    }
+
+    @Test
     void exactAssertionRejectsMissingAndUndeclaredFeatureOperations() {
         ManagementBrowserOperationTrace trace = new ManagementBrowserOperationTrace();
         trace.observe("GET", "/api/v1/setups/browser/namespaces/orders/entries");

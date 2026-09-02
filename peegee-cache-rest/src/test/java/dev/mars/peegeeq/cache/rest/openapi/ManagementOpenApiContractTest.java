@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import dev.mars.peegeeq.cache.rest.server.ManagementM7RouteInventory;
 import dev.mars.peegeeq.cache.rest.server.ManagementM8RouteInventory;
 import dev.mars.peegeeq.cache.rest.server.ManagementM9RouteInventory;
+import dev.mars.peegeeq.cache.rest.server.ManagementM11RouteInventory;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -60,6 +61,17 @@ class ManagementOpenApiContractTest {
 
         assertEquals(declared.size(), declaredIds.size(), "M9 OpenAPI inventory must not contain duplicates");
         assertEquals(declaredIds, ManagementM9RouteInventory.operationIds());
+    }
+
+    @Test
+    void declaredM11InventoryMatchesImplementedRouteInventory() throws Exception {
+        JsonNode declared = loadDocument().path("x-m11-operation-ids");
+        assertTrue(declared.isArray(), "OpenAPI must declare its backend-capability operation inventory");
+        Set<String> declaredIds = new java.util.TreeSet<>();
+        declared.forEach(value -> declaredIds.add(value.asText()));
+
+        assertEquals(declared.size(), declaredIds.size(), "M11 OpenAPI inventory must not contain duplicates");
+        assertEquals(declaredIds, ManagementM11RouteInventory.operationIds());
     }
 
     @Test
@@ -396,7 +408,9 @@ class ManagementOpenApiContractTest {
                 .contains(operationId)) {
             return "VIEW_MUTATE";
         }
-        if (Set.of("revealEntryValue", "revealLockOwner", "revealPubSubPayload").contains(operationId)) {
+        if (Set.of(
+                "revealEntryValue", "revealLockOwner", "revealPubSubPayload",
+                "batchGetEntries", "scanEntries", "checkLockOwnership").contains(operationId)) {
             return "REVEAL";
         }
         if (Set.of("streamPubSubMessages", "streamMetrics").contains(operationId)) {
@@ -444,6 +458,13 @@ class ManagementOpenApiContractTest {
             entry("createPubSubSubscription", new RequestContract("CreateSubscriptionRequest", true)),
             entry("revealPubSubPayload", new RequestContract("RevealReasonRequest", false)),
             entry("publishPubSubMessage", new RequestContract("PublishRequest", true))
+            ,entry("batchGetEntries", new RequestContract("BatchGetEntriesRequest", true))
+            ,entry("batchSetEntries", new RequestContract("BatchSetEntriesRequest", true))
+            ,entry("scanEntries", new RequestContract("ScanEntriesRequest", true))
+            ,entry("acquireLock", new RequestContract("AcquireLockRequest", true))
+            ,entry("renewLock", new RequestContract("RenewLockRequest", true))
+            ,entry("releaseLock", new RequestContract("LockOwnerRequest", true))
+            ,entry("checkLockOwnership", new RequestContract("LockOwnerRequest", true))
     );
 
     private static final Set<String> OPERATE_OPERATIONS = Set.of(
@@ -451,7 +472,8 @@ class ManagementOpenApiContractTest {
             "forgetSetup", "setEntry", "deleteEntry", "expireEntry", "persistEntry", "touchEntry",
             "previewEntryBulkDelete", "executeEntryBulkDelete", "setCounter", "adjustCounter", "expireCounter",
             "persistCounter", "deleteCounter", "previewCounterBulkDelete", "executeCounterBulkDelete",
-            "forceReleaseLock", "publishPubSubMessage");
+            "forceReleaseLock", "publishPubSubMessage", "batchSetEntries",
+            "acquireLock", "renewLock", "releaseLock");
 
     private static final Map<String, Set<String>> EXPECTED_OPERATION_PARAMETERS = Map.ofEntries(
             entry("listNamespaces", Set.of("query:prefix", "query:status", "query:sort", "query:cursor", "query:limit")),
@@ -528,6 +550,15 @@ class ManagementOpenApiContractTest {
             entry("streamMetrics", new SuccessContract(Set.of("200"), "MetricsSseEvent", "text/event-stream", "S")),
             entry("listActivity", new SuccessContract("200", "ActivityPage", "C")),
             entry("monitoringWebSocket", new SuccessContract("101", null, "W"))
+            ,entry("checkEntryExists", new SuccessContract("200", "EntryExistsResult", "R"))
+            ,entry("batchGetEntries", new SuccessContract("200", "BatchGetEntriesResult", "R"))
+            ,entry("batchSetEntries", new SuccessContract("200", "BatchSetEntriesResult", "R"))
+            ,entry("scanEntries", new SuccessContract("200", "ScanEntriesResult", "R"))
+            ,entry("acquireLock", new SuccessContract("200", "AcquireLockResult", "R"))
+            ,entry("renewLock", new SuccessContract("200", "RenewLockResult", "R"))
+            ,entry("releaseLock", new SuccessContract("200", "ReleaseLockResult", "R"))
+            ,entry("checkLockOwnership", new SuccessContract("200", "LockOwnershipResult", "R"))
+            ,entry("getCacheMetrics", new SuccessContract("200", "CacheMetricsSnapshot", "R"))
     );
 
     private static final Map<String, String> EXPECTED_OPERATIONS = new TreeMap<>(Map.ofEntries(
@@ -581,6 +612,15 @@ class ManagementOpenApiContractTest {
             entry("GET /api/v1/setups/{setupId}/sse/metrics", "streamMetrics"),
             entry("GET /api/v1/setups/{setupId}/activity", "listActivity"),
             entry("GET /ws/monitoring", "monitoringWebSocket")
+            ,entry("GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists", "checkEntryExists")
+            ,entry("POST /api/v1/setups/{setupId}/entries/batch-get", "batchGetEntries")
+            ,entry("POST /api/v1/setups/{setupId}/entries/batch-set", "batchSetEntries")
+            ,entry("POST /api/v1/setups/{setupId}/entries/scan", "scanEntries")
+            ,entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/acquire", "acquireLock")
+            ,entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/renew", "renewLock")
+            ,entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/release", "releaseLock")
+            ,entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/ownership", "checkLockOwnership")
+            ,entry("GET /api/v1/setups/{setupId}/cache-metrics", "getCacheMetrics")
     ));
 
     private static final Set<String> HTTP_METHODS = Set.of(

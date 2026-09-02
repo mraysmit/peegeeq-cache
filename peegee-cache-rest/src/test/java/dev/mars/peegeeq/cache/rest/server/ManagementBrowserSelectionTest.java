@@ -1,47 +1,49 @@
 package dev.mars.peegeeq.cache.rest.server;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ManagementBrowserSelectionTest {
-
-    @BeforeEach
-    @AfterEach
-    void clearSelection() {
-        System.clearProperty("peegeeq.playwright.scenarios");
-    }
 
     @Test
     void retainsTheCompleteCatalogueWhenNoScenarioSelectionIsConfigured() {
         List<ManagementBrowserCase> catalogue = ManagementCapabilityBrowserIT.scenarios();
 
-        assertEquals(catalogue, ManagementBrowserSelection.select(catalogue));
+        assertEquals(catalogue, ManagementBrowserSelection.select(catalogue, ""));
     }
 
     @Test
     void selectsOnlyExplicitCommaSeparatedScenarioIdsInCatalogueOrder() {
-        System.setProperty("peegeeq.playwright.scenarios", "PW-CAPABILITY-010, PW-CAPABILITY-008");
+        String configured = "PW-CAPABILITY-010, PW-CAPABILITY-008";
 
         assertEquals(List.of("PW-CAPABILITY-008", "PW-CAPABILITY-010"),
-                ManagementBrowserSelection.select(ManagementCapabilityBrowserIT.scenarios()).stream()
+                ManagementBrowserSelection.select(
+                                ManagementCapabilityBrowserIT.scenarios(), configured).stream()
                         .map(ManagementBrowserCase::id)
                         .toList());
+        assertEquals(List.of(),
+                ManagementBrowserSelection.select(
+                        ManagementCounterBrowserIT.scenarios(), configured));
+        assertFalse(ManagementBrowserSelection.classHasRequestedScenario(
+                ManagementCounterBrowserIT.class, configured));
+        assertTrue(ManagementBrowserSelection.classHasRequestedScenario(
+                ManagementCapabilityBrowserIT.class, configured));
     }
 
     @Test
     void rejectsBlankUnknownAndMalformedScenarioSelections() {
-        System.setProperty("peegeeq.playwright.scenarios", "PW-CAPABILITY-999");
         assertThrows(IllegalArgumentException.class,
-                () -> ManagementBrowserSelection.select(ManagementCapabilityBrowserIT.scenarios()));
+                () -> ManagementBrowserSelection.select(
+                        ManagementCapabilityBrowserIT.scenarios(), "PW-CAPABILITY-999"));
 
-        System.setProperty("peegeeq.playwright.scenarios", "capability-8");
         assertThrows(IllegalArgumentException.class,
-                () -> ManagementBrowserSelection.select(ManagementCapabilityBrowserIT.scenarios()));
+                () -> ManagementBrowserSelection.select(
+                        ManagementCapabilityBrowserIT.scenarios(), "capability-8"));
     }
 }

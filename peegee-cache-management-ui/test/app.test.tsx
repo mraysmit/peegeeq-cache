@@ -61,8 +61,11 @@ describe('U1 authenticated management shell', () => {
       migrationVersion: '1',
       capabilities: {
         namespaceInspection: true,
+        entryInspection: true,
         expiredEntryInspection: true,
+        entryMutation: true,
         counterInspection: false,
+        counterMutation: false,
         lockInspection: false,
         forcedLockRelease: false,
         bulkEntryDelete: true,
@@ -72,6 +75,10 @@ describe('U1 authenticated management shell', () => {
         entryValueReveal: false,
         lockOwnerReveal: false,
         pubSubPayloadReveal: false,
+        batchEntryOperations: true,
+        valueScan: true,
+        cacheMetrics: true,
+        ownerLockOperations: true,
       },
       limits: { maximumValueBytes: 1024, pubSubChannelMaxBytes: 49, pubSubPayloadMaxBytes: 7500 },
     };

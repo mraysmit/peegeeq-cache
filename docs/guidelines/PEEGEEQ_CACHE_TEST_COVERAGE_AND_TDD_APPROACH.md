@@ -1,5 +1,9 @@
 # peegee-cache Test Coverage and TDD Approach
 
+This document is the normative testing standard for `peegeeq-cache`. Requirements stated with
+**must**, **must not**, or **mandated** apply to all new and modified tests unless an exception is
+defined explicitly here.
+
 ## 1. TDD discipline
 
 Every testable behavior follows strict red-green-refactor:
@@ -159,6 +163,73 @@ Each repository method gets a Testcontainers integration test against real Postg
 | Fencing token is monotonically increasing | Acquire/release/acquire cycle, assert second token > first |
 
 ## 5. Test infrastructure
+
+### System property configuration
+
+> **Mandated: inject configuration into tests; do not mutate JVM system properties.**
+>
+> `System.setProperty` and `System.clearProperty` change process-wide state. A parallel test can
+> observe a partially updated configuration, a value belonging to another test, or a cleanup that
+> occurs while it is still running. Save-and-restore boilerplate reduces leakage after a test but
+> does not remove that race window.
+
+All unit, integration, Vert.x, REST, and browser tests must construct configuration locally and
+pass it directly to the code under test. Use the narrowest suitable value type: an immutable
+configuration record, a builder result, `Properties`, a `Map<String, String>`, or a property lookup
+function. Production code may read system properties once at the process boundary, but parsing and
+validation must be exposed separately so tests can supply an isolated property source.
+
+```java
+Properties testProperties = new Properties();
+testProperties.setProperty("feature.enabled", "true");
+
+ComponentOptions options = ComponentOptions.from(testProperties::getProperty);
+Component component = new Component(options);
+```
+
+The same rule applies to repository-specific test controls:
+
+- pass the PostgreSQL image directly to `PostgreSQLContainer` and database settings through
+  `PgConnectOptions` or the component's configuration object;
+- pass runtime and bootstrap settings through their configuration records/builders;
+- pass browser launch, observation, scenario-selection, report, and artifact settings through
+  explicit option objects or property-source parameters;
+- do not use `System.setProperty`/`System.clearProperty` in test setup, teardown, fixtures, or
+  individual test methods to configure the subject under test.
+
+Maven and CI may provide system properties when starting a test JVM, such as PostgreSQL matrix or
+Playwright execution selectors. Those values must remain stable for the lifetime of that JVM and
+must be copied into immutable configuration before concurrent test work begins. A test must not
+change them after startup.
+
+### Browser viewport scope
+
+> **Mandated: the PeeGeeQ Cache management UI is desktop-only.**
+>
+> Browser tests must not create mobile or tablet product requirements by exercising unsupported
+> viewport classes.
+
+Playwright product tests use the supported `1440x900` desktop viewport. A test may use another
+desktop viewport only when a documented desktop requirement needs it, and its width must be at
+least 1280 CSS pixels. Do not add phone/tablet device profiles, touch emulation, mobile user agents,
+narrow-viewport matrices, mobile breakpoint assertions, or mobile/tablet screenshot baselines.
+Desktop zoom and accessibility checks remain valid, but the browser viewport itself must stay
+within the supported desktop range. Graceful behavior outside that range is not a product contract
+and receives no scenario credit.
+
+The only exception is a test whose subject is the thin system-property adapter itself. Such a test
+must:
+
+1. lock the JVM system-properties resource for its entire execution so it cannot run concurrently
+   with another property-mutating test;
+2. save every affected property's exact original state and restore it in `finally` or guaranteed
+   teardown;
+3. change the complete property set atomically from the test's perspective, never leaving a
+   partially configured object visible; and
+4. keep all behavioral parsing and validation tests on an injected property source.
+
+This rule is required for all new and modified tests. Existing global-property tests are migration
+debt and must be converted when touched; cleanup alone is not considered compliance.
 
 ### Testcontainers setup
 
