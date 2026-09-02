@@ -939,7 +939,7 @@ Phase gate:
 
 Objective: finish the backend as an operable product component rather than a collection of routes.
 
-Status: **COMPLETE; CAPABILITY REGATE IN PROGRESS** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chromium verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, static-route isolation, backend facade parity, and 18 independently degraded runtime capability paths. The active Playwright catalogue contains 557 desktop-only scenarios; the 550-scenario baseline passed its PostgreSQL 18.3 cumulative gate on 2 September 2026, and the seven-case remediation is focused-green pending the complete regate.
+Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chromium verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, static-route isolation, backend facade parity, and 18 independently degraded runtime capability paths. The active Playwright catalogue contains 557 desktop-only scenarios; its clean PostgreSQL 18.3 cumulative gate passed 557/557 plus all three runnable-artifact/evidence checks on 2 September 2026.
 
 ### M10.1 Mandatory observability
 
@@ -986,6 +986,8 @@ Phase gate: every command succeeds with zero failures, errors, unexpected skips,
 
 Final evidence under OpenJDK 26.0.2:
 
+The PostgreSQL 15–18 compatibility rows below are the retained pre-capability-expansion matrix. The active 557-scenario catalogue has been freshly verified on PostgreSQL 18.3; a fresh PostgreSQL 15–17 parity regate remains release validation.
+
 | Gate | Result |
 |---|---|
 | PostgreSQL 15.17 complete reactor | Green, 3:28 |
@@ -993,7 +995,7 @@ Final evidence under OpenJDK 26.0.2:
 | PostgreSQL 17.11 complete reactor | Green, 3:34 |
 | PostgreSQL 18.3 complete reactor | Green, 3:28 |
 | Historical post-hardening complete reactor | 547 Surefire + 562 Failsafe + 123 Vitest; 0 failures/errors/skips before unsupported mobile coverage was removed |
-| Real-browser and runnable-artifact Failsafe gate | 550/550 desktop-browser baseline plus 3/3 runnable-artifact/evidence checks green on PostgreSQL 18.3; active 557-scenario catalogue focused-green for all 18 capability paths, complete regate in progress |
+| Real-browser and runnable-artifact Failsafe gate | 557/557 desktop-browser scenarios plus 3/3 runnable-artifact/evidence checks; PostgreSQL 18.3 clean cumulative gate green on 2 September 2026 |
 | Dependency/build contract | Maven Enforcer dependency convergence and duplicate-version rules green in every row |
 | Release artifacts | `-P release-artifacts -DskipTests package` green for all 11 modules; source and Javadoc jars generated |
 | Repository hygiene | `git diff --check` green; no generated targets, jars, classes, logs, or benchmark results in the change inventory |

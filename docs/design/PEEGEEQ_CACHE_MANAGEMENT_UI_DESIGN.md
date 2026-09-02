@@ -23,7 +23,7 @@ The corresponding interactive screen designs are available in [the management UI
 
 Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
-The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The active Playwright catalogue contains 557 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys, 18 independently degraded capability paths, and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. The 550-scenario desktop baseline passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 2 September 2026; the seven-case capability remediation has passed its focused gate and awaits the active catalogue's complete cumulative regate.
+The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The active Playwright catalogue contains 557 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys, 18 independently degraded capability paths, and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. The clean PostgreSQL 18.3 cumulative gate passed all 557 scenarios plus three runnable-artifact/evidence checks on 2 September 2026.
 
 ## 2. Fixed decisions
 

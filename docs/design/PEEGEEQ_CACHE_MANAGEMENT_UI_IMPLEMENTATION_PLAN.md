@@ -571,17 +571,17 @@ Acceptance increment completed 30 August 2026:
 
 - Maven installs the pinned Node/npm toolchain, reports zero dependency vulnerabilities, regenerates the OpenAPI types, type-checks, lints, tests, and creates a source-map-free fingerprinted Vite asset graph;
 - the UI JAR and shaded runnable artifact checks are green with a single SLF4J provider and no duplicate fallback UI;
-- the clean 2 September 2026 `mvn -o clean verify` gate is green across all 11 modules under OpenJDK 25 and PostgreSQL 18.3: 799 Surefire tests, 553 Failsafe tests, and 129 Vitest tests, all with zero failures, errors, or skips;
+- the clean 2 September 2026 `mvn -o clean verify` gate is green across all 11 modules under OpenJDK 25 and PostgreSQL 18.3: 560 Surefire tests, 560 Failsafe tests, and 129 Vitest tests, all with zero failures, errors, or skips; the reactor completed in 25 minutes 52 seconds;
 - 557 Java Playwright scenarios implement 17 independently named journey owners; the separate Surefire accountability contract covers all 59 operations and runtime tracing verifies declared operations from observed browser traffic. Thirteen isolated `ManagementConsoleProductJourneysIT` cases drive the packaged production asset through Chromium against real TLS PostgreSQL, while three non-scenario Failsafe checks validate the runnable artifact and evidence report;
 - the product journeys cover trusted-proxy identity/role rotation and bounded expiry; setup/scope; real namespace cursor round trips and exported JSON content; typed entry read/reveal/clipboard/CAS/TTL/persist/touch; bulk stale conflict, deterministic expiry, deletion, and replay rejection; exact 64-bit counter behavior; lock conflict recovery; Pub/Sub offline retention/resume/reveal/stop; live interruption/recovery/deduplication; desktop axe and viewport containment; cross-surface leakage; packaged response headers; and deterministic shutdown;
-- the complete 11-module reactor is green against PostgreSQL 15.17, 16.13, 17.11, and 18.3 after the browser-suite replacement.
+- the pre-capability-expansion 11-module reactor is green against PostgreSQL 15.17, 16.13, 17.11, and 18.3; the active 557-scenario catalogue is freshly verified on PostgreSQL 18.3, with a fresh cross-version parity regate remaining as release validation.
 
 Post-completion assurance update, 2 September 2026:
 
 - saved refresh, concealment, timezone, byte-unit, role, and granular capability behavior is now applied and covered rather than merely persisted or statically rendered;
 - browser diagnostics reject unexpected failed responses, missing/undeclared operations, missing durable audit actions, browser errors, and leaked resources; mutation journeys also assert committed PostgreSQL state;
 - the active desktop-only catalogue contains exactly 557 independently identified Playwright scenarios; the prior 559-scenario cumulative result predates removal of ten unsupported mobile/narrow-viewport cases, addition of `PW-BACKEND-001`, and the seven capability-degradation remediations;
-- the 550-scenario desktop-only baseline passed its PostgreSQL 18.3 cumulative gate on 2 September 2026, and the active 18-case capability tranche is green while the 557-scenario cumulative regate runs; and
+- the active desktop-only catalogue passed its PostgreSQL 18.3 cumulative gate 557/557 on 2 September 2026, and all 18 capability-degradation paths are included in that result; and
 - the PostgreSQL 15-18 evidence above remains the U10 pre-expansion matrix.
 
 RED inventory covers missing production resources, wrong asset base, duplicate fallback resources, source maps, development endpoints, non-deterministic output, cache headers, runnable startup, deep links, all required full-browser journeys, and cleanup.

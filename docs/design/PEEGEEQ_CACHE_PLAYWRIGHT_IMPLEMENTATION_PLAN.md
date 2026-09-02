@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Playwright Implementation Plan
 
-Status: **557-SCENARIO DESKTOP-ONLY IMPLEMENTATION — POSTGRESQL 18.3 CUMULATIVE REGATE IN PROGRESS**
+Status: **557-SCENARIO DESKTOP-ONLY IMPLEMENTATION — POSTGRESQL 18.3 CUMULATIVE GATE VERIFIED**
 
 Required minimum: **540 distinct Playwright browser scenarios**
 
@@ -37,7 +37,7 @@ Implementation evidence as of 2 September 2026:
 - setup capability responses now derive management, Pub/Sub, payload-reveal, batch, scan, core-metrics, and owner-lock availability from the connected runtime instead of advertising universal support; entry and counter bulk-delete capabilities are independently represented, and unavailable inspection or mutation features remove only their corresponding destinations and controls;
 - PostgreSQL-backed scenarios now reject both missing and undeclared feature operations, while failed HTTP responses must match the exact expected status and canonical route rather than only an expected count; and
 - actual JUnit browser outcomes now produce one atomic self-contained `playwright-evidence.html` report with environment details and scenario metadata; PostgreSQL-backed failures additionally capture a DOM-sanitized full-page screenshot; and
-- the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The 550-scenario desktop-only baseline, including `PW-BACKEND-001` for complete facade parity, passed **550/550** plus all three runnable-artifact/evidence checks in the clean 31-minute-13-second reactor on 2 September 2026. The active catalogue is now 557 after adding the seven missing independent capability-degradation cases; its focused 18-case capability gate is green and the complete cumulative regate is in progress; and
+- the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The active 557-scenario desktop-only catalogue includes `PW-BACKEND-001` for complete facade parity and seven additional independent capability-degradation cases; its clean 2 September 2026 reactor passed **557/557** scenarios plus all three runnable-artifact/evidence checks, with 22 minutes of browser execution and 25 minutes 52 seconds total reactor time; and
 - focused packaged PostgreSQL gates pass `PW-BACKEND-001` for existence, batch get/set, value scan, exact metrics, and owner-lock acquire/renew/ownership/release, and `PW-COUNTER-001` for create-if-missing signed adjustment with TTL and committed-state verification; and
 - report generation registers runtime bootstrap tokens, the fixture database password, and seeded revealed values as sensitive canaries, removes stale evidence before every browser test plan, and fails Maven verification unless a fresh canary-clean report is produced.
 
@@ -45,7 +45,7 @@ Post-implementation release-validation work remains:
 
 - add a reviewed trace-sanitization format before enabling Playwright trace archives; sanitized screenshots and real JUnit-to-HTML reporting are implemented;
 - complete failure-path canaries for database, durable-audit, sensitive-surface, and resource-cleanup oracles;
-- execute the active desktop-only 557-scenario suite on PostgreSQL 15.17, 16.13, and 17.11 after the PostgreSQL 18.3 cumulative regate is green.
+- execute the verified desktop-only 557-scenario suite on PostgreSQL 15.17, 16.13, and 17.11; PostgreSQL 18.3 is green.
 
 ## 1. Purpose
 
@@ -398,7 +398,7 @@ Coverage includes:
 
 Cumulative and final target: **540 scenarios**.
 
-Status: **DESKTOP-ONLY CUMULATIVE REGATE IN PROGRESS** — the 550-scenario desktop baseline passed 550/550 on PostgreSQL 18.3 on 2 September 2026. Seven missing independent capability-degradation cases bring the active catalogue to 557; their focused 18-case gate is green.
+Status: **DESKTOP-ONLY CUMULATIVE GATE VERIFIED** — seven missing independent capability-degradation cases bring the active catalogue to 557. The clean PostgreSQL 18.3 reactor passed all 557 scenarios and all three runnable-artifact/evidence checks on 2 September 2026.
 
 Coverage includes:
 
