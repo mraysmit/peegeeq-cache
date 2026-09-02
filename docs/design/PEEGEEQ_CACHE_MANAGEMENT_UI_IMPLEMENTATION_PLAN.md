@@ -9,7 +9,7 @@
 
 This document is the execution authority for Phase 8.3 of the PeeGeeQ Cache roadmap. It turns the approved management UI design into ordered, test-first slices with objective entry gates, red/green evidence, module ownership, and completion criteria.
 
-The follow-on expansion from the completed real-browser acceptance backbone to the active 550-scenario desktop-only Playwright catalogue is tracked separately in [PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md). That assurance plan does not reopen the completed U0-U10 product implementation boundary.
+The follow-on expansion from the completed real-browser acceptance backbone to the active 557-scenario desktop-only Playwright catalogue is tracked separately in [PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md). That assurance plan does not reopen the completed U0-U10 product implementation boundary.
 
 The management backend is already complete. This plan does not reopen backend phases M0-M10 or weaken their security, audit, lifecycle, compatibility, packaging, and observability guarantees. Backend changes are allowed only when a production-console integration test exposes a missing browser-facing behavior, such as static asset delivery. Every such change begins with a focused failing Java or full-browser test and retains the complete backend regression suite.
 
@@ -293,7 +293,7 @@ Browser-evidence reset on 30 August 2026:
 - the former TypeScript route-intercepted matrix was removed because counting mocked routes did not establish product behavior;
 - browser automation is now owned by `peegee-cache-rest` in Java and exercises the packaged UI, real HTTP/SSE/WebSocket transports, and real PostgreSQL without Playwright request interception;
 - `ManagementBrowserCoverageTest` makes 17 named journeys and all 59 OpenAPI operations an executable accountability contract, including a single accountable owner for each journey and operation; runtime tracing additionally fails when a product journey does not actually emit a request or WebSocket opening for an operation it declares;
-- the current catalogue contains 550 independently reported Java Playwright scenarios, including 13 isolated product journeys against real TLS PostgreSQL; three additional Failsafe checks validate runnable-artifact and evidence integrity.
+- the current catalogue contains 557 independently reported Java Playwright scenarios, including 18 independent setup-capability degradation cases and 13 isolated product journeys against real TLS PostgreSQL; three additional Failsafe checks validate runnable-artifact and evidence integrity.
 
 RED inventory:
 
@@ -572,7 +572,7 @@ Acceptance increment completed 30 August 2026:
 - Maven installs the pinned Node/npm toolchain, reports zero dependency vulnerabilities, regenerates the OpenAPI types, type-checks, lints, tests, and creates a source-map-free fingerprinted Vite asset graph;
 - the UI JAR and shaded runnable artifact checks are green with a single SLF4J provider and no duplicate fallback UI;
 - the clean 2 September 2026 `mvn -o clean verify` gate is green across all 11 modules under OpenJDK 25 and PostgreSQL 18.3: 799 Surefire tests, 553 Failsafe tests, and 129 Vitest tests, all with zero failures, errors, or skips;
-- 550 Java Playwright scenarios implement 17 independently named journey owners; the separate Surefire accountability contract covers all 59 operations and runtime tracing verifies declared operations from observed browser traffic. Thirteen isolated `ManagementConsoleProductJourneysIT` cases drive the packaged production asset through Chromium against real TLS PostgreSQL, while three non-scenario Failsafe checks validate the runnable artifact and evidence report;
+- 557 Java Playwright scenarios implement 17 independently named journey owners; the separate Surefire accountability contract covers all 59 operations and runtime tracing verifies declared operations from observed browser traffic. Thirteen isolated `ManagementConsoleProductJourneysIT` cases drive the packaged production asset through Chromium against real TLS PostgreSQL, while three non-scenario Failsafe checks validate the runnable artifact and evidence report;
 - the product journeys cover trusted-proxy identity/role rotation and bounded expiry; setup/scope; real namespace cursor round trips and exported JSON content; typed entry read/reveal/clipboard/CAS/TTL/persist/touch; bulk stale conflict, deterministic expiry, deletion, and replay rejection; exact 64-bit counter behavior; lock conflict recovery; Pub/Sub offline retention/resume/reveal/stop; live interruption/recovery/deduplication; desktop axe and viewport containment; cross-surface leakage; packaged response headers; and deterministic shutdown;
 - the complete 11-module reactor is green against PostgreSQL 15.17, 16.13, 17.11, and 18.3 after the browser-suite replacement.
 
@@ -580,8 +580,8 @@ Post-completion assurance update, 2 September 2026:
 
 - saved refresh, concealment, timezone, byte-unit, role, and granular capability behavior is now applied and covered rather than merely persisted or statically rendered;
 - browser diagnostics reject unexpected failed responses, missing/undeclared operations, missing durable audit actions, browser errors, and leaked resources; mutation journeys also assert committed PostgreSQL state;
-- the active desktop-only catalogue contains exactly 550 independently identified Playwright scenarios; the prior 559-scenario cumulative result predates removal of ten unsupported mobile/narrow-viewport cases and the addition of `PW-BACKEND-001`;
-- the desktop-only catalogue passed its fresh PostgreSQL 18.3 cumulative gate 550/550 on 2 September 2026; and
+- the active desktop-only catalogue contains exactly 557 independently identified Playwright scenarios; the prior 559-scenario cumulative result predates removal of ten unsupported mobile/narrow-viewport cases, addition of `PW-BACKEND-001`, and the seven capability-degradation remediations;
+- the 550-scenario desktop-only baseline passed its PostgreSQL 18.3 cumulative gate on 2 September 2026, and the active 18-case capability tranche is green while the 557-scenario cumulative regate runs; and
 - the PostgreSQL 15-18 evidence above remains the U10 pre-expansion matrix.
 
 RED inventory covers missing production resources, wrong asset base, duplicate fallback resources, source maps, development endpoints, non-deterministic output, cache headers, runnable startup, deep links, all required full-browser journeys, and cleanup.
@@ -636,7 +636,7 @@ The final suite contains independent, named journeys for:
 | U7 Pub/Sub/live | COMPLETE | Bounded Pub/Sub/SSE/WebSocket clients, strict event schemas, lifecycle tests, server resource/recovery evidence, and packaged real publish/receive/recovery are green |
 | U8 Monitoring/settings | COMPLETE | Scoped monitoring, live metrics, bounded activity, harmless preferences, operational states, and packaged live/settings acceptance are green |
 | U9 Hardening | COMPLETE | Desktop axe, keyboard/focus/zoom, privacy, injection, screenshot, and packaged cross-surface leakage acceptance are implemented |
-| U10 Final acceptance | COMPLETE | Deterministic artifacts; 17 named browser journeys with executable ownership/runtime evidence for all 59 operations; active 550-scenario desktop-only catalogue; and the pre-expansion PostgreSQL 15.17, 16.13, 17.11, and 18.3 matrix are retained |
+| U10 Final acceptance | COMPLETE | Deterministic artifacts; 17 named browser journeys with executable ownership/runtime evidence for all 59 operations; active 557-scenario desktop-only catalogue; and the pre-expansion PostgreSQL 15.17, 16.13, 17.11, and 18.3 matrix are retained |
 
 Status changes occur only in the same change set as their evidence. `IN PROGRESS` means at least one valid RED test exists for the phase. `COMPLETE` means every exit criterion and owning regression gate is green. Planning or production code alone cannot close a phase.
 

@@ -1,10 +1,10 @@
 # PeeGeeQ Cache Playwright Implementation Plan
 
-Status: **550-SCENARIO DESKTOP-ONLY IMPLEMENTATION — POSTGRESQL 18.3 CUMULATIVE GATE VERIFIED**
+Status: **557-SCENARIO DESKTOP-ONLY IMPLEMENTATION — POSTGRESQL 18.3 CUMULATIVE REGATE IN PROGRESS**
 
 Required minimum: **540 distinct Playwright browser scenarios**
 
-Current implemented catalogue: **550 Java Playwright scenarios implementing 17 named browser journeys and 13 parameterized scenario catalogues**
+Current implemented catalogue: **557 Java Playwright scenarios implementing 17 named browser journeys and 13 parameterized scenario catalogues**
 
 Implementation evidence as of 2 September 2026:
 
@@ -33,11 +33,11 @@ Implementation evidence as of 2 September 2026:
 - every PostgreSQL-backed fixture now rejects unexpected failed HTTP responses, missing declared operations, undeclared audited operations, missing durable audit actions, browser errors, and resource leaks. Counter, lock, entry, and bulk scenarios additionally assert authoritative PostgreSQL outcomes;
 - the earlier 540-scenario post-remediation milestone passed **540/540** catalogue scenarios with zero failures, errors, or skips and 18 minutes 52 seconds of aggregate scenario time. That historical reactor run passed **526 Surefire** and **542 Failsafe** tests, while its rebuilt UI gate passed **122 Vitest** tests, type checking, lint, and production packaging; and
 - the 12 PostgreSQL product journeys completed in 56.77 seconds in the post-remediation cumulative run, with one PostgreSQL container start and a separate schema migration, management server, Playwright browser context, operation trace, and cleanup cycle for every scenario.
-- the correctness-remediation extension adds 19 non-inflated scenarios: 11 independently advertised capability-degradation cases, five real trusted-proxy viewer workflows, counter cursor pagination, and exact/over-limit Pub/Sub payload boundaries;
-- setup capability responses now derive from the connected runtime's real `AdminCapabilities` instead of advertising universal support, and the expired-entry filter is removed when expiry inspection is unavailable;
+- the correctness-remediation extension adds 26 non-inflated scenarios: 18 independently advertised capability-degradation cases, five real trusted-proxy viewer workflows, counter cursor pagination, and exact/over-limit Pub/Sub payload boundaries;
+- setup capability responses now derive management, Pub/Sub, payload-reveal, batch, scan, core-metrics, and owner-lock availability from the connected runtime instead of advertising universal support; entry and counter bulk-delete capabilities are independently represented, and unavailable inspection or mutation features remove only their corresponding destinations and controls;
 - PostgreSQL-backed scenarios now reject both missing and undeclared feature operations, while failed HTTP responses must match the exact expected status and canonical route rather than only an expected count; and
 - actual JUnit browser outcomes now produce one atomic self-contained `playwright-evidence.html` report with environment details and scenario metadata; PostgreSQL-backed failures additionally capture a DOM-sanitized full-page screenshot; and
-- the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The active desktop-only catalogue contains 550 scenarios, including `PW-BACKEND-001` for complete facade parity; its fresh 2 September 2026 cumulative gate passed **550/550** scenarios, plus all three runnable-artifact/evidence Failsafe checks, in the green 31-minute-13-second clean reactor; and
+- the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The 550-scenario desktop-only baseline, including `PW-BACKEND-001` for complete facade parity, passed **550/550** plus all three runnable-artifact/evidence checks in the clean 31-minute-13-second reactor on 2 September 2026. The active catalogue is now 557 after adding the seven missing independent capability-degradation cases; its focused 18-case capability gate is green and the complete cumulative regate is in progress; and
 - focused packaged PostgreSQL gates pass `PW-BACKEND-001` for existence, batch get/set, value scan, exact metrics, and owner-lock acquire/renew/ownership/release, and `PW-COUNTER-001` for create-if-missing signed adjustment with TTL and committed-state verification; and
 - report generation registers runtime bootstrap tokens, the fixture database password, and seeded revealed values as sensitive canaries, removes stale evidence before every browser test plan, and fails Maven verification unless a fresh canary-clean report is produced.
 
@@ -45,7 +45,7 @@ Post-implementation release-validation work remains:
 
 - add a reviewed trace-sanitization format before enabling Playwright trace archives; sanitized screenshots and real JUnit-to-HTML reporting are implemented;
 - complete failure-path canaries for database, durable-audit, sensitive-surface, and resource-cleanup oracles;
-- execute the verified desktop-only 550-scenario suite on PostgreSQL 15.17, 16.13, and 17.11; PostgreSQL 18.3 is green.
+- execute the active desktop-only 557-scenario suite on PostgreSQL 15.17, 16.13, and 17.11 after the PostgreSQL 18.3 cumulative regate is green.
 
 ## 1. Purpose
 
@@ -106,7 +106,7 @@ The following do not count as distinct scenarios:
 | Area | Distinct scenarios |
 |---|---:|
 | Authentication, sessions, CSRF, roles, and expiry | 46 |
-| Application shell, routing, scope, navigation, and capability degradation | 45 |
+| Application shell, routing, scope, navigation, and capability degradation | 52 |
 | Setup lifecycle, target policy, and viewer setup controls | 57 |
 | Overview, namespaces, pagination, and export | 46 |
 | Entry inspection, reveal, formatting, cleanup, and viewer behavior | 55 |
@@ -117,7 +117,7 @@ The following do not count as distinct scenarios:
 | Monitoring, activity, notifications, and settings | 34 |
 | Backend facade parity | 1 |
 | Desktop accessibility, privacy, packaging, and shutdown | 48 |
-| **Total** | **550** |
+| **Total** | **557** |
 
 The existing 19 Playwright tests are included in this total after each is assigned a compliant scenario identifier and satisfies the stronger evidence contract.
 
@@ -398,7 +398,7 @@ Coverage includes:
 
 Cumulative and final target: **540 scenarios**.
 
-Status: **DESKTOP-ONLY CUMULATIVE GATE VERIFIED** — ten unsupported mobile/narrow-viewport scenarios were removed from the previously verified catalogue and one backend-parity scenario was added. The active 550-scenario baseline passed 550/550 on PostgreSQL 18.3 on 2 September 2026.
+Status: **DESKTOP-ONLY CUMULATIVE REGATE IN PROGRESS** — the 550-scenario desktop baseline passed 550/550 on PostgreSQL 18.3 on 2 September 2026. Seven missing independent capability-degradation cases bring the active catalogue to 557; their focused 18-case gate is green.
 
 Coverage includes:
 
@@ -467,7 +467,7 @@ All timing behavior uses Playwright conditions, server events, deterministic clo
 
 ### 12.1 Complete local and CI gate
 
-The standard release gate runs all 550 scenarios headlessly:
+The standard release gate runs all 557 scenarios headlessly:
 
 ```text
 mvn verify
@@ -519,7 +519,7 @@ The final suite must remain practical without weakening coverage:
 - publish slowest-scenario and slowest-fixture diagnostics; and
 - fail when a scenario exceeds its reviewed timeout without a justified exception.
 
-The root reactor must run all 550 scenarios on PostgreSQL 18. PostgreSQL 15-17 compatibility may be sharded in CI, but every shard is mandatory and the combined result must contain all 550 unique scenarios.
+The root reactor must run all 557 scenarios on PostgreSQL 18. PostgreSQL 15-17 compatibility may be sharded in CI, but every shard is mandatory and the combined result must contain all 557 unique scenarios.
 
 ## 14. Consolidated HTML evidence
 

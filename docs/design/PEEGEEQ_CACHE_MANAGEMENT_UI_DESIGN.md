@@ -23,7 +23,7 @@ The corresponding interactive screen designs are available in [the management UI
 
 Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
-The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The active Playwright catalogue contains 550 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. The earlier 559-scenario result is historical evidence from before ten unsupported mobile/narrow-viewport cases were removed and `PW-BACKEND-001` was added; the current desktop-only catalogue passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 2 September 2026.
+The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The active Playwright catalogue contains 557 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys, 18 independently degraded capability paths, and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. The 550-scenario desktop baseline passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 2 September 2026; the seven-case capability remediation has passed its focused gate and awaits the active catalogue's complete cumulative regate.
 
 ## 2. Fixed decisions
 
@@ -583,8 +583,11 @@ Capability response:
 ```json
 {
   "namespaceInspection": true,
+  "entryInspection": true,
   "expiredEntryInspection": true,
+  "entryMutation": true,
   "counterInspection": true,
+  "counterMutation": true,
   "lockInspection": true,
   "forcedLockRelease": true,
   "bulkEntryDelete": true,
@@ -593,11 +596,15 @@ Capability response:
   "databaseStatistics": true,
   "entryValueReveal": true,
   "lockOwnerReveal": true,
-  "pubSubPayloadReveal": true
+  "pubSubPayloadReveal": true,
+  "batchEntryOperations": true,
+  "valueScan": true,
+  "cacheMetrics": true,
+  "ownerLockOperations": true
 }
 ```
 
-Health/setup detail also reports migration version decimal string `"1"`, corresponding to the current V001 baseline. Later versions are reported from the migration ledger rather than inferred from table presence.
+Health/setup detail also reports migration version decimal string `"1"`, corresponding to the current V001 baseline. Later versions are reported from the migration ledger rather than inferred from table presence. Every feature flag is derived from the connected runtime and its management service; runtime configuration may narrow support further, such as disabling Pub/Sub.
 
 The UI hides unavailable navigation destinations and disables unavailable actions. Authorization remains independently enforced.
 

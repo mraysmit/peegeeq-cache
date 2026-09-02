@@ -478,7 +478,11 @@ Response `200`:
     "databaseStatistics": true,
     "entryValueReveal": true,
     "lockOwnerReveal": true,
-    "pubSubPayloadReveal": true
+    "pubSubPayloadReveal": true,
+    "batchEntryOperations": true,
+    "valueScan": true,
+    "cacheMetrics": true,
+    "ownerLockOperations": true
   },
   "limits": {
     "pubSubChannelMaxBytes": 49,
@@ -488,7 +492,7 @@ Response `200`:
 }
 ```
 
-The server closes the temporary connection after the response. Passwords are never included in logs or validation details.
+The server closes the temporary connection after the response. Passwords are never included in logs or validation details. Capability flags come from the temporary connected runtime and its management service; no feature is advertised merely because a route exists.
 
 ### 7.3 Register and connect setup
 
@@ -1634,7 +1638,7 @@ Phase 8.3 owns the production React console and its full-browser journeys for se
 
 ## 19. Implementation state and module ownership
 
-Status: **M0-M11 BACKEND AND U0-U11 PRODUCTION UI COMPLETE**. M0-M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared sampler per setup, a Prometheus scrape, a Java 21 shaded artifact, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. M11/U11 close the independently inventoried 32-method backend surface through nine additional REST/UI operations and complete runtime configuration. The desktop-only production React console retains deterministic packaging, strict runtime DTO/event validation, and independent packaged Chromium/PostgreSQL acceptance without request interception. The active browser catalogue contains exactly 550 independently identified desktop Java Playwright scenarios, 17 named journey owners, 13 isolated real-PostgreSQL product journeys, a separate executable ownership contract for all 59 management operations, and runtime verification that declared operations, expected failures, PostgreSQL outcomes, durable audit actions, and sensitive-state cleanup are observed. The earlier 559-scenario cumulative result predates removal of ten unsupported mobile/narrow-viewport cases and addition of the backend-parity journey; the current desktop-only catalogue passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 2 September 2026.
+Status: **M0-M11 BACKEND AND U0-U11 PRODUCTION UI COMPLETE**. M0-M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared sampler per setup, a Prometheus scrape, a Java 21 shaded artifact, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. M11/U11 close the independently inventoried 32-method backend surface through nine additional REST/UI operations and complete runtime configuration. The desktop-only production React console retains deterministic packaging, strict runtime DTO/event validation, and independent packaged Chromium/PostgreSQL acceptance without request interception. The active browser catalogue contains exactly 557 independently identified desktop Java Playwright scenarios, 17 named journey owners, 18 independently degraded capability paths, 13 isolated real-PostgreSQL product journeys, a separate executable ownership contract for all 59 management operations, and runtime verification that declared operations, expected failures, PostgreSQL outcomes, durable audit actions, and sensitive-state cleanup are observed. The 550-scenario baseline passed its clean PostgreSQL 18.3 cumulative gate on 2 September 2026; the seven-case capability remediation has passed its focused gate and the 557-scenario cumulative regate is in progress.
 
 Ownership is:
 
