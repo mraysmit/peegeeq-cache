@@ -46,6 +46,7 @@ class FakeNamespaceClient implements NamespaceClientPort {
     return {
       stats: row,
       valueTypeCounts: { STRING: '7', JSON: '3' },
+      ttlStateCounts: { PERSISTENT: '6', EXPIRING: '4', EXPIRED: '0' },
       ttlDistribution: [
         { range: 'PERSISTENT', count: '6' },
         { range: 'LT_1_MINUTE', count: '4' },
@@ -117,6 +118,7 @@ describe('U3 namespace inspection pages', () => {
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Entries' })).toBeVisible();
     expect(within(screen.getByLabelText('Namespace totals')).getByText('10')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'TTL states' }).closest('section')).toHaveTextContent('Expiring4');
     expect(client.selectedDetails).toEqual([row.encodedNamespace]);
     expect(selected).toEqual([row.namespace]);
   });

@@ -72,6 +72,10 @@ export const batchSetResultSchema = z.strictObject({
     previousEntry: cacheEntrySnapshotSchema.nullable(),
   })).min(1).max(1_000),
 });
+export const batchDeleteRequestSchema = z.strictObject({
+  keys: z.array(cacheKeyRequestSchema).min(1).max(1_000),
+});
+export const batchDeleteResultSchema = z.strictObject({ deletedCount: unsigned });
 
 export const scanEntriesRequestSchema = z.strictObject({
   namespace: z.string().min(1).max(128),
@@ -143,6 +147,8 @@ export type BatchGetResult = z.infer<typeof batchGetResultSchema>;
 export type CoreCacheSetRequest = z.infer<typeof coreCacheSetRequestSchema>;
 export type BatchSetRequest = z.infer<typeof batchSetRequestSchema>;
 export type BatchSetResult = z.infer<typeof batchSetResultSchema>;
+export type BatchDeleteRequest = z.infer<typeof batchDeleteRequestSchema>;
+export type BatchDeleteResult = z.infer<typeof batchDeleteResultSchema>;
 export type ScanEntriesRequest = z.infer<typeof scanEntriesRequestSchema>;
 export type ScanEntriesResult = z.infer<typeof scanEntriesResultSchema>;
 export type AcquireLockRequest = z.infer<typeof acquireLockRequestSchema>;

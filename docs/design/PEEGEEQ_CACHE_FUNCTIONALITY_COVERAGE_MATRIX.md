@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-This is the authoritative traceability matrix for backend functionality coverage. It starts with the public backend service contracts, not with the REST operation inventory. The 59-operation OpenAPI contract is checked against that independent backend inventory; neither inventory is accepted as proof in isolation.
+This is the authoritative traceability matrix for backend functionality coverage. It starts with the public backend service contracts, not with the REST operation inventory. The 60-operation OpenAPI contract is checked against that independent backend inventory; neither inventory is accepted as proof in isolation.
 
 A backend capability is `COMPLETE` only when all of the following are present:
 
@@ -57,11 +57,11 @@ Strictly counting the 32 public data-service methods in `CacheService`, `Counter
 | `MISSING` | 0 | 0% |
 | **Total** | **32** | **100%** |
 
-The percentages above are method-level traceability, not a weighted score. `BackendFunctionalityInventoryTest` independently reflects all seven public service contracts, asserts the exact 32-method inventory, and fails if any public method lacks a reviewed OpenAPI mapping.
+The percentages above are method-level traceability, not a weighted score. `BackendFunctionalityInventoryTest` independently reflects all seven public data-service contracts plus `ManagementService`, asserts the exact 62-method combined inventory (32 data-service and 30 management methods), and fails if any public method lacks a reviewed OpenAPI mapping.
 
-The 59 management operations are separately checked for OpenAPI ownership, production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The active desktop-only browser catalogue contains 550 scenarios, 17 named operation-owning journeys, and 13 isolated packaged Chromium/PostgreSQL journeys.
+The 60 management operations are separately checked for OpenAPI ownership, production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The active desktop-only browser catalogue contains 550 scenarios, 17 named operation-owning journeys, and 13 isolated packaged Chromium/PostgreSQL journeys.
 
-Final verification on 2 September 2026 used a clean 11-module `mvn -o clean verify` run under OpenJDK 25 and PostgreSQL 18.3. It passed all modules in 31 minutes 13 seconds, including 129/129 Vitest tests, 162/162 REST Surefire tests, 550/550 packaged desktop-browser scenarios, and 3/3 additional runnable-artifact/evidence Failsafe checks. The generated `playwright-evidence.html` reports exactly 550 scenarios and 550 passes.
+Final verification on 3 September 2026 used a clean 11-module `mvn -o clean verify` run under OpenJDK 25 and PostgreSQL 18.3. It passed all modules in 35 minutes 49 seconds, including 801/801 reactor Surefire tests (162/162 in the REST module), 129/129 Vitest tests, 550/550 packaged desktop-browser scenarios, and 3/3 additional runnable-artifact/evidence Failsafe checks. The generated `playwright-evidence.html` reports exactly 550 scenarios and 550 passes.
 
 ## 4. Source authorities
 
@@ -85,9 +85,9 @@ When the implementation and a planning/status document disagree, source plus exe
 | CACHE-01 | `CacheService.get(CacheKey)` | Return typed value and metadata or absence | `getEntry` plus privileged `revealEntryValue` | Key details metadata; explicit reveal/copy/hide value action | `PgCacheServiceTest`; entry read/reveal route tests; inspection client/page tests; entry browser journey | `COMPLETE` | Management intentionally separates metadata from sensitive value reveal. |
 | CACHE-02 | `getMany(List<CacheKey>)` | Preserve requested-key correlation; represent individual hits/misses and typed values | `batchGetEntries` | Advanced operations multi-key batch with per-key hit/miss and typed value results | Backend service tests; `BackendCapabilityRoutesTest`; strict client/page tests; `PW-BACKEND-001` mixed hit/miss packaged journey | `COMPLETE` | Bounded to 1,000 keys; privileged values are no-store and cleared on scope/unmount. |
 | CACHE-03 | `set(CacheSetRequest)` | Value type, TTL mode, write mode/CAS, and `returnPreviousValue` | `setEntry` for guarded single administration; `batchSetEntries` for the complete facade request/result including previous value | Key editor plus Advanced operations batch-set workflow with all set modes, optional TTL, expected version, and previous-value result | Backend tests; both route contracts; strict clients/pages; entry and backend-parity packaged journeys | `COMPLETE` | A one-item `batchSetEntries` request exposes every public `set` option without weakening the safer management key editor. |
-| CACHE-04 | `setMany(List<CacheSetRequest>)` | Per-item typed values/options and per-item outcomes; bounded atomicity/error contract | `batchSetEntries` | Advanced operations batch set with per-item modes, TTL, applied/version, and optional previous values | Backend tests; route mixed-result tests; strict client/page tests; committed PostgreSQL result in `PW-BACKEND-001` | `COMPLETE` | The facade's per-item result contract is preserved; request is bounded to 1,000 items. |
+| CACHE-04 | `setMany(List<CacheSetRequest>)` | Per-item typed values/options and per-item outcomes; bounded atomicity/error contract | `batchSetEntries` | Advanced operations accepts the exact JSON array so each item independently carries typed value, TTL, mode, expected version, and previous-value choice | Backend tests; route mixed-result tests; strict client/page tests with distinct per-item options; two committed PostgreSQL results in `PW-BACKEND-001` | `COMPLETE` | The facade's per-item request/result contract is preserved; request is bounded to 1,000 items. |
 | CACHE-05 | `delete(CacheKey)` | Delete one key and report outcome | `deleteEntry` with exact version precondition | Key details delete action with confirmation/conflict recovery | Backend, route, UI, and browser mutation tests | `COMPLETE` | REST adds a safer exact-version precondition without removing the operation. |
-| CACHE-06 | `deleteMany(List<CacheKey>)` | Bounded deletion of multiple exact keys and outcomes | `previewEntryBulkDelete` + `executeEntryBulkDelete` | Multi-select/filter preview, typed confirmation, execute/result | Backend management repository tests; route tests; UI and bulk browser journeys | `COMPLETE` | Management uses scoped, expiring, single-use confirmation. |
+| CACHE-06 | `deleteMany(List<CacheKey>)` | Bounded cross-namespace deletion of multiple exact keys and exact deleted count | `batchDeleteEntries`; the separate management preview/execute operations remain available for filter-driven administration | Advanced operations cross-namespace exact-key batch delete | `PgCacheServiceTest`; `BackendCapabilityRoutesTest`; strict client/page tests; `PW-BACKEND-001` verifies two namespaces and committed deletion | `COMPLETE` | The direct facade operation is bounded to 1,000 unique keys and durably audited. |
 | CACHE-07 | `exists(CacheKey)` | Dedicated existence result without value transfer | `checkEntryExists` | Advanced operations existence check | Backend tests; metadata-safe route test; strict client/page tests; `PW-BACKEND-001` | `COMPLETE` | Transfers only the boolean result, never the cached value. |
 | CACHE-08 | `ttl(CacheKey)` | Distinguish missing, persistent, and expiring entries and return remaining TTL | Entry metadata in `getEntry`/`listEntries` | Key details and list TTL presentation | Backend, inspection, UI, browser tests | `COMPLETE` | Keep exact missing/persistent/expiring semantics contract-tested. |
 | CACHE-09 | `expire(CacheKey, Duration)` | Apply positive TTL to an existing entry | `expireEntry` | Key TTL action | Backend, route, UI, browser tests | `COMPLETE` | Exact-version management precondition is additive safety. |
@@ -123,12 +123,12 @@ When the implementation and a planning/status document disagree, source plus exe
 
 | ID | Backend capability | Backend semantics that must survive | REST/OpenAPI mapping | Desktop UI workflow | Evidence presently available | Status | Gap/action |
 |---|---|---|---|---|---|---|---|
-| PUBSUB-01 | `publish(PublishRequest)` | Channel, content type, payload, publication acceptance | `publishPubSubMessage` | Publish form | `PgPubSubServiceTest`; route/live protocol; UI page/client; pub/sub browser journey | `COMPLETE` | — |
+| PUBSUB-01 | `publish(PublishRequest)` | Channel, nullable content type, payload, publication acceptance | `publishPubSubMessage` | Publish form with optional content type; retained metadata and reveal display it | Versioned-codec unit tests; real PostgreSQL repository/service tests; REST integration; strict UI tests; typed pub/sub packaged journey | `COMPLETE` | Plain payloads remain native-compatible. Typed payloads use the reserved `__PGQ_CACHE_TYPED_V1__:` envelope; the receiver decodes it and preserves both public record fields. |
 | PUBSUB-02 | `subscribe(channel,consumer)` | Subscribe to a channel and receive messages | `createPubSubSubscription` + `streamPubSubMessages` SSE + privileged `revealPubSubPayload` | Start subscription, live metadata list, and explicit payload reveal | Backend, REST/SSE, UI live-client/page, browser tests | `COMPLETE` | Transport adds bounded retention/resume and sensitive-payload reveal semantics. |
 | PUBSUB-03 | `Subscription.unsubscribe()` | Deterministic unsubscribe and resource cleanup | `deletePubSubSubscription` | Stop subscription; page/scope/session cleanup | Backend, REST, UI, browser resource-leak evidence | `COMPLETE` | `Subscription.channel()` is result metadata, not a separate product operation. |
 | SCAN-01 | `scan(ScanRequest)` | Namespace/prefix, opaque cursor, limit, include-expired, `includeValues` | `scanEntries` for full facade semantics; `listEntries` for metadata administration | Advanced operations value scan plus existing Keys/Namespace metadata lists | `PgScanServiceTest`; route cursor/value tests; strict client/page tests; `PW-BACKEND-001` | `COMPLETE` | Privileged value scan is bounded to 200, no-store, and cleared on scope/unmount. |
-| ADMIN-01 | `entryStats(namespace)` | Namespace entry/expiry/type aggregates | `getNamespace`, `getOverview`, `getDatabaseMonitoring` | Overview and namespace details | `PgAdminServiceTest`; management repository; REST/UI/browser aggregate tests | `COMPLETE` | — |
-| ADMIN-02 | `metrics()` | Exact `MetricsSnapshot` operation/failure/latency semantics | `getCacheMetrics` | Advanced operations exact cache metrics plus management Monitoring panels | Backend metrics tests; exact-field/64-bit route test; strict client/page test; `PW-BACKEND-001` | `COMPLETE` | Every snapshot field is transported as a decimal string where precision requires it. |
+| ADMIN-01 | `entryStats(namespace)` | Exact namespace cache-entry, counter, and active-lock counts | `getNamespace`, `getOverview`, `getDatabaseMonitoring` | Overview and namespace details | `PgAdminServiceTest`; management repository; REST/UI/browser aggregate tests | `COMPLETE` | Expiry and value-type distributions are separate management aggregates, not fields returned by `EntryStats`. |
+| ADMIN-02 | `metrics()` | Exact `MetricsSnapshot` operation counters | `getCacheMetrics` | Advanced operations exact cache metrics plus management Monitoring panels | Backend metrics tests; exact-field/64-bit route test; strict client/page test; `PW-BACKEND-001` | `COMPLETE` | Every snapshot counter is transported as a decimal string. Latency and failure data belong to management runtime monitoring, not `MetricsSnapshot`. |
 
 ## 9. ManagementService traceability
 
@@ -160,8 +160,8 @@ These are management-specific capabilities layered over the core services. Their
 | `lock` | `getLock` | Lock details | `B/O/R/U/P` | `COMPLETE` for inspection only |
 | `revealLockOwner` | `revealLockOwner` | Explicit privileged owner reveal | `B/O/R/U/P` | `COMPLETE` |
 | `forceReleaseLock` | `forceReleaseLock` | Guarded administrative force release | `B/O/R/U/P` | `COMPLETE`; not a substitute for owner release |
-| `databaseStats` | Composite in `getOverview`/`getDatabaseMonitoring` | Overview/Monitoring | `B/O/R/U/P` | `COMPLETE` |
-| `expiryStats` | Composite in `getOverview`/`getDatabaseMonitoring` | Overview/Monitoring | `B/O/R/U/P` | `COMPLETE` |
+| `databaseStats` | Exact `databaseStats` snapshot nested in `getOverview` | Overview database bytes, schema bytes, availability, and observation time | `B/O/R/U/P` | `COMPLETE` |
+| `expiryStats` | Exact `expiryStats` snapshot nested in `getOverview` | Overview expired entry/counter counts, lag availability, and observation time | `B/O/R/U/P` | `COMPLETE` |
 | `previewEntryDelete` | `previewEntryBulkDelete` | Entry bulk-delete preview | `B/O/R/U/P` | `COMPLETE` |
 | `executeEntryDelete` | `executeEntryBulkDelete` | Confirmed entry bulk delete | `B/O/R/U/P` | `COMPLETE` |
 | `previewCounterDelete` | `previewCounterBulkDelete` | Counter bulk-delete preview | `B/O/R/U/P` | `COMPLETE` |
@@ -174,6 +174,7 @@ The following operations expose the remaining public facade methods directly. Th
 | `CacheService.exists` | `checkEntryExists` | Advanced operations existence check | `B/O/R/U/P` | `COMPLETE` |
 | `CacheService.getMany` | `batchGetEntries` | Advanced operations batch get | `B/O/R/U/P` | `COMPLETE` |
 | `CacheService.set` / `setMany` complete semantics | `batchSetEntries` | Advanced operations batch set | `B/O/R/U/P` | `COMPLETE` |
+| `CacheService.deleteMany` complete semantics | `batchDeleteEntries` | Advanced operations cross-namespace batch delete | `B/O/R/U/P` | `COMPLETE` |
 | `ScanService.scan` complete semantics | `scanEntries` | Advanced operations value scan | `B/O/R/U/P` | `COMPLETE` |
 | `AdminService.metrics` | `getCacheMetrics` | Advanced operations exact metrics | `B/O/R/U/P` | `COMPLETE` |
 | `LockService.acquire` | `acquireLock` | Advanced operations owner-lock lifecycle | `B/O/R/U/P` | `COMPLETE` |
@@ -193,7 +194,7 @@ These operations make the management application usable but are not substitutes 
 | Setup state | `getSetupHealth`, `getSetupCapabilities` | Setup health/details and capability gating | `COMPLETE` |
 | Runtime monitoring | `getRuntimeMonitoring`, `streamMetrics`, `listActivity`, `monitoringWebSocket` | Monitoring, activity, live state, shell notifications | `COMPLETE` |
 
-The 59-operation accountability contract proves that every declared OpenAPI operation has a production owner and is observed in its claimed browser journey. `BackendFunctionalityInventoryTest` supplies the independent reverse check from all 32 public backend methods into those operations.
+The 60-operation accountability contract proves that every declared OpenAPI operation has a production owner and is observed in its claimed browser journey. `BackendFunctionalityInventoryTest` supplies the independent reverse check from all 32 public data-service methods and all 30 `ManagementService` methods into those operations.
 
 ## 11. Runtime, configuration, and lifecycle matrix
 
@@ -224,6 +225,7 @@ The 59-operation accountability contract proves that every declared OpenAPI oper
 | `GAP-COUNTER-001` | Added create-if-missing signed adjustment with optional creation TTL. | Route tests, page tests, and `PW-COUNTER-001` committed PostgreSQL assertion. |
 | `GAP-SCAN-001` | Added bounded privileged value scan preserving every `ScanRequest` option/result. | Backend scan suite, route/client/page tests, `PW-BACKEND-001`. |
 | `GAP-ADMIN-001` | Added exact `MetricsSnapshot` endpoint and UI panel. | Exact-field/precision route and UI tests plus `PW-BACKEND-001`. |
+| `GAP-PARITY-001`–`005` | Corrected the false-complete mappings for cross-namespace `deleteMany`, per-item `setMany`, Pub/Sub `contentType`, namespace TTL-state counts, and exact database/expiry aggregate fields. | Strengthened 62-method inventory, exact OpenAPI schema assertions, route/client/component tests, real PostgreSQL Pub/Sub tests, and `PW-BACKEND-001`. |
 | `GAP-RUNTIME-001`–`005` | Added complete runtime configuration contract, factory wiring, setup UI/details, prefix-aware capability derivation, and supported telemetry mode. | Configuration mapping/validation tests, real PostgreSQL effect/retest/cleanup tests, setup UI tests, and packaged setup journey. |
 
 ## 13. Required closure gates

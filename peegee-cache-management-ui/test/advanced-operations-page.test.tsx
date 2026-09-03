@@ -3,17 +3,19 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import type { BackendCapabilityClientPort } from '@src/api/backend-capability-client';
-import type { AcquireLockRequest, BatchGetRequest, BatchSetRequest, RenewLockRequest, ScanEntriesRequest } from '@src/api/backend-capability-schemas';
+import type { AcquireLockRequest, BatchDeleteRequest, BatchGetRequest, BatchSetRequest, RenewLockRequest, ScanEntriesRequest } from '@src/api/backend-capability-schemas';
 import { AdvancedOperationsPage } from '@src/features/advanced/AdvancedOperationsPage';
 
 class BackendFake implements BackendCapabilityClientPort {
   batchGets: BatchGetRequest[] = [];
   batchSets: BatchSetRequest[] = [];
+  batchDeletes: BatchDeleteRequest[] = [];
   scans: ScanEntriesRequest[] = [];
   lockActions: string[] = [];
   async entryExists() { return true; }
   async batchGetEntries(_setup: string, request: BatchGetRequest) { this.batchGets.push(request); return { items: request.keys.map((key) => ({ ...key, found: false, entry: null })) }; }
   async batchSetEntries(_setup: string, request: BatchSetRequest) { this.batchSets.push(request); return { items: request.entries.map((entry) => ({ namespace: entry.namespace, key: entry.key, applied: true, newVersion: '2', previousEntry: null })) }; }
+  async batchDeleteEntries(_setup: string, request: BatchDeleteRequest) { this.batchDeletes.push(request); return { deletedCount: String(request.keys.length) }; }
   async scanEntries(_setup: string, request: ScanEntriesRequest) { this.scans.push(request); return { entries: [], nextCursor: null, hasMore: false }; }
   async acquireLock(_s: string, _n: string, _k: string, request: AcquireLockRequest) { this.lockActions.push(`acquire:${request.ownerToken}`); return { acquired: true, namespace: 'orders', key: 'processor', ownerToken: request.ownerToken, fencingToken: '7', leaseExpiresAt: '2099-01-01T00:00:00Z' }; }
   async renewLock(_s: string, _n: string, _k: string, request: RenewLockRequest) { this.lockActions.push(`renew:${request.ownerToken}`); return true; }
@@ -40,9 +42,19 @@ describe('complete backend desktop workflows', () => {
     await user.click(screen.getByRole('button', { name: 'Get entry batch' }));
     expect(client.batchGets[0]?.keys).toEqual([{ namespace: 'orders', key: 'one' }]);
 
-    await user.type(screen.getByLabelText('Batch set entries'), 'orders\tone\tLONG\t9223372036854775807');
+    await user.click(screen.getByLabelText('Batch set entries (JSON)'));
+    await user.paste(JSON.stringify([
+      { namespace: 'orders', key: 'one', value: { type: 'LONG', decimal: '9223372036854775807' }, ttlMillis: 1000, setMode: 'UPSERT', expectedVersion: null, returnPreviousValue: true },
+      { namespace: 'customers', key: 'two', value: { type: 'STRING', text: 'line one\nline two' }, ttlMillis: null, setMode: 'ONLY_IF_ABSENT', expectedVersion: null, returnPreviousValue: false },
+    ]));
     await user.click(screen.getByRole('button', { name: 'Set entry batch' }));
     expect(client.batchSets[0]?.entries[0]).toMatchObject({ returnPreviousValue: true, value: { type: 'LONG', decimal: '9223372036854775807' } });
+    expect(client.batchSets[0]?.entries[1]).toMatchObject({ namespace: 'customers', ttlMillis: null, setMode: 'ONLY_IF_ABSENT', returnPreviousValue: false });
+
+    await user.type(screen.getByLabelText('Batch delete keys'), 'orders\tone\ncustomers\ttwo');
+    await user.click(screen.getByRole('button', { name: 'Delete entry batch' }));
+    expect(client.batchDeletes[0]?.keys).toEqual([{ namespace: 'orders', key: 'one' }, { namespace: 'customers', key: 'two' }]);
+    expect(await screen.findByText(/"deletedCount": "2"/u)).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Refresh core metrics' }));
     expect(await screen.findByText('Cache Gets')).toBeVisible();

@@ -6,7 +6,7 @@ import { ManagementClientError, SessionClient } from './session-client';
 
 export interface PubSubClientPort {
   createSubscription(setupId: string, channel: string, bufferLimit: number): Promise<SubscriptionSummary>;
-  publish(setupId: string, channel: string, payload: string): Promise<PublishAccepted>;
+  publish(setupId: string, channel: string, payload: string, contentType?: string): Promise<PublishAccepted>;
   revealPayload(setupId: string, subscriptionId: string, messageId: string, reason?: string): Promise<RevealedPubSubPayload>;
   deleteSubscription(setupId: string, subscriptionId: string): Promise<void>;
 }
@@ -21,9 +21,12 @@ export class PubSubClient implements PubSubClientPort {
     }));
   }
 
-  async publish(setupId: string, channel: string, payload: string): Promise<PublishAccepted> {
+  async publish(setupId: string, channel: string, payload: string, contentType?: string): Promise<PublishAccepted> {
+    const normalizedContentType = contentType?.trim();
     return response(publishAcceptedSchema, await this.session.requestJson(`${this.root(setupId)}/publish`, {
-      method: 'POST', body: { channel: validChannel(channel), payload },
+      method: 'POST', body: normalizedContentType === undefined || normalizedContentType === ''
+        ? { channel: validChannel(channel), payload }
+        : { channel: validChannel(channel), payload, contentType: normalizedContentType },
     }));
   }
 

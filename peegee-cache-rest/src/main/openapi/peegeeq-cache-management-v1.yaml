@@ -60,6 +60,7 @@ x-m11-operation-ids:
   - checkEntryExists
   - batchGetEntries
   - batchSetEntries
+  - batchDeleteEntries
   - scanEntries
   - acquireLock
   - renewLock
@@ -455,6 +456,24 @@ paths:
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: batchSetEntries
+  /api/v1/setups/{setupId}/entries/batch-delete:
+    parameters:
+      - $ref: '#/components/parameters/SetupId'
+    post:
+      x-security-profile: OPERATE
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        $ref: '#/components/requestBodies/BatchDeleteEntriesRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/BatchDeleteEntriesResult'
+        default:
+          $ref: '#/components/responses/ManagementProblem'
+      operationId: batchDeleteEntries
   /api/v1/setups/{setupId}/entries/scan:
     parameters:
       - $ref: '#/components/parameters/SetupId'
@@ -1382,7 +1401,7 @@ components:
           schema:
             $ref: '#/components/schemas/CreateSubscriptionRequest'
     PublishRequest:
-      description: PostgreSQL channel and bounded UTF-8 payload.
+      description: PostgreSQL channel, bounded UTF-8 payload, and optional preserved media type.
       required: true
       content:
         application/json:
@@ -1402,6 +1421,13 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/BatchSetEntriesRequest'
+    BatchDeleteEntriesRequest:
+      description: Bounded cross-namespace batch of exact cache keys.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BatchDeleteEntriesRequest'
     ScanEntriesRequest:
       description: Core cache scan request, including optional values and expired entries.
       required: true
@@ -1508,6 +1534,18 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/BatchSetEntriesResult'}
+    BatchDeleteEntriesResult:
+      description: Exact number of entries deleted by the core cache service.
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/XCorrelationID'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Pragma:
+          $ref: '#/components/headers/Pragma'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BatchDeleteEntriesResult'}
     ScanEntriesResult:
       description: Core cache scan page.
       headers:
@@ -2186,14 +2224,32 @@ components:
     OverviewTotals:
       type: object
       additionalProperties: false
-      required: [namespaceCount, liveEntryCount, liveCounterCount, activeLockCount, expiredEntryCount, schemaBytes]
+      required: [namespaceCount, liveEntryCount, liveCounterCount, activeLockCount, expiredEntryCount, expiredCounterCount, schemaBytes]
       properties:
         namespaceCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         liveEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         liveCounterCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         activeLockCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         expiredEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        expiredCounterCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         schemaBytes: {$ref: '#/components/schemas/AvailableLongValue'}
+    DatabaseStats:
+      type: object
+      additionalProperties: false
+      required: [observedAt, databaseBytes, schemaBytes]
+      properties:
+        observedAt: {$ref: '#/components/schemas/UtcInstant'}
+        databaseBytes: {$ref: '#/components/schemas/AvailableLongValue'}
+        schemaBytes: {$ref: '#/components/schemas/AvailableLongValue'}
+    ExpiryStats:
+      type: object
+      additionalProperties: false
+      required: [observedAt, expiredEntryCount, expiredCounterCount, oldestLagMillis]
+      properties:
+        observedAt: {$ref: '#/components/schemas/UtcInstant'}
+        expiredEntryCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        expiredCounterCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        oldestLagMillis: {$ref: '#/components/schemas/AvailableLongValue'}
     ExpiryOverview:
       type: object
       additionalProperties: false
@@ -2209,12 +2265,14 @@ components:
     Overview:
       type: object
       additionalProperties: false
-      required: [scope, observedAt, health, totals, expiry, valueTypeCounts, topNamespaces]
+      required: [scope, observedAt, health, totals, databaseStats, expiryStats, expiry, valueTypeCounts, topNamespaces]
       properties:
         scope: {type: string, const: DATABASE}
         observedAt: {$ref: '#/components/schemas/UtcInstant'}
         health: {$ref: '#/components/schemas/SetupHealth'}
         totals: {$ref: '#/components/schemas/OverviewTotals'}
+        databaseStats: {$ref: '#/components/schemas/DatabaseStats'}
+        expiryStats: {$ref: '#/components/schemas/ExpiryStats'}
         expiry: {$ref: '#/components/schemas/ExpiryOverview'}
         valueTypeCounts:
           type: object
@@ -2264,13 +2322,17 @@ components:
     NamespaceDetails:
       type: object
       additionalProperties: false
-      required: [stats, valueTypeCounts, ttlDistribution]
+      required: [stats, valueTypeCounts, ttlStateCounts, ttlDistribution]
       properties:
         stats: {$ref: '#/components/schemas/NamespaceStats'}
         valueTypeCounts:
           type: object
           additionalProperties: {$ref: '#/components/schemas/NonNegativeDecimalString'}
           propertyNames: {enum: [STRING, JSON, LONG, BYTES]}
+        ttlStateCounts:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+          propertyNames: {enum: [PERSISTENT, EXPIRING, EXPIRED]}
         ttlDistribution:
           type: array
           maxItems: 7
@@ -2507,6 +2569,23 @@ components:
           minItems: 1
           maxItems: 1000
           items: {$ref: '#/components/schemas/BatchSetEntryResult'}
+    BatchDeleteEntriesRequest:
+      type: object
+      additionalProperties: false
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CacheKeyRequest'}
+    BatchDeleteEntriesResult:
+      type: object
+      additionalProperties: false
+      required: [deletedCount]
+      properties:
+        deletedCount: {$ref: '#/components/schemas/NonNegativeDecimalString'}
     ScanEntriesRequest:
       type: object
       additionalProperties: false
@@ -2824,6 +2903,7 @@ components:
       properties:
         channel: {type: string, minLength: 1, maxLength: 63}
         payload: {type: string}
+        contentType: {type: string, minLength: 1, maxLength: 255}
     PublishAccepted:
       type: object
       additionalProperties: false

@@ -74,6 +74,7 @@ export const operationManifest: readonly OperationClassification[] = [
     'previewEntryBulkDelete',
     'executeEntryBulkDelete',
     'batchSetEntries',
+    'batchDeleteEntries',
   ]),
   ...classify('entries', 'REVEAL', ['revealEntryValue', 'batchGetEntries', 'scanEntries']),
   ...classify('counters', 'VIEW', ['listCounters', 'getCounter']),

@@ -6,7 +6,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.mars.peegeeq.cache.api.management.AdminPage;
 import dev.mars.peegeeq.cache.api.management.CounterEntry;
 import dev.mars.peegeeq.cache.api.management.CounterQuery;
+import dev.mars.peegeeq.cache.api.management.DatabaseStats;
 import dev.mars.peegeeq.cache.api.management.EntryQuery;
+import dev.mars.peegeeq.cache.api.management.ExpiryStats;
 import dev.mars.peegeeq.cache.api.management.LockQuery;
 import dev.mars.peegeeq.cache.api.management.ManagementEntryMetadata;
 import dev.mars.peegeeq.cache.api.management.ManagementActivityEvent;
@@ -212,10 +214,17 @@ public final class SetupInspectionRoutes implements ManagementRequestRouter {
     }
 
     Future<ObjectNode> overviewSnapshot(String setupId) {
-        return registry.management(setupId).overview()
-                .compose(value -> registry.health(setupId)
-                        .map(health -> overview(
-                                value, health, registry.details(setupId).runtime())));
+        var management = registry.management(setupId);
+        return management.overview()
+                .compose(value -> management.databaseStats()
+                        .compose(database -> management.expiryStats()
+                                .compose(expiry -> registry.health(setupId)
+                                        .map(health -> overview(
+                                                value,
+                                                database,
+                                                expiry,
+                                                health,
+                                                registry.details(setupId).runtime())))));
     }
 
     ObjectNode runtimeSnapshot(String setupId) {
@@ -473,6 +482,11 @@ public final class SetupInspectionRoutes implements ManagementRequestRouter {
         for (ValueType type : ValueType.values()) {
             valueTypes.put(type.name(), Long.toString(details.valueTypeCounts().getOrDefault(type, 0L)));
         }
+        ObjectNode ttlStates = node.putObject("ttlStateCounts");
+        for (ManagementTtl.State state : ManagementTtl.State.values()) {
+            ttlStates.put(state.name(),
+                    Long.toString(details.ttlStateCounts().getOrDefault(state, 0L)));
+        }
         ArrayNode ttl = node.putArray("ttlDistribution");
         for (ManagementTtlBucket bucket : ManagementTtlBucket.values()) {
             long count = details.ttlDistribution().getOrDefault(bucket, 0L);
@@ -485,6 +499,8 @@ public final class SetupInspectionRoutes implements ManagementRequestRouter {
 
     private ObjectNode overview(
             ManagementOverview overview,
+            DatabaseStats database,
+            ExpiryStats expiryStats,
             SetupHealth health,
             SetupRuntimeSummary runtime) {
         ObjectNode node = json.createObjectNode();
@@ -497,7 +513,17 @@ public final class SetupInspectionRoutes implements ManagementRequestRouter {
         totals.put("liveCounterCount", Long.toString(overview.liveCounterCount()));
         totals.put("activeLockCount", Long.toString(overview.activeLockCount()));
         totals.put("expiredEntryCount", Long.toString(overview.expiredEntryCount()));
+        totals.put("expiredCounterCount", Long.toString(overview.expiredCounterCount()));
         totals.set("schemaBytes", availableLong(overview.schemaBytes()));
+        ObjectNode databaseNode = node.putObject("databaseStats");
+        databaseNode.put("observedAt", database.observedAt().toString());
+        databaseNode.set("databaseBytes", availableLong(database.databaseBytes()));
+        databaseNode.set("schemaBytes", availableLong(database.schemaBytes()));
+        ObjectNode expiryStatsNode = node.putObject("expiryStats");
+        expiryStatsNode.put("observedAt", expiryStats.observedAt().toString());
+        expiryStatsNode.put("expiredEntryCount", Long.toString(expiryStats.expiredEntryCount()));
+        expiryStatsNode.put("expiredCounterCount", Long.toString(expiryStats.expiredCounterCount()));
+        expiryStatsNode.set("oldestLagMillis", availableLong(expiryStats.oldestLagMillis()));
         ObjectNode expiry = node.putObject("expiry");
         if (overview.oldestExpiredRowLagMillis().availability()
                 == dev.mars.peegeeq.cache.api.management.Availability.AVAILABLE) {

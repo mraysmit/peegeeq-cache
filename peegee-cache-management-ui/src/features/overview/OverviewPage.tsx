@@ -155,7 +155,11 @@ export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
         <Metric label="Live cache entries" value={formatDecimal(snapshot.totals.liveEntryCount)} />
         <Metric label="Live counters" value={formatDecimal(snapshot.totals.liveCounterCount)} />
         <Metric label="Active locks" value={formatDecimal(snapshot.totals.activeLockCount)} />
-        <Metric label="Expired rows awaiting cleanup" value={formatDecimal(snapshot.totals.expiredEntryCount)} />
+        <Metric label="Expired entries awaiting cleanup" value={formatDecimal(snapshot.totals.expiredEntryCount)} />
+        <Metric label="Expired counters awaiting cleanup" value={formatDecimal(snapshot.totals.expiredCounterCount)} />
+        {snapshot.databaseStats.databaseBytes.availability === 'AVAILABLE'
+          ? <Metric label="Database storage" value={formatDisplayBytes(snapshot.databaseStats.databaseBytes.value)} />
+          : <Metric label="Database storage" value="Unavailable" detail={snapshot.databaseStats.databaseBytes.reason} />}
         {snapshot.totals.schemaBytes.availability === 'AVAILABLE'
           ? <Metric label="Cache schema storage" value={formatDisplayBytes(snapshot.totals.schemaBytes.value)} />
           : <Metric label="Cache schema storage" value="Unavailable" detail={snapshot.totals.schemaBytes.reason} />}
@@ -167,6 +171,8 @@ export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
           <dl className="compact-details">
             <Detail label="Sweeper" value={snapshot.expiry.sweeperEnabled ? 'Enabled' : 'Disabled'} />
             <Detail label="Oldest backlog lag" value={snapshot.expiry.oldestExpiredRowLagMillis === null ? 'None' : formatDuration(snapshot.expiry.oldestExpiredRowLagMillis)} />
+            <Detail label="Exact expired entries" value={formatDecimal(snapshot.expiryStats.expiredEntryCount)} />
+            <Detail label="Exact expired counters" value={formatDecimal(snapshot.expiryStats.expiredCounterCount)} />
             <Detail label="Last sweep deleted" value={formatDecimal(snapshot.expiry.lastSweepDeletedRows)} />
             <Detail label="Last sweep" value={snapshot.expiry.lastSweepAt === null ? 'Not observed' : formatDisplayInstant(snapshot.expiry.lastSweepAt)} />
           </dl>

@@ -257,12 +257,21 @@ class ManagementOpenApiContractTest {
         JsonNode schemas = document.path("components").path("schemas");
         Set.of("NamespaceQuery", "NamespaceExportQuery", "EntryQuery", "CounterQuery", "LockQuery",
                         "ActivityQuery", "Overview", "NamespaceDetails", "DatabaseMonitoring", "RuntimeMonitoring",
-                        "ActivityPage", "AvailableLongValue")
+                        "ActivityPage", "AvailableLongValue", "DatabaseStats", "ExpiryStats",
+                        "BatchDeleteEntriesRequest", "BatchDeleteEntriesResult")
                 .forEach(schema -> assertTrue(schemas.has(schema), () -> schema + " component schema"));
 
         assertSchemaRequires(schemas, "Overview",
-                "scope", "observedAt", "health", "totals", "expiry", "valueTypeCounts", "topNamespaces");
-        assertSchemaRequires(schemas, "NamespaceDetails", "stats", "valueTypeCounts", "ttlDistribution");
+                "scope", "observedAt", "health", "totals", "databaseStats", "expiryStats",
+                "expiry", "valueTypeCounts", "topNamespaces");
+        assertSchemaRequires(schemas, "OverviewTotals", "expiredEntryCount", "expiredCounterCount");
+        assertSchemaRequires(schemas, "DatabaseStats", "observedAt", "databaseBytes", "schemaBytes");
+        assertSchemaRequires(schemas, "ExpiryStats", "observedAt", "expiredEntryCount",
+                "expiredCounterCount", "oldestLagMillis");
+        assertSchemaRequires(schemas, "NamespaceDetails", "stats", "valueTypeCounts",
+                "ttlStateCounts", "ttlDistribution");
+        assertTrue(schemas.path("PublishRequest").path("properties").has("contentType"),
+                "PublishRequest must expose the public backend contentType field");
         assertSchemaRequires(schemas, "RuntimeMonitoring", "scope", "observedAt", "lifecycleState", "pool",
                 "activeOperations", "pubSubSubscriptions", "sseClients", "webSocketClients",
                 "retainedPayloadBytes", "auditQueue", "expirySweeper", "operations");
@@ -460,6 +469,7 @@ class ManagementOpenApiContractTest {
             entry("publishPubSubMessage", new RequestContract("PublishRequest", true))
             ,entry("batchGetEntries", new RequestContract("BatchGetEntriesRequest", true))
             ,entry("batchSetEntries", new RequestContract("BatchSetEntriesRequest", true))
+            ,entry("batchDeleteEntries", new RequestContract("BatchDeleteEntriesRequest", true))
             ,entry("scanEntries", new RequestContract("ScanEntriesRequest", true))
             ,entry("acquireLock", new RequestContract("AcquireLockRequest", true))
             ,entry("renewLock", new RequestContract("RenewLockRequest", true))
@@ -472,7 +482,7 @@ class ManagementOpenApiContractTest {
             "forgetSetup", "setEntry", "deleteEntry", "expireEntry", "persistEntry", "touchEntry",
             "previewEntryBulkDelete", "executeEntryBulkDelete", "setCounter", "adjustCounter", "expireCounter",
             "persistCounter", "deleteCounter", "previewCounterBulkDelete", "executeCounterBulkDelete",
-            "forceReleaseLock", "publishPubSubMessage", "batchSetEntries",
+            "forceReleaseLock", "publishPubSubMessage", "batchSetEntries", "batchDeleteEntries",
             "acquireLock", "renewLock", "releaseLock");
 
     private static final Map<String, Set<String>> EXPECTED_OPERATION_PARAMETERS = Map.ofEntries(
@@ -553,6 +563,7 @@ class ManagementOpenApiContractTest {
             ,entry("checkEntryExists", new SuccessContract("200", "EntryExistsResult", "R"))
             ,entry("batchGetEntries", new SuccessContract("200", "BatchGetEntriesResult", "R"))
             ,entry("batchSetEntries", new SuccessContract("200", "BatchSetEntriesResult", "R"))
+            ,entry("batchDeleteEntries", new SuccessContract("200", "BatchDeleteEntriesResult", "R"))
             ,entry("scanEntries", new SuccessContract("200", "ScanEntriesResult", "R"))
             ,entry("acquireLock", new SuccessContract("200", "AcquireLockResult", "R"))
             ,entry("renewLock", new SuccessContract("200", "RenewLockResult", "R"))
@@ -615,6 +626,7 @@ class ManagementOpenApiContractTest {
             ,entry("GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists", "checkEntryExists")
             ,entry("POST /api/v1/setups/{setupId}/entries/batch-get", "batchGetEntries")
             ,entry("POST /api/v1/setups/{setupId}/entries/batch-set", "batchSetEntries")
+            ,entry("POST /api/v1/setups/{setupId}/entries/batch-delete", "batchDeleteEntries")
             ,entry("POST /api/v1/setups/{setupId}/entries/scan", "scanEntries")
             ,entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/acquire", "acquireLock")
             ,entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/renew", "renewLock")

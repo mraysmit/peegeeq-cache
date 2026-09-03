@@ -12,6 +12,7 @@ public final class ManagementM11RouteInventory {
                     "checkEntryExists",
                     "batchGetEntries",
                     "batchSetEntries",
+                    "batchDeleteEntries",
                     "scanEntries",
                     "acquireLock",
                     "renewLock",

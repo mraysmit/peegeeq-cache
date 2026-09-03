@@ -2,6 +2,7 @@ package dev.mars.peegeeq.cache.pg.service;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
 import dev.mars.peegeeq.cache.api.model.PubSubMessage;
+import dev.mars.peegeeq.cache.pg.PubSubPayloadCodec;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import dev.mars.peegeeq.cache.core.metrics.CacheMetrics;
@@ -243,10 +244,11 @@ public final class PgPubSubService implements PubSubService {
         for (var entry : handlers.entrySet()) {
             String rawChannel = entry.getKey();
             if (sql.qualifiedChannel(rawChannel).equals(qualifiedChannel)) {
+                PubSubPayloadCodec.Decoded decoded = PubSubPayloadCodec.decode(payload);
                 PubSubMessage message = new PubSubMessage(
                         rawChannel,
-                        payload,
-                        null, // contentType is not carried in NOTIFY payload
+                        decoded.payload(),
+                        decoded.contentType(),
                         System.currentTimeMillis()
                 );
                 for (Consumer<PubSubMessage> handler : entry.getValue()) {

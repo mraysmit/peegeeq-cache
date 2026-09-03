@@ -568,15 +568,16 @@ This is **not** durable subscription persistence. If the connection is down when
 Important limitations:
 - `NOTIFY` payload is text and limited to approximately 8000 bytes in PostgreSQL
 - binary payload passthrough is **not** part of the Phase 1 public API
-- for Phase 1, payloads must be UTF-8 text or JSON strings with advisory `contentType`
-- the implementation must reject payloads that exceed a configurable maximum size (default 7500 bytes) early, before passing them to `pg_notify`, returning a failed `Future` with `IllegalArgumentException`
+- for Phase 1, payloads must be UTF-8 text or JSON strings; an optional `contentType` is preserved in the reserved versioned PeeGeeQ Cache envelope
+- publications without a content type remain raw PostgreSQL payloads; a raw payload beginning with the reserved envelope prefix is escaped so facade round trips are unambiguous
+- the implementation must reject the final encoded wire payload when it exceeds a configurable maximum size (default 7500 bytes), before passing it to `pg_notify`, returning a failed `Future` with `IllegalArgumentException`
 
 ### 10.7 Phase 1 public contract
 
 API types (already defined in `peegee-cache-api`):
 
 - `PubSubService` — `publish(PublishRequest): Future<Integer>`, `subscribe(String channel, Consumer<PubSubMessage>): Future<Subscription>`
-- `PublishRequest(channel, payload, contentType)` — record, `contentType` is advisory metadata such as `text/plain` or `application/json`
+- `PublishRequest(channel, payload, contentType)` — record, `contentType` is nullable preserved metadata such as `text/plain` or `application/json`
 - `PubSubMessage(channel, payload, contentType, receivedAtEpochMillis)` — record delivered to handlers, `receivedAtEpochMillis` is set on receipt at the client side
 - `Subscription` — `channel(): String`, `unsubscribe(): Future<Void>`
 

@@ -68,6 +68,7 @@ final class ManagementBrowserOperationTrace {
             entry("GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists", "checkEntryExists"),
             entry("POST /api/v1/setups/{setupId}/entries/batch-get", "batchGetEntries"),
             entry("POST /api/v1/setups/{setupId}/entries/batch-set", "batchSetEntries"),
+            entry("POST /api/v1/setups/{setupId}/entries/batch-delete", "batchDeleteEntries"),
             entry("POST /api/v1/setups/{setupId}/entries/scan", "scanEntries"),
             entry("GET /api/v1/setups/{setupId}/cache-metrics", "getCacheMetrics"),
             entry("POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/acquire", "acquireLock"),

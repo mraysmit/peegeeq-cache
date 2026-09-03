@@ -776,14 +776,19 @@ class ManagementConsoleProductJourneysIT {
             page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Start subscription")).click();
             page.getByLabel("Publish channel").fill("acceptance-channel");
+            page.getByLabel("Content type (optional)").fill("text/plain");
             page.getByLabel("Payload").fill("pubsub-secret");
             page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Publish").setExact(true)).click();
             assertThat(page.getByRole(AriaRole.STATUS)).containsText("Accepted by PostgreSQL");
+            assertThat(page.getByRole(AriaRole.REGION,
+                    new Page.GetByRoleOptions().setName("Retained Pub/Sub messages")))
+                    .containsText("text/plain");
             page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Reveal payload")).click();
             assertThat(page.getByText("pubsub-secret", new Page.GetByTextOptions().setExact(true)))
                     .isVisible();
+            assertThat(page.getByText("Content type:").locator("..")).containsText("text/plain");
             page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Hide payload")).click();
 
@@ -1043,7 +1048,7 @@ class ManagementConsoleProductJourneysIT {
             expectedResult = "Batch values, existence, scanning, exact metrics, and the owner lock lifecycle are visible and committed",
             cleanup = "Release the owner lock, clear sensitive state, remove the batch entry, and close all fixture resources",
             operations = {
-                    "checkEntryExists", "batchGetEntries", "batchSetEntries", "scanEntries",
+                    "checkEntryExists", "batchGetEntries", "batchSetEntries", "batchDeleteEntries", "scanEntries",
                     "getCacheMetrics", "acquireLock", "checkLockOwnership", "renewLock", "releaseLock"
             },
             evidence = {
@@ -1057,7 +1062,7 @@ class ManagementConsoleProductJourneysIT {
     @ManagementBrowserJourney(
             value = "backend-service-parity",
             operations = {
-                    "checkEntryExists", "batchGetEntries", "batchSetEntries", "scanEntries",
+                    "checkEntryExists", "batchGetEntries", "batchSetEntries", "batchDeleteEntries", "scanEntries",
                     "getCacheMetrics", "acquireLock", "checkLockOwnership", "renewLock", "releaseLock"
             })
     void advancedWorkspaceExercisesCompleteBackendServiceParity() throws Exception {
@@ -1095,8 +1100,14 @@ class ManagementConsoleProductJourneysIT {
             assertThat(batchGet).containsText("stored-value");
             assertThat(batchGet).containsText("missing");
 
-            page.getByLabel("Batch set entries").fill(
-                    ManagementConsolePostgresFixture.NAMESPACE + "\tbackend-batch\tSTRING\tbatch-value");
+            page.getByLabel("Batch set entries (JSON)").fill("""
+                    [{"namespace":"logical-orders","key":"backend-batch",
+                      "value":{"type":"STRING","text":"batch-value"},"ttlMillis":60000,
+                      "setMode":"UPSERT","expectedVersion":null,"returnPreviousValue":true},
+                     {"namespace":"logical-customers","key":"backend-batch-2",
+                      "value":{"type":"LONG","decimal":"9223372036854775807"},"ttlMillis":null,
+                      "setMode":"ONLY_IF_ABSENT","expectedVersion":null,"returnPreviousValue":false}]
+                    """);
             page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Set entry batch")).click();
             assertThat(page.getByRole(AriaRole.REGION,
@@ -1107,6 +1118,22 @@ class ManagementConsoleProductJourneysIT {
                             "SELECT convert_from(value_bytes, 'UTF8') FROM peegee_cache.cache_entries "
                                     + "WHERE namespace = 'logical-orders' AND cache_key = 'backend-batch'"),
                     "batch-set value");
+            assertEquals("9223372036854775807", ManagementConsolePostgresFixture.queryScalar(
+                    context.postgres(),
+                    "SELECT numeric_value::text FROM peegee_cache.cache_entries "
+                            + "WHERE namespace = 'logical-customers' AND cache_key = 'backend-batch-2'"));
+
+            page.getByLabel("Batch delete keys").fill(
+                    "logical-orders\tbackend-batch\nlogical-customers\tbackend-batch-2");
+            page.getByRole(AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName("Delete entry batch")).click();
+            assertThat(page.getByRole(AriaRole.REGION,
+                    new Page.GetByRoleOptions().setName("Batch delete result")))
+                    .containsText("\"deletedCount\": \"2\"");
+            assertEquals("0", ManagementConsolePostgresFixture.queryScalar(context.postgres(),
+                    "SELECT count(*) FROM peegee_cache.cache_entries WHERE "
+                            + "(namespace = 'logical-orders' AND cache_key = 'backend-batch') OR "
+                            + "(namespace = 'logical-customers' AND cache_key = 'backend-batch-2')"));
 
             page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Refresh core metrics")).click();
@@ -1138,9 +1165,6 @@ class ManagementConsoleProductJourneysIT {
             assertFalse(String.valueOf(page.evaluate(
                     "JSON.stringify([...Object.values(localStorage), ...Object.values(sessionStorage)])"))
                     .contains(ownerToken));
-            ManagementConsolePostgresFixture.execute(context.postgres(),
-                    "DELETE FROM peegee_cache.cache_entries "
-                            + "WHERE namespace = 'logical-orders' AND cache_key = 'backend-batch'");
         });
     }
 

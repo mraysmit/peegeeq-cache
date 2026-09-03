@@ -621,7 +621,9 @@ Response:
   "health": {
     "status": "UP",
     "schemaReady": true,
-    "latencyMillis": 18
+    "latencyMillis": 18,
+    "checkedAt": "2026-08-16T10:42:18.000Z",
+    "detail": "PostgreSQL and cache schema are ready"
   },
   "totals": {
     "namespaceCount": "8",
@@ -629,10 +631,23 @@ Response:
     "liveCounterCount": "324",
     "activeLockCount": "7",
     "expiredEntryCount": "93",
+    "expiredCounterCount": "4",
     "schemaBytes": {
       "availability": "AVAILABLE",
+      "reason": null,
       "value": "40475034"
     }
+  },
+  "databaseStats": {
+    "observedAt": "2026-08-16T10:42:18.000Z",
+    "databaseBytes": {"availability": "AVAILABLE", "reason": null, "value": "162529280"},
+    "schemaBytes": {"availability": "AVAILABLE", "reason": null, "value": "40475034"}
+  },
+  "expiryStats": {
+    "observedAt": "2026-08-16T10:42:18.000Z",
+    "expiredEntryCount": "93",
+    "expiredCounterCount": "4",
+    "oldestLagMillis": {"availability": "AVAILABLE", "reason": null, "value": "38000"}
   },
   "expiry": {
     "oldestExpiredRowLagMillis": 38000,
@@ -687,7 +702,7 @@ Namespace item:
 
 Role: viewer
 
-Returns one namespace item plus TTL distribution and value-type counts. An empty but explicitly requested namespace returns zero counts rather than `404`; namespaces are logical and do not require registration.
+Returns one namespace item plus value-type counts, exact `PERSISTENT`/`EXPIRING`/`EXPIRED` TTL-state counts, and the seven-bucket TTL distribution. An empty but explicitly requested namespace returns zero counts rather than `404`; namespaces are logical and do not require registration.
 
 ### 8.4 Export namespace metadata
 
@@ -1165,13 +1180,13 @@ The SSE stream sends message metadata only:
 ```text
 id: 71
 event: pubsub.message
-data: {"messageId":"01K2VD...","channel":"cache-invalidation","contentType":null,"payloadBytes":142,"receivedAt":"2026-08-16T10:42:17.000Z","payloadState":"MASKED"}
+data: {"messageId":"01K2VD...","channel":"cache-invalidation","contentType":"application/json","payloadBytes":142,"receivedAt":"2026-08-16T10:42:17.000Z","payloadState":"MASKED"}
 
 ```
 
 The server sends a `ready` event first and a comment heartbeat every 15 seconds. `Last-Event-ID` resumes from the bounded session buffer. If the requested event is no longer available, the stream sends `reset` with the oldest available identifier.
 
-Native PostgreSQL `NOTIFY` carries only channel and payload. It does not carry `contentType`; therefore V1 reports `contentType: null` for received messages and does not infer a type from payload contents. A future typed envelope requires an explicit capability and wire-version decision so native subscribers are not silently broken.
+Native PostgreSQL `NOTIFY` carries only channel and payload. PeeGeeQ Cache therefore uses the reserved, versioned `__PGQ_CACHE_TYPED_V1__:` payload envelope whenever a publisher supplies `contentType`; PeeGeeQ Cache subscribers decode it back into the public `payload` and `contentType` fields. Publications without a content type remain raw PostgreSQL payloads for native compatibility. A raw PeeGeeQ Cache publication beginning with the reserved prefix is escaped through the same envelope, and malformed externally published prefix data is delivered unchanged with `contentType: null`.
 
 ### 12.3 Reveal retained payload
 
@@ -1202,11 +1217,12 @@ Role: operator
 ```json
 {
   "channel": "cache-invalidation",
-  "payload": "{\"namespace\":\"customer-profile\",\"key\":\"customer:849203\"}"
+  "payload": "{\"namespace\":\"customer-profile\",\"key\":\"customer:849203\"}",
+  "contentType": "application/json"
 }
 ```
 
-The UTF-8 encoded payload must not exceed the setup's configured pub/sub payload limit. Response `200`:
+`contentType` is optional, non-empty when supplied, and at most 255 UTF-8 bytes. The actual raw or versioned UTF-8 wire payload must not exceed the setup's configured pub/sub payload limit. Response `200`:
 
 ```json
 {
@@ -1634,7 +1650,7 @@ Phase 8.3 owns the production React console and its full-browser journeys for se
 
 ## 19. Implementation state and module ownership
 
-Status: **M0-M11 BACKEND AND U0-U11 PRODUCTION UI COMPLETE**. M0-M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared sampler per setup, a Prometheus scrape, a Java 21 shaded artifact, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. M11/U11 close the independently inventoried 32-method backend surface through nine additional REST/UI operations and complete runtime configuration. The desktop-only production React console retains deterministic packaging, strict runtime DTO/event validation, and independent packaged Chromium/PostgreSQL acceptance without request interception. The active browser catalogue contains exactly 550 independently identified desktop Java Playwright scenarios, 17 named journey owners, 13 isolated real-PostgreSQL product journeys, a separate executable ownership contract for all 59 management operations, and runtime verification that declared operations, expected failures, PostgreSQL outcomes, durable audit actions, and sensitive-state cleanup are observed. The earlier 559-scenario cumulative result predates removal of ten unsupported mobile/narrow-viewport cases and addition of the backend-parity journey; the current desktop-only catalogue passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 2 September 2026.
+Status: **M0-M11 BACKEND AND U0-U11 PRODUCTION UI COMPLETE**. M0-M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared sampler per setup, a Prometheus scrape, a Java 21 shaded artifact, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. M11/U11 close the independently inventoried 32-method data-service surface and 30-method management surface through ten additional REST/UI operations and complete runtime configuration. The desktop-only production React console retains deterministic packaging, strict runtime DTO/event validation, and independent packaged Chromium/PostgreSQL acceptance without request interception. The active browser catalogue contains exactly 550 independently identified desktop Java Playwright scenarios, 17 named journey owners, 13 isolated real-PostgreSQL product journeys, a separate executable ownership contract for all 60 management operations, and runtime verification that declared operations, expected failures, PostgreSQL outcomes, durable audit actions, and sensitive-state cleanup are observed. The earlier 559-scenario cumulative result predates removal of ten unsupported mobile/narrow-viewport cases and addition of the backend-parity journey; the current desktop-only catalogue passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 3 September 2026.
 
 Ownership is:
 

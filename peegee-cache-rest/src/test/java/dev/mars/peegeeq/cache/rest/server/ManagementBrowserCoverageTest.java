@@ -50,7 +50,7 @@ class ManagementBrowserCoverageTest {
             "streamPubSubMessages", "revealPubSubPayload", "deletePubSubSubscription",
             "publishPubSubMessage", "getDatabaseMonitoring", "getRuntimeMonitoring",
             "streamMetrics", "listActivity", "monitoringWebSocket",
-            "checkEntryExists", "batchGetEntries", "batchSetEntries", "scanEntries",
+            "checkEntryExists", "batchGetEntries", "batchSetEntries", "batchDeleteEntries", "scanEntries",
             "getCacheMetrics", "acquireLock", "renewLock", "releaseLock",
             "checkLockOwnership");
 
@@ -58,7 +58,7 @@ class ManagementBrowserCoverageTest {
             "setEntry", "deleteEntry", "expireEntry", "persistEntry", "touchEntry",
             "executeEntryBulkDelete", "setCounter", "adjustCounter", "expireCounter",
             "persistCounter", "deleteCounter", "executeCounterBulkDelete",
-            "forceReleaseLock", "batchSetEntries", "acquireLock", "renewLock",
+            "forceReleaseLock", "batchSetEntries", "batchDeleteEntries", "acquireLock", "renewLock",
             "releaseLock");
 
     private static final Set<String> AUDITED_OPERATIONS = Set.of(
@@ -69,12 +69,12 @@ class ManagementBrowserCoverageTest {
             "persistCounter", "deleteCounter", "previewCounterBulkDelete",
             "executeCounterBulkDelete", "revealLockOwner", "forceReleaseLock",
             "createPubSubSubscription", "revealPubSubPayload", "deletePubSubSubscription",
-            "publishPubSubMessage", "batchGetEntries", "batchSetEntries", "scanEntries",
+            "publishPubSubMessage", "batchGetEntries", "batchSetEntries", "batchDeleteEntries", "scanEntries",
             "acquireLock", "renewLock", "releaseLock", "checkLockOwnership");
 
     private static final Set<String> SENSITIVE_OPERATIONS = Set.of(
             "exchangeLocalToken", "revealEntryValue", "revealLockOwner", "revealPubSubPayload",
-            "batchGetEntries", "batchSetEntries", "scanEntries", "acquireLock", "renewLock",
+            "batchGetEntries", "batchSetEntries", "batchDeleteEntries", "scanEntries", "acquireLock", "renewLock",
             "releaseLock", "checkLockOwnership");
 
     private static final List<Class<?>> BROWSER_TEST_TYPES = List.of(

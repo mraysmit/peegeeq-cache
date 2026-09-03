@@ -442,24 +442,41 @@ public final class PubSubRoutes implements ManagementRequestRouter {
     private PublishRequest parse(byte[] body, SetupCapabilities.Limits limits) {
         try {
             JsonNode root = json.readTree(body);
-            if (root == null || !root.isObject() || !fieldNames(root).equals(Set.of("channel", "payload"))) {
+            if (root == null || !root.isObject()) {
+                throw validationFailure();
+            }
+            Set<String> fields = fieldNames(root);
+            if (!Set.of(Set.of("channel", "payload"), Set.of("channel", "payload", "contentType"))
+                    .contains(fields)) {
                 throw validationFailure();
             }
             String channel = requiredText(root, "channel");
             String payload = requiredTextAllowEmpty(root, "payload");
+            String contentType = fields.contains("contentType") ? requiredText(root, "contentType") : null;
             int channelBytes = channel.getBytes(StandardCharsets.UTF_8).length;
             int payloadBytes = payload.getBytes(StandardCharsets.UTF_8).length;
             if (channel.indexOf('\0') >= 0
                     || channelBytes > limits.pubSubChannelMaxBytes()
-                    || payloadBytes > limits.pubSubPayloadMaxBytes()) {
+                    || (contentType != null && contentType.getBytes(StandardCharsets.UTF_8).length > 255)
+                    || encodedPayloadBytes(payload, contentType) > limits.pubSubPayloadMaxBytes()) {
                 throw validationFailure();
             }
-            return new PublishRequest(channel, payload, null);
+            return new PublishRequest(channel, payload, contentType);
         } catch (ManagementProtocolException failure) {
             throw failure;
         } catch (Exception failure) {
             throw validationFailure();
         }
+    }
+
+    private static int encodedPayloadBytes(String payload, String contentType) {
+        int payloadBytes = payload.getBytes(StandardCharsets.UTF_8).length;
+        if (contentType == null && !payload.startsWith("__PGQ_CACHE_TYPED_V1__:")) {
+            return payloadBytes;
+        }
+        int binaryBytes = 1 + Integer.BYTES + payloadBytes
+                + (contentType == null ? 0 : contentType.getBytes(StandardCharsets.UTF_8).length);
+        return "__PGQ_CACHE_TYPED_V1__:".length() + ((binaryBytes * 4 + 2) / 3);
     }
 
     private SubscriptionRequest parseSubscription(

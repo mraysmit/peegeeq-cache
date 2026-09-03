@@ -78,7 +78,7 @@ The execution baseline is:
 - The authoritative OpenAPI file remains under `peegee-cache-rest/src/main/openapi`; it is not copied into frontend source.
 - `openapi-typescript` generates compile-time types into `peegee-cache-management-ui/target/generated-sources/openapi` during the Maven build.
 - Generated files are build output and are not committed.
-- A committed operation manifest in the UI module classifies all 59 operation identifiers by transport, role, sensitivity, and owning feature slice.
+- A committed operation manifest in the UI module classifies all 60 operation identifiers by transport, role, sensitivity, and owning feature slice.
 - A contract test fails when an OpenAPI operation is added, removed, renamed, or reclassified without an explicit UI decision.
 - Zod schemas validate every REST response, problem response, SSE event, and WebSocket message at runtime. Compile-time generation alone is insufficient.
 - Protocol incompatibility produces a bounded, sanitized `CONTRACT_MISMATCH` client state; it never renders unvalidated data.
@@ -159,7 +159,7 @@ Prohibited shortcuts:
 
 Static tests verify:
 
-- all 59 OpenAPI operation identifiers are classified exactly once;
+- all 60 OpenAPI operation identifiers are classified exactly once;
 - generated contract types are reproducible from the authoritative OpenAPI file;
 - every network response/event crosses a Zod parser;
 - sensitive DTOs cannot be assigned to Redux/Zustand stores, persistence middleware, URL builders, notification models, analytics, or logging helpers;
@@ -221,7 +221,7 @@ GREEN evidence:
 
 - pinned toolchain: Node 22.22.2 and npm 10.9.4 installed and invoked by `frontend-maven-plugin` 1.15.1; the initial RED run used the older reference patch before the dependency-engine gate justified this same-major upgrade;
 - dependency gate: committed npm lockfile; `npm audit --audit-level=moderate` reports zero vulnerabilities after upgrading the initially vulnerable Vite, Vitest, React Router, and YAML patch versions;
-- contract gate: `openapi-typescript` 7.9.1 generates build-only types from the authoritative OpenAPI file, and the committed manifest classifies all 59 operation identifiers exactly once with matching security and transport declarations;
+- contract gate: `openapi-typescript` 7.9.1 generates build-only types from the authoritative OpenAPI file, and the committed manifest classifies all 60 operation identifiers exactly once with matching security and transport declarations;
 - focused frontend gate: 4 Vitest files and 24 tests pass for the minimal shell, canonical UTF-8 identifier codec, strict current-session/problem validation, and operation manifest;
 - quality gate: TypeScript strict checking and ESLint pass with zero warnings;
 - production build: Vite 6.4.3 emits `ui/index.html` plus fingerprinted JavaScript and CSS, with no source maps;
@@ -249,7 +249,7 @@ Implementation:
 Exit gate:
 
 - a clean checkout can run `mvn -pl :peegee-cache-management-ui test package` without global Node/npm;
-- generation is deterministic, all 59 operations are classified, type/lint/test gates pass, and the UI JAR contains only the expected minimal resources;
+- generation is deterministic, all 60 operations are classified, type/lint/test gates pass, and the UI JAR contains only the expected minimal resources;
 - full root `mvn verify` remains green.
 
 ### U1: Static hosting, session bootstrap, and application shell
@@ -292,7 +292,7 @@ Browser-evidence reset on 30 August 2026:
 
 - the former TypeScript route-intercepted matrix was removed because counting mocked routes did not establish product behavior;
 - browser automation is now owned by `peegee-cache-rest` in Java and exercises the packaged UI, real HTTP/SSE/WebSocket transports, and real PostgreSQL without Playwright request interception;
-- `ManagementBrowserCoverageTest` makes 17 named journeys and all 59 OpenAPI operations an executable accountability contract, including a single accountable owner for each journey and operation; runtime tracing additionally fails when a product journey does not actually emit a request or WebSocket opening for an operation it declares;
+- `ManagementBrowserCoverageTest` makes 17 named journeys and all 60 OpenAPI operations an executable accountability contract, including a single accountable owner for each journey and operation; runtime tracing additionally fails when a product journey does not actually emit a request or WebSocket opening for an operation it declares;
 - the current catalogue contains 550 independently reported Java Playwright scenarios, including 13 isolated product journeys against real TLS PostgreSQL; three additional Failsafe checks validate runnable-artifact and evidence integrity.
 
 RED inventory:
@@ -571,17 +571,17 @@ Acceptance increment completed 30 August 2026:
 
 - Maven installs the pinned Node/npm toolchain, reports zero dependency vulnerabilities, regenerates the OpenAPI types, type-checks, lints, tests, and creates a source-map-free fingerprinted Vite asset graph;
 - the UI JAR and shaded runnable artifact checks are green with a single SLF4J provider and no duplicate fallback UI;
-- the clean 2 September 2026 `mvn -o clean verify` gate is green across all 11 modules under OpenJDK 25 and PostgreSQL 18.3: 799 Surefire tests, 553 Failsafe tests, and 129 Vitest tests, all with zero failures, errors, or skips;
-- 550 Java Playwright scenarios implement 17 independently named journey owners; the separate Surefire accountability contract covers all 59 operations and runtime tracing verifies declared operations from observed browser traffic. Thirteen isolated `ManagementConsoleProductJourneysIT` cases drive the packaged production asset through Chromium against real TLS PostgreSQL, while three non-scenario Failsafe checks validate the runnable artifact and evidence report;
+- the clean 3 September 2026 `mvn -o clean verify` gate is green across all 11 modules under OpenJDK 25 and PostgreSQL 18.3: 801 Surefire tests, 553 Failsafe tests, and 129 Vitest tests, all with zero failures, errors, or skips;
+- 550 Java Playwright scenarios implement 17 independently named journey owners; the separate Surefire accountability contract covers all 60 operations and runtime tracing verifies declared operations from observed browser traffic. Thirteen isolated `ManagementConsoleProductJourneysIT` cases drive the packaged production asset through Chromium against real TLS PostgreSQL, while three non-scenario Failsafe checks validate the runnable artifact and evidence report;
 - the product journeys cover trusted-proxy identity/role rotation and bounded expiry; setup/scope; real namespace cursor round trips and exported JSON content; typed entry read/reveal/clipboard/CAS/TTL/persist/touch; bulk stale conflict, deterministic expiry, deletion, and replay rejection; exact 64-bit counter behavior; lock conflict recovery; Pub/Sub offline retention/resume/reveal/stop; live interruption/recovery/deduplication; desktop axe and viewport containment; cross-surface leakage; packaged response headers; and deterministic shutdown;
 - the complete 11-module reactor is green against PostgreSQL 15.17, 16.13, 17.11, and 18.3 after the browser-suite replacement.
 
-Post-completion assurance update, 2 September 2026:
+Post-completion assurance update, 3 September 2026:
 
 - saved refresh, concealment, timezone, byte-unit, role, and granular capability behavior is now applied and covered rather than merely persisted or statically rendered;
 - browser diagnostics reject unexpected failed responses, missing/undeclared operations, missing durable audit actions, browser errors, and leaked resources; mutation journeys also assert committed PostgreSQL state;
 - the active desktop-only catalogue contains exactly 550 independently identified Playwright scenarios; the prior 559-scenario cumulative result predates removal of ten unsupported mobile/narrow-viewport cases and the addition of `PW-BACKEND-001`;
-- the desktop-only catalogue passed its fresh PostgreSQL 18.3 cumulative gate 550/550 on 2 September 2026; and
+- the desktop-only catalogue passed its fresh PostgreSQL 18.3 cumulative gate 550/550 on 3 September 2026; and
 - the PostgreSQL 15-18 evidence above remains the U10 pre-expansion matrix.
 
 RED inventory covers missing production resources, wrong asset base, duplicate fallback resources, source maps, development endpoints, non-deterministic output, cache headers, runnable startup, deep links, all required full-browser journeys, and cleanup.
@@ -636,7 +636,7 @@ The final suite contains independent, named journeys for:
 | U7 Pub/Sub/live | COMPLETE | Bounded Pub/Sub/SSE/WebSocket clients, strict event schemas, lifecycle tests, server resource/recovery evidence, and packaged real publish/receive/recovery are green |
 | U8 Monitoring/settings | COMPLETE | Scoped monitoring, live metrics, bounded activity, harmless preferences, operational states, and packaged live/settings acceptance are green |
 | U9 Hardening | COMPLETE | Desktop axe, keyboard/focus/zoom, privacy, injection, screenshot, and packaged cross-surface leakage acceptance are implemented |
-| U10 Final acceptance | COMPLETE | Deterministic artifacts; 17 named browser journeys with executable ownership/runtime evidence for all 59 operations; active 550-scenario desktop-only catalogue; and the pre-expansion PostgreSQL 15.17, 16.13, 17.11, and 18.3 matrix are retained |
+| U10 Final acceptance | COMPLETE | Deterministic artifacts; 17 named browser journeys with executable ownership/runtime evidence for all 60 operations; active 550-scenario desktop-only catalogue; and the pre-expansion PostgreSQL 15.17, 16.13, 17.11, and 18.3 matrix are retained |
 
 Status changes occur only in the same change set as their evidence. `IN PROGRESS` means at least one valid RED test exists for the phase. `COMPLETE` means every exit criterion and owning regression gate is green. Planning or production code alone cannot close a phase.
 
@@ -645,7 +645,7 @@ Status changes occur only in the same change set as their evidence. `IN PROGRESS
 Phase 8.3 is complete only when:
 
 - the production console implements every in-scope screen and workflow in the approved design;
-- all 59 OpenAPI operations are deliberately classified and every consumed response/event is runtime validated;
+- all 60 OpenAPI operations are deliberately classified and every consumed response/event is runtime validated;
 - the server remains the authority for authentication, authorization, Origin, CSRF, target policy, rate limits, concurrency, audit, and mutation outcomes;
 - sensitive values are isolated to short-lived component memory and absent from every prohibited surface;
 - REST, SSE, and WebSocket failure and recovery behavior is visible, bounded, and leak-free;

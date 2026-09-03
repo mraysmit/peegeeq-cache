@@ -1,6 +1,7 @@
 package dev.mars.peegeeq.cache.pg.repository;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
+import dev.mars.peegeeq.cache.pg.PubSubPayloadCodec;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.pg.logging.SafeLogValue;
 import dev.mars.peegeeq.cache.pg.sql.PubSubSql;
@@ -38,8 +39,9 @@ public final class PgPubSubRepository {
      * @return Future resolving to 1 on success
      */
     public Future<Integer> publish(PublishRequest request) {
+        String wirePayload;
         try {
-            validate(request);
+            wirePayload = validateAndEncode(request);
         } catch (IllegalArgumentException e) {
             return Future.failedFuture(e);
         }
@@ -48,12 +50,12 @@ public final class PgPubSubRepository {
         if (log.isTraceEnabled()) {
             log.atTrace()
                     .addKeyValue("pubsub.channel", SafeLogValue.identifier(request.channel()))
-                    .addKeyValue("payload.bytes", request.payload().getBytes(StandardCharsets.UTF_8).length)
+                    .addKeyValue("payload.bytes", wirePayload.getBytes(StandardCharsets.UTF_8).length)
                     .log("pubsub.publish.request");
         }
 
         return pool.preparedQuery(PubSubSql.NOTIFY)
-                .execute(Tuple.of(qualifiedChannel, request.payload()))
+                .execute(Tuple.of(qualifiedChannel, wirePayload))
                 .map(rows -> 1);
     }
 
@@ -61,7 +63,7 @@ public final class PgPubSubRepository {
         return sql;
     }
 
-    private void validate(PublishRequest request) {
+    private String validateAndEncode(PublishRequest request) {
         Objects.requireNonNull(request, "request");
         if (request.channel() == null || request.channel().isBlank()) {
             throw new IllegalArgumentException("channel must not be null or blank");
@@ -69,10 +71,12 @@ public final class PgPubSubRepository {
         if (request.payload() == null) {
             throw new IllegalArgumentException("payload must not be null");
         }
-        int payloadSize = request.payload().getBytes(StandardCharsets.UTF_8).length;
+        String wirePayload = PubSubPayloadCodec.encode(request.payload(), request.contentType());
+        int payloadSize = wirePayload.getBytes(StandardCharsets.UTF_8).length;
         if (payloadSize > maxPayloadBytes) {
             throw new IllegalArgumentException(
                     "payload size %d bytes exceeds maximum %d bytes".formatted(payloadSize, maxPayloadBytes));
         }
+        return wirePayload;
     }
 }

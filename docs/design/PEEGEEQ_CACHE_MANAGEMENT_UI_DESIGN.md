@@ -23,7 +23,7 @@ The corresponding interactive screen designs are available in [the management UI
 
 Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
-The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The active Playwright catalogue contains 550 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. The earlier 559-scenario result is historical evidence from before ten unsupported mobile/narrow-viewport cases were removed and `PW-BACKEND-001` was added; the current desktop-only catalogue passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 2 September 2026.
+The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The active Playwright catalogue contains 550 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. The earlier 559-scenario result is historical evidence from before ten unsupported mobile/narrow-viewport cases were removed and `PW-BACKEND-001` was added; the current desktop-only catalogue passed 550/550 in the clean PostgreSQL 18.3 cumulative gate on 3 September 2026.
 
 ## 2. Fixed decisions
 
@@ -386,7 +386,7 @@ An operator or viewer enters a channel and starts an SSE stream. The page displa
 
 Operators can publish text or JSON up to the configured cache payload limit. The form shows encoded byte length and disables publishing when the limit is exceeded. Closing the tab or stopping the session closes the subscription.
 
-Native PostgreSQL notifications do not carry content type, so received messages display `contentType: null`; the console does not infer it from payload text. A successful publish displays `accepted: true`, meaning PostgreSQL accepted `pg_notify`, never a listener count or delivery guarantee. Publish is never automatically retried.
+Native PostgreSQL notifications do not carry content type. The publish form therefore accepts an optional content type and the backend preserves it with the versioned PeeGeeQ Cache payload envelope; received metadata and explicit reveal display the decoded value. Raw native notifications continue to display `contentType: null`, and the console never infers a type from payload text. A successful publish displays `accepted: true`, meaning PostgreSQL accepted `pg_notify`, never a listener count or delivery guarantee. Publish is never automatically retried.
 
 Creating a console subscription returns an opaque subscription identifier. Received messages are assigned opaque identifiers and retained in a bounded server-side session buffer so an operator can explicitly reveal one payload. Stopping the subscription, detaching the setup, expiring the session, or restarting the server removes that buffer. The displayed message history is explicitly labelled non-durable.
 

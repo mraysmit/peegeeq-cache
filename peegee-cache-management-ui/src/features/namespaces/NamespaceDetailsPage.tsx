@@ -67,7 +67,7 @@ export function NamespaceDetailsPage({ client, encodedNamespace, selectedSetupId
         <Link aria-selected="false" role="tab" to={`/counters?namespace=${stats.encodedNamespace}`}>Counters</Link>
         <Link aria-selected="false" role="tab" to={`/locks?namespace=${stats.encodedNamespace}`}>Locks</Link>
       </div>
-      <div className="overview-panels"><section className="overview-panel"><h2>Value types</h2><dl className="compact-details">{Object.entries(details.valueTypeCounts).map(([type, count]) => <div key={type}><dt>{type}</dt><dd>{BigInt(count).toLocaleString('en-US')}</dd></div>)}</dl></section><section className="overview-panel"><h2>TTL distribution</h2><dl className="compact-details">{details.ttlDistribution.map((bucket) => <div key={bucket.range}><dt>{humanize(bucket.range)}</dt><dd>{BigInt(bucket.count).toLocaleString('en-US')}</dd></div>)}</dl></section></div>
+      <div className="overview-panels"><section className="overview-panel"><h2>Value types</h2><dl className="compact-details">{Object.entries(details.valueTypeCounts).map(([type, count]) => <div key={type}><dt>{type}</dt><dd>{BigInt(count).toLocaleString('en-US')}</dd></div>)}</dl></section><section className="overview-panel"><h2>TTL states</h2><dl className="compact-details">{Object.entries(details.ttlStateCounts).map(([state, count]) => <div key={state}><dt>{humanize(state)}</dt><dd>{BigInt(count).toLocaleString('en-US')}</dd></div>)}</dl></section><section className="overview-panel"><h2>TTL distribution</h2><dl className="compact-details">{details.ttlDistribution.map((bucket) => <div key={bucket.range}><dt>{humanize(bucket.range)}</dt><dd>{BigInt(bucket.count).toLocaleString('en-US')}</dd></div>)}</dl></section></div>
     </DetailsWorkspace>
   );
 }

@@ -1,6 +1,7 @@
 package dev.mars.peegeeq.cache.pg.repository;
 
 import dev.mars.peegeeq.cache.api.model.PublishRequest;
+import dev.mars.peegeeq.cache.pg.PubSubPayloadCodec;
 import dev.mars.peegeeq.cache.pg.config.PgCacheStoreConfig;
 import dev.mars.peegeeq.cache.test.PgTestSupport;
 import io.vertx.core.Promise;
@@ -73,7 +74,11 @@ class PgPubSubRepositoryTest {
                                 return received.future();
                             })
                             .onComplete(ctx.succeeding(receivedPayload -> {
-                                ctx.verify(() -> assertEquals(payload, receivedPayload));
+                                ctx.verify(() -> {
+                                    var decoded = PubSubPayloadCodec.decode(receivedPayload);
+                                    assertEquals(payload, decoded.payload());
+                                    assertEquals("text/plain", decoded.contentType());
+                                });
                                 conn.close().onComplete(v -> ctx.completeNow());
                             }));
                 }));
@@ -84,7 +89,7 @@ class PgPubSubRepositoryTest {
     @Test
     void publishRejectsOversizedPayload(VertxTestContext ctx) {
         String oversized = "x".repeat(PgCacheStoreConfig.DEFAULT_MAX_PAYLOAD_BYTES + 1);
-        PublishRequest request = new PublishRequest("ch", oversized, "text/plain");
+        PublishRequest request = new PublishRequest("ch", oversized, null);
 
         repo.publish(request).onComplete(ctx.failing(err -> ctx.verify(() -> {
             assertInstanceOf(IllegalArgumentException.class, err);
@@ -123,7 +128,7 @@ class PgPubSubRepositoryTest {
     @Test
     void publishAcceptsPayloadAtExactMaxSize(Vertx vertx, VertxTestContext ctx) throws Exception {
         String exactMax = "x".repeat(PgCacheStoreConfig.DEFAULT_MAX_PAYLOAD_BYTES);
-        PublishRequest request = new PublishRequest("exact-max", exactMax, "text/plain");
+        PublishRequest request = new PublishRequest("exact-max", exactMax, null);
 
         repo.publish(request).onComplete(ctx.succeeding(count -> ctx.verify(() -> {
             assertEquals(1, count);
@@ -154,7 +159,9 @@ class PgPubSubRepositoryTest {
                             .compose(v -> customRepo.publish(new PublishRequest(channel, "custom-payload", "text/plain")))
                             .compose(count -> received.future())
                             .onComplete(ctx.succeeding(receivedPayload -> {
-                                ctx.verify(() -> assertEquals("custom-payload", receivedPayload));
+                                ctx.verify(() -> assertEquals(
+                                        "custom-payload",
+                                        PubSubPayloadCodec.decode(receivedPayload).payload()));
                                 conn.close().onComplete(v -> ctx.completeNow());
                             }));
                 }));

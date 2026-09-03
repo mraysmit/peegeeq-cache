@@ -13,8 +13,17 @@ const validOverview = {
   },
   totals: {
     namespaceCount: '1', liveEntryCount: '2', liveCounterCount: '3',
-    activeLockCount: '4', expiredEntryCount: '5',
+    activeLockCount: '4', expiredEntryCount: '5', expiredCounterCount: '6',
     schemaBytes: { availability: 'AVAILABLE', reason: null, value: '4096' },
+  },
+  databaseStats: {
+    observedAt: '2026-08-26T10:15:30Z',
+    databaseBytes: { availability: 'AVAILABLE', reason: null, value: '8192' },
+    schemaBytes: { availability: 'AVAILABLE', reason: null, value: '4096' },
+  },
+  expiryStats: {
+    observedAt: '2026-08-26T10:15:30Z', expiredEntryCount: '5', expiredCounterCount: '6',
+    oldestLagMillis: { availability: 'UNAVAILABLE', reason: 'no expired rows', value: null },
   },
   expiry: {
     oldestExpiredRowLagMillis: null, sweeperEnabled: true,
@@ -268,6 +277,7 @@ describe('U3 inspection protocol client', () => {
         return {
           stats: namespace,
           valueTypeCounts: { STRING: '7', JSON: '3' },
+          ttlStateCounts: { PERSISTENT: '6' },
           ttlDistribution: [{ range: 'PERSISTENT', count: '6' }],
         };
       }

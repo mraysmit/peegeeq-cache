@@ -60,7 +60,19 @@ export const overviewSchema: z.ZodType<OverviewContract> = z.strictObject({
     liveCounterCount: nonNegativeDecimalSchema,
     activeLockCount: nonNegativeDecimalSchema,
     expiredEntryCount: nonNegativeDecimalSchema,
+    expiredCounterCount: nonNegativeDecimalSchema,
     schemaBytes: availableLongValueSchema,
+  }),
+  databaseStats: z.strictObject({
+    observedAt: utcInstantSchema,
+    databaseBytes: availableLongValueSchema,
+    schemaBytes: availableLongValueSchema,
+  }),
+  expiryStats: z.strictObject({
+    observedAt: utcInstantSchema,
+    expiredEntryCount: nonNegativeDecimalSchema,
+    expiredCounterCount: nonNegativeDecimalSchema,
+    oldestLagMillis: availableLongValueSchema,
   }),
   expiry: z.strictObject({
     oldestExpiredRowLagMillis: z.number().int().nonnegative().nullable(),
@@ -91,6 +103,10 @@ export const namespaceExportSchema: z.ZodType<NamespaceExportContract> = z.stric
 export const namespaceDetailsSchema: z.ZodType<NamespaceDetailsContract> = z.strictObject({
   stats: namespaceStatsSchema,
   valueTypeCounts: valueTypeCountsSchema,
+  ttlStateCounts: z.partialRecord(
+    z.enum(['PERSISTENT', 'EXPIRING', 'EXPIRED']),
+    nonNegativeDecimalSchema,
+  ),
   ttlDistribution: z.array(z.strictObject({
     range: z.enum([
       'PERSISTENT',

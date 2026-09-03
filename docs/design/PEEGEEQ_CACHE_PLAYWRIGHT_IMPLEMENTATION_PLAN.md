@@ -6,10 +6,10 @@ Required minimum: **540 distinct Playwright browser scenarios**
 
 Current implemented catalogue: **550 Java Playwright scenarios implementing 17 named browser journeys and 13 parameterized scenario catalogues**
 
-Implementation evidence as of 2 September 2026:
+Implementation evidence as of 3 September 2026:
 
 - all 19 baseline browser scenarios have stable `PW-<AREA>-NNN` identifiers and machine-readable requirement, area, risk, action, result, operation, evidence, and cleanup metadata;
-- `ManagementBrowserCoverageTest` enforces the exact current scenario count, unique scenario and journey ownership, all 59 OpenAPI operation owners, and evidence requirements for operations, mutations, sensitive state, and cleanup;
+- `ManagementBrowserCoverageTest` enforces the exact current scenario count, unique scenario and journey ownership, all 60 OpenAPI operation owners, and evidence requirements for operations, mutations, sensitive state, and cleanup;
 - negative accountability canaries prove that incomplete metadata, unknown operations, missing operation evidence, mutation without a PostgreSQL/audit oracle, and sensitive operations without leakage evidence fail validation;
 - the source-policy gate rejects Playwright request interception, response substitution, synthetic page content, and synthetic init-script patterns, with a negative canary for every prohibited construct;
 - a typed self-contained HTML evidence-report skeleton provides readable UTC dates, environment and per-scenario structure, atomic single-file output, HTML escaping, and registered-sensitive-canary rejection;
@@ -37,7 +37,7 @@ Implementation evidence as of 2 September 2026:
 - setup capability responses now derive from the connected runtime's real `AdminCapabilities` instead of advertising universal support, and the expired-entry filter is removed when expiry inspection is unavailable;
 - PostgreSQL-backed scenarios now reject both missing and undeclared feature operations, while failed HTTP responses must match the exact expected status and canonical route rather than only an expected count; and
 - actual JUnit browser outcomes now produce one atomic self-contained `playwright-evidence.html` report with environment details and scenario metadata; PostgreSQL-backed failures additionally capture a DOM-sanitized full-page screenshot; and
-- the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The active desktop-only catalogue contains 550 scenarios, including `PW-BACKEND-001` for complete facade parity; its fresh 2 September 2026 cumulative gate passed **550/550** scenarios, plus all three runnable-artifact/evidence Failsafe checks, in the green 31-minute-13-second clean reactor; and
+- the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The active desktop-only catalogue contains 550 scenarios, including `PW-BACKEND-001` for complete facade parity; its fresh 3 September 2026 cumulative gate passed **550/550** scenarios, plus all three runnable-artifact/evidence Failsafe checks, in the green 35-minute-49-second clean reactor; and
 - focused packaged PostgreSQL gates pass `PW-BACKEND-001` for existence, batch get/set, value scan, exact metrics, and owner-lock acquire/renew/ownership/release, and `PW-COUNTER-001` for create-if-missing signed adjustment with TTL and committed-state verification; and
 - report generation registers runtime bootstrap tokens, the fixture database password, and seeded revealed values as sensitive canaries, removes stale evidence before every browser test plan, and fails Maven verification unless a fresh canary-clean report is produced.
 
@@ -398,7 +398,7 @@ Coverage includes:
 
 Cumulative and final target: **540 scenarios**.
 
-Status: **DESKTOP-ONLY CUMULATIVE GATE VERIFIED** — ten unsupported mobile/narrow-viewport scenarios were removed from the previously verified catalogue and one backend-parity scenario was added. The active 550-scenario baseline passed 550/550 on PostgreSQL 18.3 on 2 September 2026.
+Status: **DESKTOP-ONLY CUMULATIVE GATE VERIFIED** — ten unsupported mobile/narrow-viewport scenarios were removed from the previously verified catalogue and one backend-parity scenario was added. The active 550-scenario baseline passed 550/550 on PostgreSQL 18.3 on 3 September 2026.
 
 Coverage includes:
 
@@ -561,7 +561,7 @@ This plan is complete only when:
 
 - at least 540 unique, active, non-inflated scenarios are implemented;
 - every active scenario satisfies the metadata and evidence contract;
-- all 59 OpenAPI operations have deliberate ownership and runtime-observed browser evidence where the UI consumes them;
+- all 60 OpenAPI operations have deliberate ownership and runtime-observed browser evidence where the UI consumes them;
 - all mutation scenarios verify PostgreSQL and durable audit outcomes;
 - no request interception or synthetic product response exists;
 - all scenarios pass against PostgreSQL 15.17, 16.13, 17.11, and 18.3;

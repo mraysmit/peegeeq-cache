@@ -34,6 +34,7 @@ public final class ManagementRouteTemplate {
             route("/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute"),
             route("/api/v1/setups/{setupId}/entries/batch-get"),
             route("/api/v1/setups/{setupId}/entries/batch-set"),
+            route("/api/v1/setups/{setupId}/entries/batch-delete"),
             route("/api/v1/setups/{setupId}/entries/scan"),
             route("/api/v1/setups/{setupId}/cache-metrics"),
             route("/api/v1/setups/{setupId}/counters"),

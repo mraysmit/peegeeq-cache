@@ -70,6 +70,7 @@ final class ManagementConsolePostgresFixture {
             Map.entry("publishPubSubMessage", "PUBLISH_PUBSUB"),
             Map.entry("batchGetEntries", "BATCH_GET_ENTRIES"),
             Map.entry("batchSetEntries", "BATCH_SET_ENTRIES"),
+            Map.entry("batchDeleteEntries", "BATCH_DELETE_ENTRIES"),
             Map.entry("scanEntries", "SCAN_ENTRY_VALUES"),
             Map.entry("acquireLock", "ACQUIRE_LOCK"),
             Map.entry("renewLock", "RENEW_LOCK"),

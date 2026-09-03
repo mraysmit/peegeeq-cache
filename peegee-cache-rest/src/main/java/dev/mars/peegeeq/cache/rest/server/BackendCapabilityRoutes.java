@@ -72,6 +72,8 @@ public final class BackendCapabilityRoutes implements ManagementRequestRouter {
             "^/api/v1/setups/([^/]+)/entries/batch-get$");
     private static final Pattern BATCH_SET = Pattern.compile(
             "^/api/v1/setups/([^/]+)/entries/batch-set$");
+    private static final Pattern BATCH_DELETE = Pattern.compile(
+            "^/api/v1/setups/([^/]+)/entries/batch-delete$");
     private static final Pattern SCAN = Pattern.compile(
             "^/api/v1/setups/([^/]+)/entries/scan$");
     private static final Pattern LOCK_ACTION = Pattern.compile(
@@ -131,6 +133,11 @@ public final class BackendCapabilityRoutes implements ManagementRequestRouter {
         Matcher batchSet = BATCH_SET.matcher(request.path());
         if (batchSet.matches()) {
             routeBody(request, batchSet.group(1), Operation.BATCH_SET, null);
+            return true;
+        }
+        Matcher batchDelete = BATCH_DELETE.matcher(request.path());
+        if (batchDelete.matches()) {
+            routeBody(request, batchDelete.group(1), Operation.BATCH_DELETE, null);
             return true;
         }
         Matcher scan = SCAN.matcher(request.path());
@@ -243,6 +250,8 @@ public final class BackendCapabilityRoutes implements ManagementRequestRouter {
                         request, setupId, authenticated, correlationId, parseBatchGet(body));
                 case BATCH_SET -> executeBatchSet(
                         request, setupId, authenticated, correlationId, parseBatchSet(body));
+                case BATCH_DELETE -> executeBatchDelete(
+                        request, setupId, authenticated, correlationId, parseBatchDelete(body));
                 case SCAN -> executeScan(
                         request, setupId, authenticated, correlationId, parseScan(body));
                 case LOCK -> executeLock(
@@ -297,6 +306,30 @@ public final class BackendCapabilityRoutes implements ManagementRequestRouter {
                 "ENTRIES_BATCH_SET",
                 () -> registry.cache(setupId).cache().setMany(entries))
                 .onSuccess(results -> writeBatchSet(request, entries, results, correlationId))
+                .onFailure(failure -> writeProblem(request, failure, correlationId));
+    }
+
+    private void executeBatchDelete(
+            HttpServerRequest request,
+            String setupId,
+            AuthenticatedManagementRequest authenticated,
+            String correlationId,
+            List<CacheKey> keys) {
+        audited(
+                authenticated,
+                correlationId,
+                setupId,
+                ManagementAuditAction.BATCH_DELETE_ENTRIES,
+                ManagementResourceType.BULK_SELECTION,
+                Map.of(),
+                null,
+                "ENTRIES_BATCH_DELETED",
+                () -> registry.cache(setupId).cache().deleteMany(keys))
+                .onSuccess(deleted -> {
+                    ObjectNode response = json.createObjectNode();
+                    response.put("deletedCount", Long.toString(deleted));
+                    writeJson(request, 200, response, correlationId, true);
+                })
                 .onFailure(failure -> writeProblem(request, failure, correlationId));
     }
 
@@ -429,6 +462,12 @@ public final class BackendCapabilityRoutes implements ManagementRequestRouter {
                     requiredBoolean(node, "returnPreviousValue")));
         }
         return List.copyOf(entries);
+    }
+
+    private List<CacheKey> parseBatchDelete(byte[] body) {
+        JsonNode root = parseObject(body);
+        requireFields(root, Set.of("keys"));
+        return parseKeys(root.get("keys"));
     }
 
     private ParsedScan parseScan(byte[] body) {
@@ -938,7 +977,7 @@ public final class BackendCapabilityRoutes implements ManagementRequestRouter {
         return supplied == null || supplied.isBlank() ? UUID.randomUUID().toString() : supplied;
     }
 
-    private enum Operation { BATCH_GET, BATCH_SET, SCAN, LOCK }
+    private enum Operation { BATCH_GET, BATCH_SET, BATCH_DELETE, SCAN, LOCK }
 
     private record BatchGet(List<CacheKey> keys, String reason) { }
 

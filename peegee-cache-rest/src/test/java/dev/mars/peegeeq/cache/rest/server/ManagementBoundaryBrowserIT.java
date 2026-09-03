@@ -67,7 +67,7 @@ class ManagementBoundaryBrowserIT {
                     Page page = openPubSub(context);
                     page.getByLabel("Publish channel").fill("boundary-channel");
                     page.getByLabel("Payload").fill("x".repeat(7_500));
-                    assertThat(page.getByText("7500 / 7500 UTF-8 bytes",
+                    assertThat(page.getByText("7500 raw · 7500 / 7500 wire bytes",
                             new Page.GetByTextOptions().setExact(true))).isVisible();
                     assertThat(page.getByRole(AriaRole.BUTTON,
                             new Page.GetByRoleOptions().setName("Publish").setExact(true))).isEnabled();
@@ -92,7 +92,7 @@ class ManagementBoundaryBrowserIT {
                     Page page = openPubSub(context);
                     page.getByLabel("Publish channel").fill("boundary-channel");
                     page.getByLabel("Payload").fill("x".repeat(7_501));
-                    assertThat(page.getByText("7501 / 7500 UTF-8 bytes",
+                    assertThat(page.getByText("7501 raw · 7501 / 7500 wire bytes",
                             new Page.GetByTextOptions().setExact(true))).isVisible();
                     assertThat(page.getByRole(AriaRole.BUTTON,
                             new Page.GetByRoleOptions().setName("Publish").setExact(true))).isDisabled();

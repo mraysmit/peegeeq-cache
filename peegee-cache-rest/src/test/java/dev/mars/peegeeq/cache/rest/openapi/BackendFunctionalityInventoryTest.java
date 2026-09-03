@@ -7,6 +7,7 @@ import dev.mars.peegeeq.cache.api.admin.AdminService;
 import dev.mars.peegeeq.cache.api.cache.CacheService;
 import dev.mars.peegeeq.cache.api.counter.CounterService;
 import dev.mars.peegeeq.cache.api.lock.LockService;
+import dev.mars.peegeeq.cache.api.management.ManagementService;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import dev.mars.peegeeq.cache.api.pubsub.Subscription;
 import dev.mars.peegeeq.cache.api.scan.ScanService;
@@ -34,7 +35,8 @@ class BackendFunctionalityInventoryTest {
             PubSubService.class,
             Subscription.class,
             ScanService.class,
-            AdminService.class);
+            AdminService.class,
+            ManagementService.class);
 
     private static final Map<String, Set<String>> MAPPINGS = Map.ofEntries(
             entry("CacheService.get", Set.of("getEntry", "revealEntryValue")),
@@ -42,7 +44,7 @@ class BackendFunctionalityInventoryTest {
             entry("CacheService.set", Set.of("batchSetEntries")),
             entry("CacheService.setMany", Set.of("batchSetEntries")),
             entry("CacheService.delete", Set.of("deleteEntry")),
-            entry("CacheService.deleteMany", Set.of("executeEntryBulkDelete")),
+            entry("CacheService.deleteMany", Set.of("batchDeleteEntries")),
             entry("CacheService.exists", Set.of("checkEntryExists")),
             entry("CacheService.ttl", Set.of("getEntry")),
             entry("CacheService.expire", Set.of("expireEntry")),
@@ -68,7 +70,37 @@ class BackendFunctionalityInventoryTest {
             entry("Subscription.unsubscribe", Set.of("deletePubSubSubscription")),
             entry("ScanService.scan", Set.of("scanEntries")),
             entry("AdminService.entryStats", Set.of("getNamespace")),
-            entry("AdminService.metrics", Set.of("getCacheMetrics")));
+            entry("AdminService.metrics", Set.of("getCacheMetrics")),
+            entry("ManagementService.capabilities", Set.of("getSetupCapabilities")),
+            entry("ManagementService.overview", Set.of("getOverview")),
+            entry("ManagementService.databaseMonitoring", Set.of("getDatabaseMonitoring")),
+            entry("ManagementService.namespaces", Set.of("listNamespaces", "exportNamespaces")),
+            entry("ManagementService.namespace", Set.of("getNamespace")),
+            entry("ManagementService.entries", Set.of("listEntries")),
+            entry("ManagementService.entry", Set.of("getEntry")),
+            entry("ManagementService.revealEntry", Set.of("revealEntryValue")),
+            entry("ManagementService.setEntry", Set.of("setEntry")),
+            entry("ManagementService.expireEntry", Set.of("expireEntry")),
+            entry("ManagementService.persistEntry", Set.of("persistEntry")),
+            entry("ManagementService.touchEntry", Set.of("touchEntry")),
+            entry("ManagementService.deleteEntry", Set.of("deleteEntry")),
+            entry("ManagementService.counters", Set.of("listCounters")),
+            entry("ManagementService.counter", Set.of("getCounter")),
+            entry("ManagementService.setCounter", Set.of("setCounter")),
+            entry("ManagementService.adjustCounter", Set.of("adjustCounter")),
+            entry("ManagementService.expireCounter", Set.of("expireCounter")),
+            entry("ManagementService.persistCounter", Set.of("persistCounter")),
+            entry("ManagementService.deleteCounter", Set.of("deleteCounter")),
+            entry("ManagementService.locks", Set.of("listLocks")),
+            entry("ManagementService.lock", Set.of("getLock")),
+            entry("ManagementService.revealLockOwner", Set.of("revealLockOwner")),
+            entry("ManagementService.forceReleaseLock", Set.of("forceReleaseLock")),
+            entry("ManagementService.databaseStats", Set.of("getOverview")),
+            entry("ManagementService.expiryStats", Set.of("getOverview")),
+            entry("ManagementService.previewEntryDelete", Set.of("previewEntryBulkDelete")),
+            entry("ManagementService.executeEntryDelete", Set.of("executeEntryBulkDelete")),
+            entry("ManagementService.previewCounterDelete", Set.of("previewCounterBulkDelete")),
+            entry("ManagementService.executeCounterDelete", Set.of("executeCounterBulkDelete")));
 
     @Test
     void everyPublicBackendMethodHasAnExistingOpenApiOperation() throws Exception {
@@ -78,7 +110,7 @@ class BackendFunctionalityInventoryTest {
                 .map(method -> type.getSimpleName() + "." + method.getName())
                 .forEach(reflected::add));
 
-        assertEquals(32, reflected.size(), "The reviewed public backend denominator changed");
+        assertEquals(62, reflected.size(), "The reviewed public backend denominator changed");
         assertEquals(reflected, MAPPINGS.keySet(),
                 "Every public method must be added to the functionality matrix mapping");
 

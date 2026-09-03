@@ -110,8 +110,7 @@ class PgPubSubServiceTest {
         received.future().onComplete(ctx.succeeding(msg -> ctx.verify(() -> {
             assertEquals("events", msg.channel());
             assertEquals("hello", msg.payload());
-            // contentType is not transmitted through pg NOTIFY — only payload is
-            assertNull(msg.contentType());
+            assertEquals("text/plain", msg.contentType());
             assertTrue(msg.receivedAtEpochMillis() > 0);
             ctx.completeNow();
         })));

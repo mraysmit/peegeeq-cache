@@ -1000,7 +1000,7 @@ class PostgresSetupRuntimeFactoryTest {
                         managementPort, managementSubscriptionPath, "operator", managementOrigin,
                         "test-session", "test-csrf", null).statusCode());
                 String publishBody = "{\"channel\":\"management-events\","
-                        + "\"payload\":\"published-value\"}";
+                        + "\"payload\":\"published-value\",\"contentType\":\"text/plain\"}";
                 assertEquals(403, post(
                         managementPort, publishPath, null, managementOrigin,
                         "test-session", "test-csrf", "application/json",
@@ -1052,7 +1052,7 @@ class PostgresSetupRuntimeFactoryTest {
                 PubSubMessage received = receivedPublication.get(5, TimeUnit.SECONDS);
                 assertEquals("management-events", received.channel());
                 assertEquals("published-value", received.payload());
-                assertEquals(null, received.contentType());
+                assertEquals("text/plain", received.contentType());
                 assertEquals(1, publicationCount.get());
                 await(publicationSubscription.unsubscribe());
                 var retained = managementSubscriptions.snapshot(

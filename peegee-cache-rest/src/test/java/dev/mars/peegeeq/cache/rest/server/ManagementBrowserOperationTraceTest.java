@@ -26,6 +26,7 @@ class ManagementBrowserOperationTraceTest {
         trace.observe("GET", "/api/v1/setups/browser/namespaces/orders/entries/customer/exists");
         trace.observe("POST", "/api/v1/setups/browser/entries/batch-get");
         trace.observe("POST", "/api/v1/setups/browser/entries/batch-set");
+        trace.observe("POST", "/api/v1/setups/browser/entries/batch-delete");
         trace.observe("POST", "/api/v1/setups/browser/entries/scan");
         trace.observe("GET", "/api/v1/setups/browser/cache-metrics");
         trace.observe("POST", "/api/v1/setups/browser/namespaces/orders/locks/customer/acquire");
@@ -37,6 +38,7 @@ class ManagementBrowserOperationTraceTest {
                 "checkEntryExists",
                 "batchGetEntries",
                 "batchSetEntries",
+                "batchDeleteEntries",
                 "scanEntries",
                 "getCacheMetrics",
                 "acquireLock",

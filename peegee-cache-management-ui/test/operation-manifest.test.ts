@@ -36,11 +36,11 @@ function openApiOperations(): Map<string, OpenApiOperation> {
 }
 
 describe('management UI operation manifest', () => {
-  it('classifies all 59 OpenAPI operations exactly once', () => {
+  it('classifies all 60 OpenAPI operations exactly once', () => {
     const openApi = openApiOperations();
     const identifiers = operationManifest.map((operation) => operation.operationId);
 
-    expect(openApi.size).toBe(59);
+    expect(openApi.size).toBe(60);
     expect(new Set(identifiers).size).toBe(identifiers.length);
     expect(new Set(identifiers)).toEqual(new Set(openApi.keys()));
   });

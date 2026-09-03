@@ -27,12 +27,12 @@ describe('U7 pub/sub protocol and SSE framing', () => {
     const sessionClient = new SessionClient(baseUrl); await sessionClient.load(); const client = new PubSubClient(sessionClient);
     const subscription = await client.createSubscription('setup', 'orders', 20);
     responseBody = { accepted: true, publishedAt: '2026-08-29T10:01:00Z' };
-    const accepted = await client.publish('setup', 'orders', '{"id":1}');
+    const accepted = await client.publish('setup', 'orders', '{"id":1}', 'application/json');
     await client.deleteSubscription('setup', subscription.subscriptionId);
     expect(accepted).toEqual({ accepted: true, publishedAt: '2026-08-29T10:01:00Z' });
     expect(requests.slice(1)).toEqual([
       { method: 'POST', url: '/api/v1/setups/setup/pubsub/subscriptions', body: { channel: 'orders', bufferLimit: 20 } },
-      { method: 'POST', url: '/api/v1/setups/setup/pubsub/publish', body: { channel: 'orders', payload: '{"id":1}' } },
+      { method: 'POST', url: '/api/v1/setups/setup/pubsub/publish', body: { channel: 'orders', payload: '{"id":1}', contentType: 'application/json' } },
       { method: 'DELETE', url: '/api/v1/setups/setup/pubsub/subscriptions/sub-1', body: undefined },
     ]);
   });

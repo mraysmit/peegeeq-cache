@@ -186,10 +186,16 @@ class SomeTest {
   }
   
   // GOOD: Proper test infrastructure
+  private PgConnectOptions connectOptions;
+
   @BeforeEach
   void configureDatabase() {
-      System.setProperty("db.host", postgres.getHost());
-      System.setProperty("db.port", String.valueOf(postgres.getFirstMappedPort()));
+      connectOptions = new PgConnectOptions()
+          .setHost(postgres.getHost())
+          .setPort(postgres.getFirstMappedPort())
+          .setDatabase(postgres.getDatabaseName())
+          .setUser(postgres.getUsername())
+          .setPassword(postgres.getPassword());
   }
   ```
 
@@ -201,7 +207,7 @@ class SomeTest {
 - **Code Practice**:
   ```java
   /**
-   * Integration test that validates system properties with a real database.
+   * Integration test that validates explicit configuration with a real database.
    * Uses TestContainers to provide PostgreSQL for testing.
    * 
    * Requirements:
@@ -224,7 +230,9 @@ class SomeTest {
   static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15");
   
   // Step 2: Configure connection - verify it connects
-  System.setProperty("db.host", postgres.getHost());
+  PgConnectOptions connectOptions = new PgConnectOptions()
+      .setHost(postgres.getHost())
+      .setPort(postgres.getFirstMappedPort());
   
   // Step 3: Test actual functionality - verify it works
   ```
@@ -372,8 +380,10 @@ class OutboxFactoryTest {
   // Don't think: "Expected failure in test environment"
   // Think: "This test needs a real database host"
   
-  // Solution: Provide the real host via TestContainers
-  System.setProperty("db.host", postgres.getHost());
+  // Solution: Inject the real endpoint supplied by TestContainers
+  PgConnectOptions connectOptions = new PgConnectOptions()
+      .setHost(postgres.getHost())
+      .setPort(postgres.getFirstMappedPort());
   ```
 
 ## **Modern Vert.x 5.x Composable Future Patterns**

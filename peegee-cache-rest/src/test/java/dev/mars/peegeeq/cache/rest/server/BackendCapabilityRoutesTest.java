@@ -148,6 +148,12 @@ class BackendCapabilityRoutesTest {
             assertEquals("value", batchSet.path("items").get(0).path("previousEntry")
                     .path("value").path("text").asText());
 
+            JsonNode batchDelete = body(post(port, origin, "role=operator",
+                    "/api/v1/setups/test/entries/batch-delete",
+                    "{\"keys\":[{\"namespace\":\"orders\",\"key\":\"present\"},"
+                            + "{\"namespace\":\"customers\",\"key\":\"other\"}]}"));
+            assertEquals("2", batchDelete.path("deletedCount").asText());
+
             JsonNode scan = body(post(port, origin, "role=operator",
                     "/api/v1/setups/test/entries/scan",
                     "{\"namespace\":\"orders\",\"prefix\":null,\"cursor\":null,"
@@ -175,7 +181,8 @@ class BackendCapabilityRoutesTest {
                     "{\"ownerToken\":\"owner-secret\"}")).path("released").asBoolean());
 
             assertEquals(List.of(
-                            "BATCH_GET_ENTRIES", "BATCH_SET_ENTRIES", "SCAN_ENTRY_VALUES",
+                            "BATCH_GET_ENTRIES", "BATCH_SET_ENTRIES", "BATCH_DELETE_ENTRIES",
+                            "SCAN_ENTRY_VALUES",
                             "ACQUIRE_LOCK", "CHECK_LOCK_OWNERSHIP", "RENEW_LOCK", "RELEASE_LOCK"),
                     audit.intents.stream().map(intent -> intent.action().name()).toList());
             assertEquals(audit.intents.size(), audit.outcomes.size());
@@ -249,6 +256,11 @@ class BackendCapabilityRoutesTest {
                 requests.forEach(request -> values.put(
                         request.key(), new CacheSetResult(true, 9, entry)));
                 yield Future.succeededFuture(values);
+            }
+            case "deleteMany" -> {
+                @SuppressWarnings("unchecked")
+                List<CacheKey> keys = (List<CacheKey>) arguments[0];
+                yield Future.succeededFuture((long) keys.size());
             }
             default -> throw new UnsupportedOperationException(name);
         });

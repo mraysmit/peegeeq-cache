@@ -28,7 +28,19 @@ const overview: Overview = {
     liveCounterCount: '4',
     activeLockCount: '1',
     expiredEntryCount: '3',
+    expiredCounterCount: '2',
     schemaBytes: { availability: 'UNAVAILABLE', reason: 'insufficient privilege', value: null },
+  },
+  databaseStats: {
+    observedAt: '2026-08-26T10:15:30Z',
+    databaseBytes: { availability: 'AVAILABLE', reason: null, value: '8192' },
+    schemaBytes: { availability: 'UNAVAILABLE', reason: 'insufficient privilege', value: null },
+  },
+  expiryStats: {
+    observedAt: '2026-08-26T10:15:30Z',
+    expiredEntryCount: '3',
+    expiredCounterCount: '2',
+    oldestLagMillis: { availability: 'AVAILABLE', reason: null, value: '2500' },
   },
   expiry: {
     oldestExpiredRowLagMillis: 2_500,
@@ -122,6 +134,9 @@ describe('U3 database overview page', () => {
     expect(screen.getByText('Database-wide snapshot')).toBeVisible();
     expect(screen.getAllByText('Unavailable')).not.toHaveLength(0);
     expect(screen.getByText('insufficient privilege')).toBeVisible();
+    expect(screen.getByText('Expired counters awaiting cleanup')).toBeVisible();
+    expect(screen.getByText('Exact expired counters')).toBeVisible();
+    expect(screen.getByText('8 KiB')).toBeVisible();
     expect(screen.getByRole('time', { name: 'Snapshot observed at' })).toHaveAttribute(
       'datetime',
       overview.observedAt,

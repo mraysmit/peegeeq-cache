@@ -584,7 +584,7 @@ Explicit non-goal unless strategy changes:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md)
 
-**Status:** **COMPLETE (M0–M11 COMPLETE)** — the management backend includes the complete typed/PostgreSQL REST surface, security and lifecycle, atomic administration, audited pub/sub, bounded live transports, mandatory bounded Micrometer/Prometheus telemetry, shared per-setup metrics sampling, both executable authentication configurations, a verified executable Java 21 artifact, operational guidance, complete runtime configuration, and full backend-facade REST parity. The clean 2 September 2026 PostgreSQL 18.3 reactor passed all 11 modules under OpenJDK 25 with 799 Surefire, 553 Failsafe, and 129 Vitest tests and zero failures, errors, or skips. The 553 Failsafe tests comprise 550 packaged desktop-browser scenarios and three runnable-artifact/evidence checks; the prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained.
+**Status:** **COMPLETE (M0–M11 COMPLETE)** — the management backend includes the complete typed/PostgreSQL REST surface, security and lifecycle, atomic administration, audited pub/sub, bounded live transports, mandatory bounded Micrometer/Prometheus telemetry, shared per-setup metrics sampling, both executable authentication configurations, a verified executable Java 21 artifact, operational guidance, complete runtime configuration, and full backend-facade REST parity. The clean 3 September 2026 PostgreSQL 18.3 reactor passed all 11 modules under OpenJDK 25 in 35 minutes 49 seconds with 801 Surefire, 553 Failsafe, and 129 Vitest tests and zero failures, errors, or skips. The 553 Failsafe tests comprise 550 packaged desktop-browser scenarios and three runnable-artifact/evidence checks; the prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained.
 
 Scope:
 
@@ -607,9 +607,9 @@ Prerequisites:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md)
 
-**Backend-functionality coverage authority:** [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The matrix now maps all 32 public data-service methods to the 59 declared management operations and their production desktop workflows, with no open functionality gaps.
+**Backend-functionality coverage authority:** [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The matrix maps all 32 public data-service methods and all 30 `ManagementService` methods to the 60 declared management operations and their production desktop workflows, with no open functionality gaps.
 
-**Status:** **COMPLETE (U0-U11)** — the desktop-only production console implements setup and complete runtime configuration, overview, namespace, entry inspection/administration, counters, locks, Pub/Sub, monitoring, activity, settings, privacy, and the Advanced operations facade-parity surface. Mobile and tablet behavior is outside the product boundary. Strict runtime validation covers every consumed REST, SSE, and WebSocket payload. Java Playwright owns 17 independent packaged-application journeys; a separate executable accountability contract covers all 59 management operations, and runtime tracing verifies declared operations from observed browser requests and WebSocket openings. Thirteen product journeys run against isolated real TLS PostgreSQL fixtures without request interception.
+**Status:** **COMPLETE (U0-U11)** — the desktop-only production console implements setup and complete runtime configuration, overview, namespace, entry inspection/administration, counters, locks, Pub/Sub, monitoring, activity, settings, privacy, and the Advanced operations facade-parity surface. Mobile and tablet behavior is outside the product boundary. Strict runtime validation covers every consumed REST, SSE, and WebSocket payload. Java Playwright owns 17 independent packaged-application journeys; a separate executable accountability contract covers all 60 management operations, and runtime tracing verifies declared operations from observed browser requests and WebSocket openings. Thirteen product journeys run against isolated real TLS PostgreSQL fixtures without request interception.
 
 Scope:
 
@@ -743,7 +743,7 @@ The implemented boundary is:
 - entry values, raw identifiers, credentials, cursor keys, and audit keys remain absent from ordinary logs and default authoritative audit intents;
 - No management-backend or management-UI implementation stage remains. Production deployment/topology validation and credentialed public publication are separate external release-readiness actions; Phase 8.3 U0-U10 is complete.
 
-Current management evidence includes the clean 2 September 2026 11-module PostgreSQL 18.3 reactor with 799 Surefire, 553 Failsafe, and 129 Vitest tests under OpenJDK 25 and zero failures, errors, or skips. The earlier complete-reactor PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained. The authoritative behavior and evidence are in `PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md` and `PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`.
+Current management evidence includes the clean 3 September 2026 11-module PostgreSQL 18.3 reactor with 801 Surefire, 553 Failsafe, and 129 Vitest tests under OpenJDK 25 and zero failures, errors, or skips. The earlier complete-reactor PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained. The authoritative behavior and evidence are in `PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md` and `PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`.
 
 Completed M5 sequence:
 
@@ -771,7 +771,7 @@ The implemented U1 boundary is:
 
 The delivered U2-U10 boundary builds on those controls without persisting credentials, CSRF material, or revealed values; weakening CSP/static routing; reconstructing server cursors; or duplicating the UI entry point. `ManagementConsoleProductJourneysIT` uses isolated TLS PostgreSQL fixtures and the real schema to verify the packaged U2-U9 console through Chromium, including administration, Pub/Sub and monitoring live transports, conflict recovery, accessibility, lifecycle, and leakage checks. Java Playwright is Maven/Failsafe-owned and does not intercept product requests; focused Java and frontend suites prove the corresponding concurrency, audit, protocol-validation, and cleanup semantics.
 
-No Phase 8.3 implementation task remains. The active desktop catalogue contains 550 independently reported scenarios and three runnable-artifact/evidence checks; the fresh full-reactor PostgreSQL 18.3 gate passed on 2 September 2026. The prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility evidence is retained, while a fresh cross-version parity regate remains release validation. Production-topology benchmarking and credentialed Maven Central publication remain intentionally deferred release-readiness actions.
+No Phase 8.3 implementation task remains. The active desktop catalogue contains 550 independently reported scenarios and three runnable-artifact/evidence checks; the fresh full-reactor PostgreSQL 18.3 gate passed on 3 September 2026. The prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility evidence is retained, while a fresh cross-version parity regate remains release validation. Production-topology benchmarking and credentialed Maven Central publication remain intentionally deferred release-readiness actions.
 
 ## 4. Feature rollout by milestone
 

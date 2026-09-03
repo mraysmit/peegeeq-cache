@@ -2,13 +2,14 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import type { BackendCapabilityClientPort } from '../../api/backend-capability-client';
 import type {
+  BatchDeleteResult,
   BatchGetResult,
   BatchSetResult,
   CacheMetricsSnapshot,
   CoreCacheSetRequest,
-  CoreCacheValue,
   ScanEntriesResult,
 } from '../../api/backend-capability-schemas';
+import { batchSetRequestSchema } from '../../api/backend-capability-schemas';
 import { encodeKey, encodeNamespace } from '../../api/identifier-codec';
 import { ManagementClientError } from '../../api/session-client';
 
@@ -28,13 +29,12 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
   const [key, setKey] = useState('');
   const [exists, setExists] = useState<boolean>();
   const [batchKeys, setBatchKeys] = useState('');
+  const [batchDeleteKeys, setBatchDeleteKeys] = useState('');
   const [batchValues, setBatchValues] = useState('');
   const [reason, setReason] = useState('Interactive console operation');
-  const [setMode, setSetMode] = useState<CoreCacheSetRequest['setMode']>('UPSERT');
-  const [ttl, setTtl] = useState('');
-  const [returnPreviousValue, setReturnPreviousValue] = useState(true);
   const [batchGet, setBatchGet] = useState<BatchGetResult>();
   const [batchSet, setBatchSet] = useState<BatchSetResult>();
+  const [batchDelete, setBatchDelete] = useState<BatchDeleteResult>();
   const [scanPrefix, setScanPrefix] = useState('');
   const [scanLimit, setScanLimit] = useState('50');
   const [scanValues, setScanValues] = useState(true);
@@ -55,6 +55,7 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
   const clearSensitive = () => {
     setBatchGet(undefined);
     setBatchSet(undefined);
+    setBatchDelete(undefined);
     setScan(undefined);
     setOwnerToken('');
     setLockResult('');
@@ -64,6 +65,7 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
     const clear = () => {
       setBatchGet(undefined);
       setBatchSet(undefined);
+      setBatchDelete(undefined);
       setScan(undefined);
       setOwnerToken('');
       setLockResult('');
@@ -109,9 +111,15 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
 
   const setMany = () => void run(async () => {
     setBatchSet(await client.batchSetEntries(selectedSetupId, {
-      entries: parseSetEntries(batchValues, setMode, ttl, returnPreviousValue),
+      entries: parseSetEntries(batchValues),
     }));
   }, 'Batch set completed');
+
+  const deleteMany = () => void run(async () => {
+    setBatchDelete(await client.batchDeleteEntries(selectedSetupId, {
+      keys: parseKeys(batchDeleteKeys),
+    }));
+  }, 'Batch delete completed');
 
   const scanEntries = (cursor: string | null = null) => void run(async () => {
     setScan(await client.scanEntries(selectedSetupId, {
@@ -209,15 +217,17 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
     </Panel>}
 
     {canOperate && canBatch && <Panel title="Batch set">
-      <p>One entry per line: <code>namespace[TAB]key[TAB]STRING|JSON|LONG|BYTES[TAB]value</code>. Version-matched writes add the observed version as a fifth column.</p>
-      <TextArea id="batch-values" label="Batch set entries" onChange={setBatchValues} value={batchValues} />
-      <TwoColumns>
-        <label className="field" htmlFor="batch-set-mode">Set mode<select id="batch-set-mode" onChange={(event) => setSetMode(event.target.value as CoreCacheSetRequest['setMode'])} value={setMode}><option value="UPSERT">Upsert</option><option value="ONLY_IF_ABSENT">Only if absent</option><option value="ONLY_IF_PRESENT">Only if present</option><option value="ONLY_IF_VERSION_MATCHES">Only if version matches</option></select></label>
-        <Field id="batch-ttl" label="TTL milliseconds (blank uses runtime default)" onChange={setTtl} type="number" value={ttl} />
-      </TwoColumns>
-      <label><input checked={returnPreviousValue} onChange={(event) => setReturnPreviousValue(event.target.checked)} type="checkbox" /> Return previous values</label>
+      <p>Provide a JSON array. Every entry independently specifies namespace, key, typed value, TTL, set mode, expected version, and whether to return its previous value.</p>
+      <TextArea id="batch-values" label="Batch set entries (JSON)" onChange={setBatchValues} value={batchValues} />
       <div><button className="button" disabled={busy || batchValues.trim() === ''} onClick={setMany} type="button">Set entry batch</button></div>
       {batchSet !== undefined && <Result title="Batch set result" value={batchSet} />}
+    </Panel>}
+
+    {canOperate && canBatch && <Panel title="Cross-namespace batch delete">
+      <p>One entry per line: <code>namespace[TAB]key</code>. This invokes the core cache service’s exact multi-key delete operation.</p>
+      <TextArea id="batch-delete-keys" label="Batch delete keys" onChange={setBatchDeleteKeys} value={batchDeleteKeys} />
+      <button className="button button--danger" disabled={busy || batchDeleteKeys.trim() === ''} onClick={deleteMany} type="button">Delete entry batch</button>
+      {batchDelete !== undefined && <Result title="Batch delete result" value={batchDelete} />}
     </Panel>}
 
     {canMetrics && <Panel title="Exact core metrics">
@@ -255,36 +265,20 @@ function parseKeys(value: string) {
   });
 }
 
-function parseSetEntries(value: string, setMode: CoreCacheSetRequest['setMode'], ttl: string, returnPreviousValue: boolean): CoreCacheSetRequest[] {
-  return lines(value).map((line) => {
-    const [namespace, key, type, rawValue, version, ...extra] = line.split('\t');
-    if (namespace === undefined || key === undefined || type === undefined || rawValue === undefined || extra.length > 0) throw validation('Each batch-set line must contain namespace, key, type, and value separated by tabs');
-    return {
-      namespace: required(namespace, 'Namespace'),
-      key: required(key, 'Key'),
-      value: parseValue(type, rawValue),
-      ttlMillis: ttl.trim() === '' ? null : positiveInt(ttl, Number.MAX_SAFE_INTEGER, 'TTL'),
-      setMode,
-      expectedVersion: setMode === 'ONLY_IF_VERSION_MATCHES' ? unsigned(required(version ?? '', 'Version')) : null,
-      returnPreviousValue,
-    };
-  });
-}
-
-function parseValue(type: string, value: string): CoreCacheValue {
-  switch (type) {
-    case 'STRING': return { type, text: value };
-    case 'JSON': { try { JSON.parse(value); } catch { throw validation('JSON values must contain valid JSON'); } return { type, text: value }; }
-    case 'LONG': return { type, decimal: signed(value) };
-    case 'BYTES': { try { atob(value); } catch { throw validation('BYTES values must be Base64'); } return { type, base64: value }; }
-    default: throw validation('Value type must be STRING, JSON, LONG, or BYTES');
+function parseSetEntries(value: string): CoreCacheSetRequest[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    const result = batchSetRequestSchema.safeParse({ entries: parsed });
+    if (!result.success) throw validation('Batch set JSON does not match the per-entry request contract');
+    return result.data.entries;
+  } catch (failure) {
+    if (failure instanceof ManagementClientError) throw failure;
+    throw validation('Batch set entries must be a valid JSON array');
   }
 }
 
 function lines(value: string) { const parsed = value.split(/\r?\n/u).filter((line) => line.trim() !== ''); if (parsed.length === 0 || parsed.length > 1_000) throw validation('Provide between 1 and 1000 lines'); return parsed; }
 function required(value: string, label: string) { if (value.trim() === '') throw validation(`${label} is required`); return value; }
-function unsigned(value: string) { if (!/^(?:0|[1-9][0-9]*)$/u.test(value)) throw validation('Version must be a non-negative decimal integer'); return value; }
-function signed(value: string) { if (!/^-?(?:0|[1-9][0-9]*)$/u.test(value)) throw validation('LONG value must be a signed decimal integer'); const parsed = BigInt(value); if (parsed < -9_223_372_036_854_775_808n || parsed > 9_223_372_036_854_775_807n) throw validation('LONG value is outside the signed 64-bit range'); return value; }
 function positiveInt(value: string, maximum: number, label: string) { const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) throw validation(`${label} must be a positive integer`); return parsed; }
 function validation(message: string) { return new ManagementClientError(400, 'VALIDATION_FAILED', message); }
 function asError(value: unknown) { return value instanceof ManagementClientError ? value : new ManagementClientError(0, 'OPERATION_FAILED', 'Advanced operation failed'); }

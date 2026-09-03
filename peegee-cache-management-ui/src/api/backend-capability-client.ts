@@ -5,6 +5,8 @@ import {
   batchGetResultSchema,
   batchSetRequestSchema,
   batchSetResultSchema,
+  batchDeleteRequestSchema,
+  batchDeleteResultSchema,
   cacheMetricsSnapshotSchema,
   entryExistsResultSchema,
   lockOwnerRequestSchema,
@@ -20,6 +22,8 @@ import {
   type BatchGetResult,
   type BatchSetRequest,
   type BatchSetResult,
+  type BatchDeleteRequest,
+  type BatchDeleteResult,
   type CacheMetricsSnapshot,
   type RenewLockRequest,
   type ScanEntriesRequest,
@@ -31,6 +35,7 @@ export interface BackendCapabilityClientPort {
   entryExists(setupId: string, encodedNamespace: string, encodedKey: string): Promise<boolean>;
   batchGetEntries(setupId: string, request: BatchGetRequest): Promise<BatchGetResult>;
   batchSetEntries(setupId: string, request: BatchSetRequest): Promise<BatchSetResult>;
+  batchDeleteEntries(setupId: string, request: BatchDeleteRequest): Promise<BatchDeleteResult>;
   scanEntries(setupId: string, request: ScanEntriesRequest): Promise<ScanEntriesResult>;
   acquireLock(setupId: string, encodedNamespace: string, encodedKey: string, request: AcquireLockRequest): Promise<AcquireLockResult>;
   renewLock(setupId: string, encodedNamespace: string, encodedKey: string, request: RenewLockRequest): Promise<boolean>;
@@ -56,6 +61,10 @@ export class BackendCapabilityClient implements BackendCapabilityClientPort {
 
   async batchSetEntries(setupId: string, request: BatchSetRequest): Promise<BatchSetResult> {
     return parse(batchSetResultSchema, await this.post(setupId, 'entries/batch-set', validate(batchSetRequestSchema, request)));
+  }
+
+  async batchDeleteEntries(setupId: string, request: BatchDeleteRequest): Promise<BatchDeleteResult> {
+    return parse(batchDeleteResultSchema, await this.post(setupId, 'entries/batch-delete', validate(batchDeleteRequestSchema, request)));
   }
 
   async scanEntries(setupId: string, request: ScanEntriesRequest): Promise<ScanEntriesResult> {

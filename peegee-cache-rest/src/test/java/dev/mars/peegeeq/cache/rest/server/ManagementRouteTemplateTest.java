@@ -22,6 +22,8 @@ class ManagementRouteTemplateTest {
                 ManagementRouteTemplate.resolve("/api/v1/setups/customer:secret/entries/batch-get"));
         assertEquals("/api/v1/setups/{setupId}/entries/batch-set",
                 ManagementRouteTemplate.resolve("/api/v1/setups/customer:secret/entries/batch-set"));
+        assertEquals("/api/v1/setups/{setupId}/entries/batch-delete",
+                ManagementRouteTemplate.resolve("/api/v1/setups/customer:secret/entries/batch-delete"));
         assertEquals("/api/v1/setups/{setupId}/entries/scan",
                 ManagementRouteTemplate.resolve("/api/v1/setups/customer:secret/entries/scan"));
         assertEquals("/api/v1/setups/{setupId}/cache-metrics",

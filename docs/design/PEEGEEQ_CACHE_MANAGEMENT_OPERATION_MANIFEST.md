@@ -1,14 +1,14 @@
 # PeeGeeQ Cache Management V1 Operation Manifest
 
-**Status:** Reviewed 59-operation contract
+**Status:** Reviewed 60-operation contract
 
-**Date:** 20 August 2026
+**Date:** 3 September 2026
 
 **Base path:** `/api/v1` except the monitoring WebSocket, which is rooted at `/ws`
 
 This is the closed operation inventory used by the M1 OpenAPI completeness test. The authoritative behavioral detail remains [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md). Every row below names an exact method/path, operation identifier, security profile, request and success schema, statuses/headers, capability/limit rules, audit behavior, retry policy, and endpoint-specific problem codes. No abbreviated path is normative.
 
-This manifest proves completeness against the declared management REST boundary. Independent backend-to-REST-to-UI traceability is owned by [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md), and `BackendFunctionalityInventoryTest` ensures all 32 public data-service methods map into this inventory.
+This manifest proves completeness against the declared management REST boundary. Independent backend-to-REST-to-UI traceability is owned by [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md), and `BackendFunctionalityInventoryTest` ensures all 32 public data-service methods and all 30 `ManagementService` methods map into this inventory.
 
 ## Shared rules referenced by every row
 
@@ -90,14 +90,15 @@ Common validation applies before service invocation:
 
 | Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Capability and limits | Audit / retry | Specific problems |
 |---|---|---|---|---|---|---|---|
-| `checkEntryExists` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists` | `VIEW` | none → `EntryExistsResult` | `200 / N` | connected runtime; no value transfer | no audit / safe read retry | `SETUP_NOT_FOUND`, `RUNTIME_STOPPED`, `INVALID_IDENTIFIER` |
+| `checkEntryExists` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists` | `VIEW` | none → `EntryExistsResult` | `200 / R` | connected runtime; no value transfer | no audit / safe read retry | `SETUP_NOT_FOUND`, `RUNTIME_STOPPED`, `INVALID_IDENTIFIER` |
 | `batchGetEntries` | `POST /api/v1/setups/{setupId}/entries/batch-get` | `REVEAL` | `BatchGetEntriesRequest` → `BatchGetEntriesResult` | `200 / R` | 1–1,000 keys; typed hit/miss values; operation/reveal rate limits | required `BATCH_GET_ENTRIES` / never | `RATE_LIMITED`, `REQUEST_TOO_LARGE`, `INVALID_IDENTIFIER` |
-| `batchSetEntries` | `POST /api/v1/setups/{setupId}/entries/batch-set` | `OPERATE` | `BatchSetEntriesRequest` → `BatchSetEntriesResult` | `200 / N` | 1–1,000 typed per-item requests; all set modes, TTL, expected version, optional previous value | required `BATCH_SET_ENTRIES` / never | `RATE_LIMITED`, `REQUEST_TOO_LARGE`, `JSON_VALUE_INVALID`, `VALUE_TYPE_MISMATCH` |
+| `batchSetEntries` | `POST /api/v1/setups/{setupId}/entries/batch-set` | `OPERATE` | `BatchSetEntriesRequest` → `BatchSetEntriesResult` | `200 / R` | 1–1,000 typed per-item requests; all set modes, TTL, expected version, optional previous value | required `BATCH_SET_ENTRIES` / never | `RATE_LIMITED`, `REQUEST_TOO_LARGE`, `JSON_VALUE_INVALID`, `VALUE_TYPE_MISMATCH` |
+| `batchDeleteEntries` | `POST /api/v1/setups/{setupId}/entries/batch-delete` | `OPERATE` | `BatchDeleteEntriesRequest` → `BatchDeleteEntriesResult` | `200 / R` | 1–1,000 unique exact keys across namespaces; exact deleted count | required `BATCH_DELETE_ENTRIES` / never | `RATE_LIMITED`, `REQUEST_TOO_LARGE`, `INVALID_IDENTIFIER` |
 | `scanEntries` | `POST /api/v1/setups/{setupId}/entries/scan` | `REVEAL` | `ScanEntriesRequest` → `ScanEntriesResult` | `200 / R` | limit 1–200; namespace/prefix/cursor/include-expired/include-values | required `SCAN_ENTRY_VALUES` / never | `RATE_LIMITED`, `INVALID_CURSOR`, `INVALID_IDENTIFIER` |
-| `getCacheMetrics` | `GET /api/v1/setups/{setupId}/cache-metrics` | `VIEW` | none → `CacheMetricsSnapshot` | `200 / N` | exact facade metrics; 64-bit counts transported as decimal strings | no audit / safe read retry | `SETUP_NOT_FOUND`, `RUNTIME_STOPPED` |
-| `acquireLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/acquire` | `OPERATE` | `AcquireLockRequest` → `AcquireLockResult` | `200 / N` | owner token in body only; positive lease; operation rate limit | required `ACQUIRE_LOCK` / never | `RATE_LIMITED`, `INVALID_IDENTIFIER` |
-| `renewLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/renew` | `OPERATE` | `RenewLockRequest` → `RenewLockResult` | `200 / N` | owner token in body only; positive lease; operation rate limit | required `RENEW_LOCK` / never | `RATE_LIMITED`, `INVALID_IDENTIFIER` |
-| `releaseLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/release` | `OPERATE` | `LockOwnerRequest` → `ReleaseLockResult` | `200 / N` | owner-authenticated normal release; operation rate limit | required `RELEASE_LOCK` / never | `RATE_LIMITED`, `INVALID_IDENTIFIER` |
+| `getCacheMetrics` | `GET /api/v1/setups/{setupId}/cache-metrics` | `VIEW` | none → `CacheMetricsSnapshot` | `200 / R` | exact facade metrics; 64-bit counts transported as decimal strings | no audit / safe read retry | `SETUP_NOT_FOUND`, `RUNTIME_STOPPED` |
+| `acquireLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/acquire` | `OPERATE` | `AcquireLockRequest` → `AcquireLockResult` | `200 / R` | owner token in body only; positive lease; operation rate limit | required `ACQUIRE_LOCK` / never | `RATE_LIMITED`, `INVALID_IDENTIFIER` |
+| `renewLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/renew` | `OPERATE` | `RenewLockRequest` → `RenewLockResult` | `200 / R` | owner token in body only; positive lease; operation rate limit | required `RENEW_LOCK` / never | `RATE_LIMITED`, `INVALID_IDENTIFIER` |
+| `releaseLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/release` | `OPERATE` | `LockOwnerRequest` → `ReleaseLockResult` | `200 / R` | owner-authenticated normal release; operation rate limit | required `RELEASE_LOCK` / never | `RATE_LIMITED`, `INVALID_IDENTIFIER` |
 | `checkLockOwnership` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/ownership` | `REVEAL` | `LockOwnerRequest` → `LockOwnershipResult` | `200 / R` | owner token in body only; response is boolean only; reveal rate limit | required `CHECK_LOCK_OWNERSHIP` / never | `RATE_LIMITED`, `INVALID_IDENTIFIER` |
 
 ## Counters and locks
@@ -126,7 +127,7 @@ Common validation applies before service invocation:
 | `streamPubSubMessages` | `GET /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}/stream` | `SSE` | optional `Last-Event-ID` → `PubSubSseEvent` stream | `200 / S` | owner only; one-hour subscription; five-minute resume; bounded entries/bytes | safe stream lifecycle / bounded reconnect | `SUBSCRIPTION_NOT_FOUND`, `SUBSCRIPTION_EXPIRED`, `PUBSUB_UNAVAILABLE` |
 | `revealPubSubPayload` | `POST /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}/messages/{messageId}/payload/reveal` | `REVEAL`, owner | optional `RevealReasonRequest` → `RevealedPubSubPayload` | `200 / R` | retained owner buffer only; reveal rate; nullable content type | required `PUBSUB_PAYLOAD_REVEALED` / never | `SUBSCRIPTION_NOT_FOUND`, `MESSAGE_NOT_FOUND`, `MESSAGE_EXPIRED` |
 | `deletePubSubSubscription` | `DELETE /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}` | `VIEW_MUTATE`, owner | none → none | `204 / C` | owner only | required `SUBSCRIPTION_DELETED` / never | `SUBSCRIPTION_NOT_FOUND` |
-| `publishPubSubMessage` | `POST /api/v1/setups/{setupId}/pubsub/publish` | `OPERATE` | `PublishRequest` → `PublishAccepted` | `200 / C` | pub/sub; channel byte max; setup payload byte max; publish rate | required `PUBSUB_PUBLISHED` / never | `PAYLOAD_TOO_LARGE`, `RATE_LIMITED`, `PUBSUB_UNAVAILABLE`, `CAPABILITY_UNAVAILABLE` |
+| `publishPubSubMessage` | `POST /api/v1/setups/{setupId}/pubsub/publish` | `OPERATE` | `PublishRequest` with optional `contentType` → `PublishAccepted` | `200 / C` | pub/sub; channel byte max; encoded wire-payload byte max; publish rate; versioned typed envelope | required `PUBSUB_PUBLISHED` / never | `PAYLOAD_TOO_LARGE`, `RATE_LIMITED`, `PUBSUB_UNAVAILABLE`, `CAPABILITY_UNAVAILABLE` |
 | `getDatabaseMonitoring` | `GET /api/v1/setups/{setupId}/monitoring/database` | `VIEW` | none → `DatabaseMonitoring` | `200 / C` | database-statistics capability; permission fields use availability wrappers | no audit / safe read retry | `CAPABILITY_UNAVAILABLE` |
 | `getRuntimeMonitoring` | `GET /api/v1/setups/{setupId}/monitoring/runtime` | `VIEW` | none → `RuntimeMonitoring` | `200 / C` | process-local bounded dimensions only | no audit / safe read retry | `SETUP_NOT_FOUND` |
 | `streamMetrics` | `GET /api/v1/setups/{setupId}/sse/metrics` | `SSE` | optional `Last-Event-ID` → `MetricsSseEvent` stream | `200 / S` | 15-second snapshots/heartbeat; bounded five-minute resume | safe stream lifecycle / bounded reconnect | `SETUP_NOT_FOUND` |
@@ -149,4 +150,4 @@ Touch is explicitly version-stable: a successful touch returns updated metadata 
 
 ## M1 acceptance use
 
-`ManagementOpenApiContractTest.matchesReviewedOperationManifest` compares all 59 operation IDs and exact method/path pairs in this document with OpenAPI. It also verifies each row's security profile, success status/schema, problem response, headers, and declared transport schemas.
+`ManagementOpenApiContractTest.matchesReviewedOperationManifest` compares all 60 operation IDs and exact method/path pairs in this document with OpenAPI. It also verifies each row's security profile, success status/schema, problem response, headers, and declared transport schemas.

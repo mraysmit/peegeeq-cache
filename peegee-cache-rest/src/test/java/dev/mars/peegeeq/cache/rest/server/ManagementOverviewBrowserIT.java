@@ -64,13 +64,16 @@ class ManagementOverviewBrowserIT {
         overview(context -> assertThat(metric(context.page(), "Active locks")).containsText("1"));
     }
 
-    @ManagementBrowserScenario(id = "PW-OVERVIEW-008", requirement = "Management API: zero expired rows is an exact available value", area = ManagementBrowserArea.OVERVIEW, risk = ManagementBrowserRisk.HIGH, action = "Inspect Expired rows awaiting cleanup", expectedResult = "The exact value is 0 rather than Unavailable", cleanup = "Close the scoped context and reset PostgreSQL", operations = {"getOverview", "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-OVERVIEW-008", requirement = "Management API: zero expired entry and counter rows are exact available values", area = ManagementBrowserArea.OVERVIEW, risk = ManagementBrowserRisk.HIGH, action = "Inspect the separate expired-entry and expired-counter totals", expectedResult = "Both exact values are 0 rather than Unavailable", cleanup = "Close the scoped context and reset PostgreSQL", operations = {"getOverview", "getDatabaseMonitoring", "getRuntimeMonitoring", "listActivity"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void overviewDistinguishesZeroExpiredRowsFromUnavailable() throws Exception {
         overview(context -> {
-            Locator card = metric(context.page(), "Expired rows awaiting cleanup");
-            assertThat(card).containsText("0");
-            assertThat(card).not().containsText("Unavailable");
+            Locator entryCard = metric(context.page(), "Expired entries awaiting cleanup");
+            Locator counterCard = metric(context.page(), "Expired counters awaiting cleanup");
+            assertThat(entryCard).containsText("0");
+            assertThat(entryCard).not().containsText("Unavailable");
+            assertThat(counterCard).containsText("0");
+            assertThat(counterCard).not().containsText("Unavailable");
         });
     }
 

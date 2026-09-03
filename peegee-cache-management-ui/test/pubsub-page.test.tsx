@@ -8,10 +8,10 @@ import type { LiveStream, PubSubStreamPort } from '@src/api/live-transport';
 import { PubSubPage } from '@src/features/pubsub/PubSubPage';
 
 class PubSubFake implements PubSubClientPort {
-  published: string[] = [];
+  published: Array<{ payload: string; contentType?: string }> = [];
   stopped = false;
   async createSubscription() { return { subscriptionId: 'sub-1', channel: 'orders', streamPath: '/stream', bufferLimit: 20, createdAt: '2026-08-29T10:00:00Z', expiresAt: '2099-08-29T10:00:00Z' }; }
-  async publish(_setup: string, _channel: string, payload: string) { this.published.push(payload); return { accepted: true as const, publishedAt: '2026-08-29T10:01:00Z' }; }
+  async publish(_setup: string, _channel: string, payload: string, contentType?: string) { this.published.push({ payload, contentType }); return { accepted: true as const, publishedAt: '2026-08-29T10:01:00Z' }; }
   async revealPayload(): Promise<RevealedPubSubPayload> { return { messageId: 'm1', channel: 'orders', payload: '<secret>&value', contentType: null, encoding: 'UTF8', receivedAt: '2026-08-29T10:01:00Z', revealedAt: '2026-08-29T10:01:01Z', autoHideAfterMillis: 60_000 }; }
   async deleteSubscription() { this.stopped = true; }
 }
@@ -28,8 +28,9 @@ describe('U7 Pub/Sub page', () => {
     expect(screen.queryByRole('heading', { name: 'Publish' })).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Channel'), 'orders');
     await user.click(screen.getByRole('button', { name: 'Start subscription' }));
-    stream.message?.({ messageId: 'm1', channel: 'orders', contentType: null, payloadBytes: 14, receivedAt: '2026-08-29T10:01:00Z', payloadState: 'MASKED' });
+    stream.message?.({ messageId: 'm1', channel: 'orders', contentType: 'application/json', payloadBytes: 14, receivedAt: '2026-08-29T10:01:00Z', payloadState: 'MASKED' });
     expect(await screen.findByText('Masked')).toBeVisible();
+    expect(screen.getByText('application/json')).toBeVisible();
     expect(screen.getByRole('region', { name: 'Retained Pub/Sub messages' })).toHaveAttribute('tabindex', '0');
     expect(screen.queryByRole('button', { name: /Reveal payload/u })).not.toBeInTheDocument();
   });
@@ -59,7 +60,7 @@ describe('U7 Pub/Sub page', () => {
     await user.click(screen.getByRole('button', { name: 'Publish' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Accepted by PostgreSQL');
     expect(screen.getByRole('status')).not.toHaveTextContent(/deliver/i);
-    expect(client.published).toEqual(['ok']);
+    expect(client.published).toEqual([{ payload: 'ok', contentType: '' }]);
   });
 
   it('enforces subscription and publish channel limits as UTF-8 bytes', async () => {

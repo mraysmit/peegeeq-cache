@@ -48,6 +48,12 @@ describe('complete backend capability protocol', () => {
     await client.batchSetEntries('setup', { entries: [{ namespace: 'orders', key: 'one', value: { type: 'LONG', decimal: '9223372036854775807' }, ttlMillis: null, setMode: 'ONLY_IF_VERSION_MATCHES', expectedVersion: '2', returnPreviousValue: true }] });
     expect(requests.at(-1)?.body).toMatchObject({ entries: [{ expectedVersion: '2', returnPreviousValue: true }] });
 
+    responseBody = { deletedCount: '2' };
+    await expect(client.batchDeleteEntries('setup', { keys: [
+      { namespace: 'orders', key: 'one' }, { namespace: 'customers', key: 'two' },
+    ] })).resolves.toEqual({ deletedCount: '2' });
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/v1/setups/setup/entries/batch-delete' });
+
     responseBody = { entries: [entry], nextCursor: null, hasMore: false };
     await client.scanEntries('setup', { namespace: 'orders', prefix: null, cursor: null, limit: 50, includeValues: true, includeExpired: true, reason: 'incident review' });
     expect(requests.at(-1)?.body).toMatchObject({ includeValues: true, includeExpired: true });

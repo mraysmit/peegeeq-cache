@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management Build and Configuration Decision
 
-**Status:** Accepted and implemented; Phase 8.3 U0-U11 complete as of 2 September 2026
+**Status:** Accepted and implemented; Phase 8.3 U0-U11 complete as of 3 September 2026
 
 **Date:** 20 August 2026
 
