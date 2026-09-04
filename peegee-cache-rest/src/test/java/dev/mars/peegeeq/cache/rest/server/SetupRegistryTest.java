@@ -48,7 +48,12 @@ class SetupRegistryTest {
         assertFalse(result.capabilities().counterMutation());
         assertFalse(result.capabilities().entryValueReveal());
         assertFalse(result.capabilities().lockOwnerReveal());
-        assertTrue(result.capabilities().pubSubPayloadReveal());
+        assertFalse(result.capabilities().pubSub());
+        assertFalse(result.capabilities().pubSubPayloadReveal());
+        assertFalse(result.capabilities().batchEntryOperations());
+        assertFalse(result.capabilities().valueScan());
+        assertFalse(result.capabilities().cacheMetrics());
+        assertFalse(result.capabilities().ownerLockOperations());
         assertEquals(10_485_760, result.limits().maximumValueBytes());
     }
 

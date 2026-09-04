@@ -161,6 +161,36 @@ final class PostgresManagedSetupRuntime implements ManagedSetupRuntime {
     }
 
     @Override
+    public boolean supportsPubSub() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsPubSubPayloadReveal() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsBatchEntryOperations() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsValueScan() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsCacheMetrics() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsOwnerLockOperations() {
+        return true;
+    }
+
+    @Override
     public synchronized Future<Void> closeAsync() {
         if (closing != null) {
             return closing;

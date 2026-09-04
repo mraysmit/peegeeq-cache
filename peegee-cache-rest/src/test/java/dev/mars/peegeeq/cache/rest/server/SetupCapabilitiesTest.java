@@ -27,29 +27,31 @@ class SetupCapabilitiesTest {
 
         SetupCapabilities actual = SetupCapabilities.from(admin);
 
-        assertEquals(new SetupCapabilities(
-                "1",
-                new SetupCapabilities.Features(
-                        true,
-                        true,
-                        false,
-                        true,
-                        true,
-                        true,
-                        true,
-                        false,
-                        false,
-                        false,
-                        true,
-                        true,
-                        false,
-                        false,
-                        true),
-                new SetupCapabilities.Limits(49, 7_500, 4_096)), actual);
+        SetupCapabilities.Features features = actual.features();
+        assertEquals(true, features.namespaceInspection());
+        assertEquals(true, features.entryInspection());
+        assertEquals(false, features.expiredEntryInspection());
+        assertEquals(true, features.entryMutation());
+        assertEquals(true, features.counterInspection());
+        assertEquals(true, features.counterMutation());
+        assertEquals(true, features.lockInspection());
+        assertEquals(false, features.forcedLockRelease());
+        assertEquals(false, features.bulkEntryDelete());
+        assertEquals(false, features.bulkCounterDelete());
+        assertEquals(false, features.pubSub());
+        assertEquals(true, features.databaseStatistics());
+        assertEquals(false, features.entryValueReveal());
+        assertEquals(false, features.lockOwnerReveal());
+        assertEquals(false, features.pubSubPayloadReveal());
+        assertEquals(false, features.batchEntryOperations());
+        assertEquals(false, features.valueScan());
+        assertEquals(false, features.cacheMetrics());
+        assertEquals(false, features.ownerLockOperations());
+        assertEquals(new SetupCapabilities.Limits(49, 7_500, 4_096), actual.limits());
     }
 
     @Test
-    void reportsEntryLockAndPubSubRevealCapabilitiesIndependently() {
+    void reportsEntryAndLockRevealCapabilitiesIndependently() {
         AdminCapabilities entryReveal = new AdminCapabilities(
                 EnumSet.of(ManagementCapability.ENTRY_REVEAL),
                 ManagementLimits.defaults());
@@ -60,12 +62,53 @@ class SetupCapabilitiesTest {
         SetupCapabilities.Features entryFeatures = SetupCapabilities.from(entryReveal).features();
         assertEquals(true, entryFeatures.entryValueReveal());
         assertEquals(false, entryFeatures.lockOwnerReveal());
-        assertEquals(true, entryFeatures.pubSubPayloadReveal());
+        assertEquals(false, entryFeatures.pubSubPayloadReveal());
 
         SetupCapabilities.Features lockFeatures = SetupCapabilities.from(lockReveal).features();
         assertEquals(false, lockFeatures.entryValueReveal());
         assertEquals(true, lockFeatures.lockOwnerReveal());
-        assertEquals(true, lockFeatures.pubSubPayloadReveal());
+        assertEquals(false, lockFeatures.pubSubPayloadReveal());
+    }
+
+    @Test
+    void mapsInspectionMutationAndRuntimePubSubCapabilitiesIndependently() {
+        AdminCapabilities admin = new AdminCapabilities(
+                EnumSet.of(
+                        ManagementCapability.ENTRY_INSPECTION,
+                        ManagementCapability.ENTRY_MUTATION,
+                        ManagementCapability.COUNTER_MUTATION),
+                ManagementLimits.defaults());
+
+        SetupCapabilities.Features features = SetupCapabilities.from(
+                new SetupCapabilities.Source(admin, true, false)).features();
+
+        assertEquals(false, features.namespaceInspection());
+        assertEquals(true, features.entryInspection());
+        assertEquals(true, features.entryMutation());
+        assertEquals(false, features.counterInspection());
+        assertEquals(true, features.counterMutation());
+        assertEquals(true, features.pubSub());
+        assertEquals(false, features.pubSubPayloadReveal());
+    }
+
+    @Test
+    void advertisesCacheOperationsOnlyWhenTheRuntimeProvidesTheCacheFacade() {
+        AdminCapabilities admin = new AdminCapabilities(
+                EnumSet.noneOf(ManagementCapability.class), ManagementLimits.defaults());
+
+        SetupCapabilities.Features unavailable = SetupCapabilities.from(admin).features();
+        assertEquals(false, unavailable.batchEntryOperations());
+        assertEquals(false, unavailable.valueScan());
+        assertEquals(false, unavailable.cacheMetrics());
+        assertEquals(false, unavailable.ownerLockOperations());
+
+        SetupCapabilities.Features available = SetupCapabilities.from(
+                new SetupCapabilities.Source(
+                        admin, false, false, true, true, true, true)).features();
+        assertEquals(true, available.batchEntryOperations());
+        assertEquals(true, available.valueScan());
+        assertEquals(true, available.cacheMetrics());
+        assertEquals(true, available.ownerLockOperations());
     }
 
     @Test

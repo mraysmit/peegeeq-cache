@@ -35,10 +35,10 @@ public final class UnsupportedManagementService implements ManagementService {
     public Future<VersionedMutationResult<Void>> forceReleaseLock(ForceReleaseLockRequest request, ManagementActionContext context) { return unavailable(ManagementCapability.FORCE_LOCK_RELEASE); }
     public Future<DatabaseStats> databaseStats() { return unavailable(ManagementCapability.DATABASE_MONITORING); }
     public Future<ExpiryStats> expiryStats() { return unavailable(ManagementCapability.EXPIRY_MONITORING); }
-    public Future<BulkDeletePreview> previewEntryDelete(EntryDeleteFilter filter, ManagementActionContext context) { return unavailable(ManagementCapability.BULK_DELETE); }
-    public Future<BulkDeleteResult> executeEntryDelete(ConfirmedEntryDelete request, ManagementActionContext context) { return unavailable(ManagementCapability.BULK_DELETE); }
-    public Future<BulkDeletePreview> previewCounterDelete(CounterDeleteSelection selection, ManagementActionContext context) { return unavailable(ManagementCapability.BULK_DELETE); }
-    public Future<BulkDeleteResult> executeCounterDelete(ConfirmedCounterDelete request, ManagementActionContext context) { return unavailable(ManagementCapability.BULK_DELETE); }
+    public Future<BulkDeletePreview> previewEntryDelete(EntryDeleteFilter filter, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_BULK_DELETE); }
+    public Future<BulkDeleteResult> executeEntryDelete(ConfirmedEntryDelete request, ManagementActionContext context) { return unavailable(ManagementCapability.ENTRY_BULK_DELETE); }
+    public Future<BulkDeletePreview> previewCounterDelete(CounterDeleteSelection selection, ManagementActionContext context) { return unavailable(ManagementCapability.COUNTER_BULK_DELETE); }
+    public Future<BulkDeleteResult> executeCounterDelete(ConfirmedCounterDelete request, ManagementActionContext context) { return unavailable(ManagementCapability.COUNTER_BULK_DELETE); }
 
     private static <T> Future<T> unavailable(ManagementCapability capability) {
         return Future.failedFuture(new ManagementCapabilityException(capability));

@@ -59,9 +59,9 @@ Strictly counting the 32 public data-service methods in `CacheService`, `Counter
 
 The percentages above are method-level traceability, not a weighted score. `BackendFunctionalityInventoryTest` independently reflects all seven public data-service contracts plus `ManagementService`, asserts the exact 62-method combined inventory (32 data-service and 30 management methods), and fails if any public method lacks a reviewed OpenAPI mapping.
 
-The 60 management operations are separately checked for OpenAPI ownership, production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The active desktop-only browser catalogue contains 550 scenarios, 17 named operation-owning journeys, and 13 isolated packaged Chromium/PostgreSQL journeys.
+The 60 OpenAPI management operations are separately checked for production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The merged desktop-only browser catalogue declares 557 scenarios, 17 named operation-owning journeys, 18 independently degraded capability paths, and 13 isolated packaged Chromium/PostgreSQL journeys.
 
-Final verification on 3 September 2026 used a clean 11-module `mvn -o clean verify` run under OpenJDK 25 and PostgreSQL 18.3. It passed all modules in 35 minutes 49 seconds, including 801/801 reactor Surefire tests (162/162 in the REST module), 129/129 Vitest tests, 550/550 packaged desktop-browser scenarios, and 3/3 additional runnable-artifact/evidence Failsafe checks. The generated `playwright-evidence.html` reports exactly 550 scenarios and 550 passes.
+The capability-remediation parent passed 557/557 packaged desktop-browser scenarios plus 3/3 runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026. The fixture-lifecycle parent subsequently passed its then-current 550-scenario catalogue on 3 September. Because the merged checkout combines the 557-scenario capability catalogue with the shared-fixture lifecycle changes and pending U11 locator changes, a fresh 557-scenario cumulative gate is required before recording merged verification.
 
 ## 4. Source authorities
 

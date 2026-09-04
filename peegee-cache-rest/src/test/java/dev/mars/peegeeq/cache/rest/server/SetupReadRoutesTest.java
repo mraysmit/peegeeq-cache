@@ -139,7 +139,12 @@ class SetupReadRoutesTest {
             assertFalse(capabilities.path("capabilities").path("forcedLockRelease").asBoolean());
             assertFalse(capabilities.path("capabilities").path("entryValueReveal").asBoolean());
             assertFalse(capabilities.path("capabilities").path("lockOwnerReveal").asBoolean());
-            assertTrue(capabilities.path("capabilities").path("pubSubPayloadReveal").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("pubSub").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("pubSubPayloadReveal").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("batchEntryOperations").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("valueScan").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("cacheMetrics").asBoolean());
+            assertFalse(capabilities.path("capabilities").path("ownerLockOperations").asBoolean());
             assertEquals(49, capabilities.path("limits").path("pubSubChannelMaxBytes").asInt());
             assertEquals(7_500, capabilities.path("limits").path("pubSubPayloadMaxBytes").asInt());
             assertEquals(10_485_760, capabilities.path("limits").path("maximumValueBytes").asInt());

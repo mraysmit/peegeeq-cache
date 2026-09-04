@@ -584,7 +584,7 @@ Explicit non-goal unless strategy changes:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md)
 
-**Status:** **COMPLETE (M0–M11 COMPLETE)** — the management backend includes the complete typed/PostgreSQL REST surface, security and lifecycle, atomic administration, audited pub/sub, bounded live transports, mandatory bounded Micrometer/Prometheus telemetry, shared per-setup metrics sampling, both executable authentication configurations, a verified executable Java 21 artifact, operational guidance, complete runtime configuration, and full backend-facade REST parity. The clean 3 September 2026 PostgreSQL 18.3 reactor passed all 11 modules under OpenJDK 25 in 35 minutes 49 seconds with 801 Surefire, 553 Failsafe, and 129 Vitest tests and zero failures, errors, or skips. The 553 Failsafe tests comprise 550 packaged desktop-browser scenarios and three runnable-artifact/evidence checks; the prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained.
+**Status:** **COMPLETE (M0–M11 COMPLETE)** — the management backend includes the complete typed/PostgreSQL REST surface, security and lifecycle, atomic administration, audited pub/sub, bounded live transports, mandatory bounded Micrometer/Prometheus telemetry, shared per-setup metrics sampling, both executable authentication configurations, a verified executable Java 21 artifact, operational guidance, complete runtime configuration, and full backend-facade REST parity. Before this merge, the capability-remediation parent passed a clean 11-module PostgreSQL 18.3 reactor under OpenJDK 25 with 560 Surefire, 560 Failsafe, and 129 Vitest tests on 2 September 2026; its Failsafe total comprised 557 packaged desktop-browser scenarios and three runnable-artifact/evidence checks. The fixture-lifecycle parent subsequently passed its then-current 550-scenario catalogue on 3 September. The merged checkout declares 60 OpenAPI operations and 557 browser scenarios and requires a fresh cumulative gate; the prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained.
 
 Scope:
 
@@ -609,7 +609,7 @@ Prerequisites:
 
 **Backend-functionality coverage authority:** [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The matrix maps all 32 public data-service methods and all 30 `ManagementService` methods to the 60 declared management operations and their production desktop workflows, with no open functionality gaps.
 
-**Status:** **COMPLETE (U0-U11)** — the desktop-only production console implements setup and complete runtime configuration, overview, namespace, entry inspection/administration, counters, locks, Pub/Sub, monitoring, activity, settings, privacy, and the Advanced operations facade-parity surface. Mobile and tablet behavior is outside the product boundary. Strict runtime validation covers every consumed REST, SSE, and WebSocket payload. Java Playwright owns 17 independent packaged-application journeys; a separate executable accountability contract covers all 60 management operations, and runtime tracing verifies declared operations from observed browser requests and WebSocket openings. Thirteen product journeys run against isolated real TLS PostgreSQL fixtures without request interception.
+**Status:** **U0-U10 COMPLETE; U11 IN PROGRESS** — the desktop-only production console implements setup and complete runtime configuration, overview, namespace, entry inspection/administration, counters, locks, Pub/Sub, monitoring, activity, settings, privacy, and the Advanced operations facade-parity surface. Mobile and tablet behavior is outside the product boundary. Strict runtime validation covers every consumed REST, SSE, and WebSocket payload. Java Playwright owns 17 independent packaged-application journeys; a separate executable accountability contract covers all 60 management operations, and runtime tracing verifies declared operations from observed browser requests and WebSocket openings. U11 UI-module work is green, but its merged 557-scenario packaged-browser, complete-reactor, and PostgreSQL 15-18 gates remain pending.
 
 Scope:
 
@@ -743,7 +743,7 @@ The implemented boundary is:
 - entry values, raw identifiers, credentials, cursor keys, and audit keys remain absent from ordinary logs and default authoritative audit intents;
 - No management-backend or management-UI implementation stage remains. Production deployment/topology validation and credentialed public publication are separate external release-readiness actions; Phase 8.3 U0-U10 is complete.
 
-Current management evidence includes the clean 3 September 2026 11-module PostgreSQL 18.3 reactor with 801 Surefire, 553 Failsafe, and 129 Vitest tests under OpenJDK 25 and zero failures, errors, or skips. The earlier complete-reactor PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained. The authoritative behavior and evidence are in `PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md` and `PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`.
+Current pre-merge management evidence includes the clean 2 September 2026 11-module PostgreSQL 18.3 capability-remediation reactor with 560 Surefire, 560 Failsafe, and 129 Vitest tests under OpenJDK 25 and zero failures, errors, or skips. All 557 browser scenarios and the three runnable-artifact/evidence checks passed on that parent. The 3 September fixture-lifecycle parent independently passed its 550-scenario catalogue. The merged 557-scenario state has not yet completed its cumulative gate. The earlier complete-reactor PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility matrix is retained. The authoritative behavior and evidence are in `PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md` and `PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`.
 
 Completed M5 sequence:
 
@@ -771,7 +771,7 @@ The implemented U1 boundary is:
 
 The delivered U2-U10 boundary builds on those controls without persisting credentials, CSRF material, or revealed values; weakening CSP/static routing; reconstructing server cursors; or duplicating the UI entry point. `ManagementConsoleProductJourneysIT` uses isolated TLS PostgreSQL fixtures and the real schema to verify the packaged U2-U9 console through Chromium, including administration, Pub/Sub and monitoring live transports, conflict recovery, accessibility, lifecycle, and leakage checks. Java Playwright is Maven/Failsafe-owned and does not intercept product requests; focused Java and frontend suites prove the corresponding concurrency, audit, protocol-validation, and cleanup semantics.
 
-No Phase 8.3 implementation task remains. The active desktop catalogue contains 550 independently reported scenarios and three runnable-artifact/evidence checks; the fresh full-reactor PostgreSQL 18.3 gate passed on 3 September 2026. The prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility evidence is retained, while a fresh cross-version parity regate remains release validation. Production-topology benchmarking and credentialed Maven Central publication remain intentionally deferred release-readiness actions.
+No U0-U10 Phase 8.3 product implementation task remains. U11 reference parity is in progress: its UI-module slices are green, while the merged 557-scenario desktop-browser catalogue, complete reactor, and PostgreSQL 15-18 parity regate remain pending. The prior PostgreSQL 15.17, 16.13, 17.11, and 18.3 compatibility evidence is retained. Production-topology benchmarking and credentialed Maven Central publication remain intentionally deferred release-readiness actions.
 
 ## 4. Feature rollout by milestone
 
@@ -1093,4 +1093,4 @@ Current conclusion:
 - Phase 6 is complete
 - Phase 7 is complete
 - Phase 8.1 and management backend M0–M11 are complete
-- Phase 8.3 is complete under its approved strict-TDD plan; U0-U11, packaged Chromium/PostgreSQL acceptance, the fresh PostgreSQL 18.3 cumulative gate, and the retained PostgreSQL 15-18 compatibility matrix are green
+- Phase 8.3 U0-U10 is complete under its approved strict-TDD plan; U11 reference parity remains in progress pending the merged packaged Chromium/PostgreSQL, complete-reactor, and PostgreSQL 15-18 gates

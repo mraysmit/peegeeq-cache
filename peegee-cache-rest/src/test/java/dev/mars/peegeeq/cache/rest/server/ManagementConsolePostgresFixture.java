@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -143,11 +144,11 @@ final class ManagementConsolePostgresFixture {
             Path temporaryDirectory,
             PostgreSQLContainer postgres,
             boolean seed,
-            SetupCapabilities advertisedCapabilities,
+            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter,
             List<String> expectedOperations,
             Journey journey) throws Exception {
         runIsolated(temporaryDirectory, postgres, seed, Clock.systemUTC(), expectedOperations,
-                java.util.Objects.requireNonNull(advertisedCapabilities, "advertisedCapabilities"),
+                java.util.Objects.requireNonNull(capabilitySourceFilter, "capabilitySourceFilter"),
                 Map.of(), false, journey);
     }
 
@@ -217,7 +218,7 @@ final class ManagementConsolePostgresFixture {
             boolean seed,
             Clock clock,
             List<String> expectedOperations,
-            SetupCapabilities advertisedCapabilities,
+            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter,
             Map<String, String> trustedProxyHeaders,
             boolean prepareSetup,
             Journey journey) throws Exception {
@@ -226,7 +227,7 @@ final class ManagementConsolePostgresFixture {
         }
         try (Environment environment = Environment.start(
                 temporaryDirectory.resolve("management-browser-audit.jsonl"),
-                postgres, seed, clock, advertisedCapabilities, trustedProxyHeaders)) {
+                postgres, seed, clock, capabilitySourceFilter, trustedProxyHeaders)) {
             environment.run(expectedOperations, journey, false, prepareSetup);
         }
     }
@@ -310,7 +311,7 @@ final class ManagementConsolePostgresFixture {
                 PostgreSQLContainer postgres,
                 boolean seed,
                 Clock clock,
-                SetupCapabilities advertisedCapabilities,
+                UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter,
                 Map<String, String> trustedProxyHeaders) throws Exception {
             Vertx migrationVertx = Vertx.vertx();
             try {
@@ -348,7 +349,7 @@ final class ManagementConsolePostgresFixture {
                         "127.0.0.1", managementPort, origin, targetPolicy, auditPath, auditKey);
                 InetAddress databaseAddress = InetAddress.getByName(postgres.getHost());
                 Buffer serverCertificate = certificate();
-                application = advertisedCapabilities == null
+                application = capabilitySourceFilter == null
                         ? await(ManagementServerApplication.start(
                         configuration,
                         reference -> reference.equals(auditKey) ? new byte[32] : null,
@@ -361,9 +362,9 @@ final class ManagementConsolePostgresFixture {
                         reference -> reference.equals(auditKey) ? new byte[32] : null,
                         ignored -> List.of(databaseAddress),
                         trustProfile -> trustProfile.equals("test-ca") ? serverCertificate : null,
-                        meters,
-                        clock,
-                        ignored -> advertisedCapabilities));
+                         meters,
+                         clock,
+                         capabilitySourceFilter));
                 String bootstrapToken = trustedProxy
                         ? ""
                         : application.takeBootstrapToken().orElseThrow();
@@ -577,7 +578,7 @@ final class ManagementConsolePostgresFixture {
         com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(
                 dialog.getByRole(com.microsoft.playwright.options.AriaRole.STATUS))
                 .containsText("Connection succeeded");
-        dialog.getByLabel("Schema bootstrap").selectOption("APPLY");
+        AntSelect.choose(page, dialog.getByLabel("Schema bootstrap"), "APPLY");
         dialog.getByRole(com.microsoft.playwright.options.AriaRole.BUTTON,
                 new com.microsoft.playwright.Locator.GetByRoleOptions().setName("Register setup")).click();
         com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(page.getByTitle("Active setup scope"))
