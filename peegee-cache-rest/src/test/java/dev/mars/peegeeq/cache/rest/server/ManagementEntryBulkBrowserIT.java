@@ -97,8 +97,6 @@ class ManagementEntryBulkBrowserIT {
                 temporaryDirectory, POSTGRES.postgres(), true, scenario.operations(), context -> {
                     if (index == 24) context.diagnostics().expectFailedResponse(409,
                             "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute");
-                    ManagementConsolePostgresFixture.authenticate(context);
-                    ManagementConsolePostgresFixture.registerSetup(context);
                     openEntries(context.page());
                     verify(index, context);
                 });

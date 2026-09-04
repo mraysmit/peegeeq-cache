@@ -10,7 +10,7 @@ From the repository root:
 mvn -pl :peegee-cache-management-ui verify
 ```
 
-Maven installs Node 22.22.2 and npm 10.9.4 into this module, runs `npm ci`, generates types from the authoritative management OpenAPI document, performs type and lint checks, runs Vitest, builds Vite production resources, packages the UI JAR, and validates its contents. A global Node or npm installation is not required.
+Maven installs Node 22.22.2 and npm 10.9.4 into this module, runs `npm ci`, generates types from the authoritative management OpenAPI document, performs type and lint checks, runs Vitest with the coverage gate, builds Vite production resources, packages the UI JAR, and validates its contents. A global Node or npm installation is not required.
 
 The complete project gate remains:
 
@@ -25,9 +25,14 @@ After Maven has installed the pinned local toolchain, commands can be run from t
 - `run generate:openapi` — generate build-only TypeScript contract types under `target/generated-sources/openapi`;
 - `run quality` — run TypeScript and ESLint checks;
 - `run test:run` — run the deterministic frontend test suite;
+- `run test:coverage` — run the same suite with V8 coverage; the build fails below 80 percent branch coverage on `src/api/**` and `src/state/**` (reports under `target/coverage`);
 - `run build` — create the production webroot under `target/classes/ui`;
 - `run verify` — run generation, quality, tests, and the production build.
 
 Generated types, installed tools, dependencies, reports, and compiled assets remain ignored build output. `package.json`, `package-lock.json`, source, tests, and configuration are committed.
+
+## Directives enforced by `test/quality`
+
+Five static guard tests run in the default Vitest gate and encode the mandates in `docs/guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md` §5 and `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md` §3.1: UI controls come from Ant Design 5 and charts from Recharts (`component-library.guard`); no test doubles of any kind and no client/port props on pages (`no-test-fakes.guard`); no transport construction outside `src/api` and no `axios` (`no-direct-transport.guard`); every served fixture body is produced by a production Zod schema and every page test is served by `test/support/loopback-server` (`zod-fixture.guard`); sensitive DTOs never reach stores, RTK Query slices, persistence, URL builders, or logging (`sensitive-dto.guard`). See phase U11 of `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`.
 
 The production console must never persist session CSRF proof, setup passwords, bootstrap tokens, cache values, lock owners, or pub/sub payloads. Phase-specific behavior and evidence requirements are defined in `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`.

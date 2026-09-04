@@ -84,7 +84,7 @@ class ManagementShutdownBrowserIT {
     @MethodSource("dev.mars.peegeeq.cache.rest.server.ManagementBrowserSelection#shutdownScenarios")
     void shutdownScenario(ManagementBrowserCase scenario) throws Exception {
         int index = Integer.parseInt(scenario.id().substring(scenario.id().length() - 3)) - 1;
-        ManagementConsolePostgresFixture.run(
+        ManagementConsolePostgresFixture.runIsolated(
                 temporaryDirectory,
                 POSTGRES.postgres(),
                 true,

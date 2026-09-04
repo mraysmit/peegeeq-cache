@@ -243,8 +243,6 @@ class ManagementNamespaceBrowserIT {
 
     private void namespaces(ManagementConsolePostgresFixture.Journey journey) throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             openNamespaces(context.page());
             journey.run(context);
         });
@@ -252,8 +250,6 @@ class ManagementNamespaceBrowserIT {
 
     private void paginated(ManagementConsolePostgresFixture.Journey journey) throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             ManagementConsolePostgresFixture.execute(context.postgres(), """
                     INSERT INTO peegee_cache.cache_entries
                         (namespace, cache_key, value_type, value_bytes, numeric_value, version)

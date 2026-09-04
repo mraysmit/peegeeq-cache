@@ -70,7 +70,7 @@ class ManagementCounterBrowserIT {
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/increment");
             if (i == 32) c.diagnostics().expectFailedResponse(412,
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}");
-            seed(i,c); ManagementConsolePostgresFixture.authenticate(c); ManagementConsolePostgresFixture.registerSetup(c);
+            seed(i,c);
             Page p=c.page(); p.getByRole(AriaRole.LINK,new Page.GetByRoleOptions().setName("Counters").setExact(true)).click();
             assertThat(p.getByRole(AriaRole.HEADING,new Page.GetByRoleOptions().setName("Counters").setExact(true))).isVisible(); verify(i,c);
         });

@@ -37,7 +37,6 @@ class ManagementBoundaryBrowserIT {
                             SELECT 'logical-orders', 'pager-' || lpad(value::text, 3, '0'), value, 1
                               FROM generate_series(1, 60) value
                             """);
-                    prepare(context);
                     Page page = context.page();
                     page.getByRole(AriaRole.LINK,
                             new Page.GetByRoleOptions().setName("Counters").setExact(true)).click();
@@ -63,7 +62,6 @@ class ManagementBoundaryBrowserIT {
     void pubSubPayloadAtAdvertisedByteLimitPublishes() throws Exception {
         ManagementConsolePostgresFixture.run(
                 temporaryDirectory, POSTGRES.postgres(), true, context -> {
-                    prepare(context);
                     Page page = openPubSub(context);
                     page.getByLabel("Publish channel").fill("boundary-channel");
                     page.getByLabel("Payload").fill("x".repeat(7_500));
@@ -88,7 +86,6 @@ class ManagementBoundaryBrowserIT {
     void pubSubPayloadOneByteAboveAdvertisedLimitIsBlockedClientSide() throws Exception {
         ManagementConsolePostgresFixture.run(
                 temporaryDirectory, POSTGRES.postgres(), true, context -> {
-                    prepare(context);
                     Page page = openPubSub(context);
                     page.getByLabel("Publish channel").fill("boundary-channel");
                     page.getByLabel("Payload").fill("x".repeat(7_501));
@@ -97,11 +94,6 @@ class ManagementBoundaryBrowserIT {
                     assertThat(page.getByRole(AriaRole.BUTTON,
                             new Page.GetByRoleOptions().setName("Publish").setExact(true))).isDisabled();
                 });
-    }
-
-    private static void prepare(ManagementConsolePostgresFixture.Context context) {
-        ManagementConsolePostgresFixture.authenticate(context);
-        ManagementConsolePostgresFixture.registerSetup(context);
     }
 
     private static Page openPubSub(ManagementConsolePostgresFixture.Context context) {

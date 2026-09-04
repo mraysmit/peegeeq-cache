@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ManagementShell } from '@src/app/ManagementShell';
 import { SessionClient, type BrowserSession } from '@src/api/session-client';
+import { createManagementClients, createManagementStore, ManagementProvider } from '@src/store';
 import type { SetupCapabilities } from '@src/api/setup-schemas';
 import { useSetupScopeStore } from '@src/state/scope-store';
 
@@ -22,12 +23,13 @@ const session: BrowserSession = {
   },
 };
 const sessionClient = new SessionClient();
+const store = createManagementStore(createManagementClients(sessionClient));
 
 describe('U1 authenticated management shell', () => {
   it('renders route navigation, identity, connection state, and role-aware controls', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
-        <ManagementShell session={session} sessionClient={sessionClient} onLogout={() => Promise.resolve()} />
+        <ManagementProvider store={store}><ManagementShell session={session} onLogout={() => Promise.resolve()} /></ManagementProvider>
       </MemoryRouter>,
     );
 
@@ -44,7 +46,7 @@ describe('U1 authenticated management shell', () => {
     const user = userEvent.setup();
     const { container } = render(
       <MemoryRouter initialEntries={['/monitoring']}>
-        <ManagementShell session={session} sessionClient={sessionClient} onLogout={() => Promise.resolve()} />
+        <ManagementProvider store={store}><ManagementShell session={session} onLogout={() => Promise.resolve()} /></ManagementProvider>
       </MemoryRouter>,
     );
 
@@ -86,7 +88,7 @@ describe('U1 authenticated management shell', () => {
     try {
       render(
         <MemoryRouter initialEntries={['/counters']}>
-          <ManagementShell session={session} sessionClient={sessionClient} onLogout={() => Promise.resolve()} />
+          <ManagementProvider store={store}><ManagementShell session={session} onLogout={() => Promise.resolve()} /></ManagementProvider>
         </MemoryRouter>,
       );
 

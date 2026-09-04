@@ -11,9 +11,22 @@ export default defineConfig({
     },
   },
   test: {
+    coverage: {
+      // U11 gate: branch coverage on the contract and state layers. Pages are covered by the
+      // Java Playwright catalogue in peegee-cache-rest and are not thresholded here.
+      exclude: ['test/**', 'target/**', 'node/**', 'src/main.tsx', 'src/vite-env.d.ts', '**/*.config.*'],
+      include: ['src/**/*.{ts,tsx}'],
+      provider: 'v8',
+      reportOnFailure: true,
+      reporter: ['text-summary', 'json-summary', 'html'],
+      reportsDirectory: 'target/coverage',
+      thresholds: {
+        'src/api/**': { branches: 80 },
+        'src/state/**': { branches: 80 },
+      },
+    },
     environment: 'jsdom',
     include: ['test/**/*.test.{ts,tsx}'],
-    restoreMocks: true,
     setupFiles: ['./test/setup.ts'],
   },
 });

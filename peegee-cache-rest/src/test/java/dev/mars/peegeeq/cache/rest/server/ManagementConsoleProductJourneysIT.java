@@ -158,8 +158,6 @@ class ManagementConsoleProductJourneysIT {
             operations = {"getSetupCapabilities", "getNamespace"})
     void setupAndNamespaceScopeAreRevalidatedByTheRealCapabilityContract() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
 
             assertThat(page.getByRole(AriaRole.LINK,
@@ -207,8 +205,6 @@ class ManagementConsoleProductJourneysIT {
             })
     void overviewNamespacePagingExportAndMonitoringReflectDatabaseTruth() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
 
             page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName("Overview")).click();
@@ -286,8 +282,6 @@ class ManagementConsoleProductJourneysIT {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
             context.diagnostics().expectFailedResponse(412,
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             openEntry(page, "customer:1");
 
@@ -405,8 +399,6 @@ class ManagementConsoleProductJourneysIT {
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute");
             context.diagnostics().expectFailedResponse(409,
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute");
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             openNamespace(page);
             page.getByRole(AriaRole.TAB, new Page.GetByRoleOptions().setName("Entries")).click();
@@ -557,8 +549,6 @@ class ManagementConsoleProductJourneysIT {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
             context.diagnostics().expectFailedResponse(409,
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/increment");
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             page.getByRole(AriaRole.LINK,
                     new Page.GetByRoleOptions().setName("Counters").setExact(true)).click();
@@ -681,8 +671,6 @@ class ManagementConsoleProductJourneysIT {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
             context.diagnostics().expectFailedResponse(412,
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/force-release");
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             page.getByRole(AriaRole.LINK,
                     new Page.GetByRoleOptions().setName("Locks").setExact(true)).click();
@@ -756,8 +744,6 @@ class ManagementConsoleProductJourneysIT {
             })
     void pubSubSubscribesPublishesResumesRevealsAndStopsAgainstPostgres() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             AtomicReference<String> resumedFrom = new AtomicReference<>();
             page.onRequest(request -> {
@@ -775,6 +761,8 @@ class ManagementConsoleProductJourneysIT {
                     .fill("acceptance-channel");
             page.getByRole(AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Start subscription")).click();
+            assertThat(page.getByText("Non-durable · CONNECTED · bounded to 20 messages",
+                    new Page.GetByTextOptions().setExact(true))).isVisible();
             page.getByLabel("Publish channel").fill("acceptance-channel");
             page.getByLabel("Content type (optional)").fill("text/plain");
             page.getByLabel("Payload").fill("pubsub-secret");
@@ -848,8 +836,6 @@ class ManagementConsoleProductJourneysIT {
                 "connectSetup", "publishPubSubMessage");
         ManagementConsolePostgresFixture.run(
                 temporaryDirectory, POSTGRES.postgres(), true, runtimeOperations, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             AtomicReference<String> metricsResumeId = new AtomicReference<>();
             AtomicInteger runtimeRequests = new AtomicInteger();
@@ -915,8 +901,6 @@ class ManagementConsoleProductJourneysIT {
             operations = {})
     void populatedWorkflowsRemainKeyboardReachableOnDesktop() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             page.setViewportSize(1440, 900);
 
@@ -995,8 +979,6 @@ class ManagementConsoleProductJourneysIT {
                 temporaryDirectory, POSTGRES.postgres(), true,
                 List.of("listNamespaces", "getNamespace", "listEntries", "getEntry", "revealEntryValue"),
                 context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             openEntry(page, "customer:1");
             page.getByLabel("Reveal reason (optional)").fill("leakage verification");
@@ -1067,8 +1049,6 @@ class ManagementConsoleProductJourneysIT {
             })
     void advancedWorkspaceExercisesCompleteBackendServiceParity() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             Page page = context.page();
             String ownerToken = "backend-owner-token";
             ManagementBrowserEvidenceListener.registerSensitiveCanary(ownerToken);
@@ -1184,7 +1164,7 @@ class ManagementConsoleProductJourneysIT {
             value = "deterministic-shutdown",
             operations = {})
     void activeBrowserTransportsAreClosedAndResourceGaugesReturnToZero() throws Exception {
-        ManagementConsolePostgresFixture.run(
+        ManagementConsolePostgresFixture.runIsolated(
                 temporaryDirectory, POSTGRES.postgres(), true,
                 List.of("createPubSubSubscription", "streamPubSubMessages"), context -> {
             ManagementConsolePostgresFixture.authenticate(context);

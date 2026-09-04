@@ -92,8 +92,6 @@ class ManagementLiveTransportBrowserIT {
                 true,
                 scenario.operations(),
                 context -> {
-                    ManagementConsolePostgresFixture.authenticate(context);
-                    ManagementConsolePostgresFixture.registerSetup(context);
                     verify(index, context.page());
                 });
     }

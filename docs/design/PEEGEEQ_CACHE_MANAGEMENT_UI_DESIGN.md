@@ -49,6 +49,8 @@ The following decisions are part of the approved design:
 
 The cache console must look and behave like the desktop PeeGeeQ Management UI. It uses the same dark collapsible sidebar, light content area, page header, connection indicator, manual refresh control, notification drawer, Ant Design cards and tables, destructive confirmation patterns, setup scope selector, and embedded `/ui/*` deployment shape.
 
+> **Mandated (3 September 2026).** All UI controls are Ant Design 5 components and all charts are Recharts components. Hand-written equivalents of tables, forms, dialogs, drawers, selects, tags, notifications, statistics, or charts are prohibited. `src/components/common` may only compose Ant Design primitives into the reference's shared pieces (`StatCard`, `SetupScopeBar`, `FilterBar`, `ConfirmDialog`, `ConnectionStatus`, `ErrorBoundary`). Plain CSS is limited to layout tokens and `ConfigProvider` theme overrides. A guard test in the UI module enforces this.
+
 Consistency does not require copying accidental implementation fragmentation. The cache console uses one clear owner for each class of state:
 
 - RTK Query owns REST request state, caching, invalidation, and retry policy.
@@ -202,7 +204,7 @@ The desktop sidebar may collapse to icons through its explicit control. The head
 | Route | Page |
 |---|---|
 | `/` | Overview |
-| `/cache-setups` | Cache Setups |
+| `/setups` | Cache Setups |
 | `/namespaces` | Namespaces |
 | `/namespaces/:encodedNamespace` | Namespace Details |
 | `/keys` | Key Browser |
@@ -461,6 +463,8 @@ Use the same major frontend stack and build shape as `peegeeq-management-ui`:
 - Vitest and Testing Library;
 - Playwright;
 - Node 22.22.2 and npm 10.9.4, deliberately advanced within the Node 22 LTS major, installed by Maven, and used with a committed lockfile and `npm ci`.
+
+Every item above is mandatory, not aspirational: a declared dependency that `src/` does not import is a defect, and a feature page that does not use the mandated library for its controls, charts, or REST state is a defect. The 3 September 2026 review found U1-U10 delivered without Ant Design, Recharts, or RTK Query; the U11 phase of the implementation plan corrects this.
 
 ### 8.2 State ownership
 

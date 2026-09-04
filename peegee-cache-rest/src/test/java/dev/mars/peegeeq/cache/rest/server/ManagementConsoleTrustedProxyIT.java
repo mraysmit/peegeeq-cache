@@ -4,7 +4,6 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.AriaRole;
 import dev.mars.peegeeq.cache.api.management.ManagementAuditIntent;
 import dev.mars.peegeeq.cache.api.management.ManagementAuditOutcome;
@@ -132,11 +131,8 @@ class ManagementConsoleTrustedProxyIT {
     void packagedConsoleBootstrapsFromTrustedIdentityHeadersWithoutLocalTokenUi() {
         List<String> browserErrors = new ArrayList<>();
         List<String> failedResponses = new ArrayList<>();
-        try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
-                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
-             Browser browser = playwright.chromium().launch(
-                     ManagementPlaywright.launchOptions());
-             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext(
+                new Browser.NewContextOptions()
                      .setExtraHTTPHeaders(Map.of(
                              "X-PeeGeeQ-User", "alex",
                              "X-PeeGeeQ-Roles", "viewer,operator")))) {
@@ -221,11 +217,8 @@ class ManagementConsoleTrustedProxyIT {
             operations = {})
     void viewerIsDeniedByTheRealServerWhenItCallsAnOperatorRouteDirectly() {
         List<String> browserErrors = new ArrayList<>();
-        try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
-                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
-             Browser browser = playwright.chromium().launch(
-                     ManagementPlaywright.launchOptions());
-             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext(
+                new Browser.NewContextOptions()
                      .setExtraHTTPHeaders(Map.of(
                              "X-PeeGeeQ-User", "viewer-only",
                              "X-PeeGeeQ-Roles", "viewer")))) {

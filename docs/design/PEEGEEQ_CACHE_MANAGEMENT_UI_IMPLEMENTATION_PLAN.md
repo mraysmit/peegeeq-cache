@@ -1,7 +1,7 @@
 # PeeGeeQ Cache Management UI Implementation Plan
 
-**Status:** Phase 8.3 COMPLETE; U0-U11 complete with packaged Chromium/PostgreSQL acceptance, verified backend-facade parity, and PostgreSQL 15-18 compatibility evidence
-**Date:** 30 August 2026
+**Status:** Phase 8.3 U0-U10 COMPLETE with packaged Chromium/PostgreSQL acceptance, verified backend-facade parity, and PostgreSQL 15-18 compatibility evidence; U11 reference-parity migration IN PROGRESS (U11.0 RED recorded 3 September 2026)
+**Date:** 3 September 2026
 **Delivery method:** strict test-driven development
 **Target:** production React management console served by `peegee-cache-rest` at `/ui/*`
 
@@ -70,6 +70,8 @@ The execution baseline is:
 - `package-lock.json` is committed and Maven always uses `npm ci`, never `npm install`.
 - Direct and development dependency versions are exact in `package.json`; transitive resolution is locked by `package-lock.json`.
 - The initial major stack is React 18, TypeScript, Vite 6, Ant Design 5, React Router, Redux Toolkit/RTK Query, Zustand, Zod, Recharts, Vitest, Testing Library, and Playwright.
+- Production runtime dependencies are pinned to the versions the reference `peegeeq-management-ui` lockfile resolves (antd 5.26.5, @ant-design/icons 5.6.1, React 18.3.1, RTK 2.10.1, react-redux 9.2.0, Recharts 3.1.2, Zod 4.2.1, Zustand 5.0.8), except where this plan records a deliberate security advance (react-router-dom).
+- Every declared production dependency must be imported by `src/`. Ant Design 5 is the only source of UI controls and Recharts the only source of charts; hand-written tables, forms, dialogs, drawers, selects, notifications, or charts are prohibited outside `src/components/common`, which may only compose Ant Design primitives (U11 mandate, 3 September 2026).
 - Dependency upgrades are separate reviewed changes. A feature slice cannot silently update the frontend toolchain.
 - npm lifecycle scripts cannot download executable content during normal test or package phases after `npm ci` has completed.
 
@@ -145,7 +147,8 @@ A valid RED test must fail an assertion about missing or incorrect observable be
 Prohibited shortcuts:
 
 - Mockito or any substitute mocking framework;
-- `vi.mock`, fetch replacement, module replacement, or framework-generated service mocks used to simulate the management protocol;
+- any test double in the UI module: `vi.mock`, `vi.stubGlobal`, `vi.fn`, `vi.spyOn`, fetch or module replacement, framework-generated service mocks, and hand-built fakes of client, port, transport, or store interfaces, whether or not they simulate the management protocol;
+- pages that accept client or port objects as props so that tests can substitute them;
 - disabled, focused-only, order-dependent, retry-to-pass, or timing-sleep tests;
 - broad snapshots that approve behavior without semantic assertions;
 - hard-coded successful DTOs that bypass serialization and runtime validation;
@@ -166,13 +169,14 @@ Static tests verify:
 - mutation operations are classified as CSRF protected and operator-only where the API requires it;
 - no direct page-level `fetch`, Axios, `EventSource`, or `WebSocket` construction exists;
 - no Mockito, substitute mocking framework, empty catch, ignored Promise, test exclusion, or committed generated/build output exists;
+- the `test/quality` guard tests (component library, no test fakes, no direct transport, Zod-produced fixtures, sensitive DTO isolation) pass in the default Vitest gate;
 - production dependency licenses and known-vulnerability policy pass the configured gate.
 
 ### 6.2 Frontend unit and component tests
 
 Vitest and Testing Library use real routers, stores, reducers, RTK Query middleware, Zod schemas, and browser APIs where jsdom implements them. Tests exercise visible behavior, accessibility roles, keyboard input, focus transitions, state cleanup, and protocol parsing.
 
-For HTTP/SSE/WebSocket states that cannot be produced by a component alone, tests use a lightweight purpose-built server listening on an ephemeral loopback port. The fixture performs actual serialization, cookies, headers, chunked SSE framing, WebSocket frames, malformed responses, disconnects, and cleanup. It is not a function or module mock and does not replace real-backend acceptance.
+Component tests render the page inside the real Redux store, RTK Query middleware, router, and Zustand stores; they never receive fakes. Every HTTP, SSE, or WebSocket response the test needs comes from a lightweight purpose-built server listening on an ephemeral loopback port, and every fixture body that server serves is produced by calling the production Zod schema's `parse` so a fixture cannot drift from the contract. The fixture performs actual serialization, cookies, headers, chunked SSE framing, WebSocket frames, malformed responses, disconnects, and cleanup. It is not a function or module mock and does not replace real-backend acceptance.
 
 ### 6.3 Full-browser acceptance
 
@@ -184,7 +188,7 @@ Each independent Java Playwright journey:
 - boots the actual cache schema;
 - starts the actual management server on an ephemeral loopback port;
 - loads the compiled UI from the actual server, not Vite dev mode;
-- gives every product journey an isolated browser context, server, database, audit file, and PostgreSQL container;
+- gives every product scenario an isolated browser context from one suite-owned Playwright/Chromium process; ordinary scenarios also reuse one suite-scoped PostgreSQL container, management server, authenticated session, audit sink, and registered setup, while lifecycle-mutating scenarios isolate only the server/session/setup state they exercise;
 - captures browser console errors, page errors, failed network requests, server logs, audit output, storage, and URLs;
 - shuts down contexts, server, pools, subscriptions, and container deterministically.
 
@@ -293,7 +297,7 @@ Browser-evidence reset on 30 August 2026:
 - the former TypeScript route-intercepted matrix was removed because counting mocked routes did not establish product behavior;
 - browser automation is now owned by `peegee-cache-rest` in Java and exercises the packaged UI, real HTTP/SSE/WebSocket transports, and real PostgreSQL without Playwright request interception;
 - `ManagementBrowserCoverageTest` makes 17 named journeys and all 60 OpenAPI operations an executable accountability contract, including a single accountable owner for each journey and operation; runtime tracing additionally fails when a product journey does not actually emit a request or WebSocket opening for an operation it declares;
-- the current catalogue contains 550 independently reported Java Playwright scenarios, including 13 isolated product journeys against real TLS PostgreSQL; three additional Failsafe checks validate runnable-artifact and evidence integrity.
+- the current catalogue contains 550 independently reported Java Playwright scenarios against real TLS PostgreSQL; ordinary scenarios reuse one suite-scoped registered setup, while setup/authentication/capability/shutdown lifecycle scenarios retain explicit isolation; three additional Failsafe checks validate runnable-artifact and evidence integrity.
 
 RED inventory:
 
@@ -572,7 +576,8 @@ Acceptance increment completed 30 August 2026:
 - Maven installs the pinned Node/npm toolchain, reports zero dependency vulnerabilities, regenerates the OpenAPI types, type-checks, lints, tests, and creates a source-map-free fingerprinted Vite asset graph;
 - the UI JAR and shaded runnable artifact checks are green with a single SLF4J provider and no duplicate fallback UI;
 - the clean 3 September 2026 `mvn -o clean verify` gate is green across all 11 modules under OpenJDK 25 and PostgreSQL 18.3: 801 Surefire tests, 553 Failsafe tests, and 129 Vitest tests, all with zero failures, errors, or skips;
-- 550 Java Playwright scenarios implement 17 independently named journey owners; the separate Surefire accountability contract covers all 60 operations and runtime tracing verifies declared operations from observed browser traffic. Thirteen isolated `ManagementConsoleProductJourneysIT` cases drive the packaged production asset through Chromium against real TLS PostgreSQL, while three non-scenario Failsafe checks validate the runnable artifact and evidence report;
+- 550 Java Playwright scenarios implement 17 independently named journey owners; the separate Surefire accountability contract covers all 60 operations and runtime tracing verifies declared operations from observed browser traffic. The browser harness reuses one suite-scoped PostgreSQL container and one registered setup for ordinary scenarios, with explicit isolation only for global setup, authentication, capability, and shutdown lifecycle mutations. Thirteen `ManagementConsoleProductJourneysIT` cases drive the packaged production asset through Chromium against real TLS PostgreSQL, while three non-scenario Failsafe checks validate the runnable artifact and evidence report;
+- the 3 September 2026 fixture-lifecycle remediation removed authentication and registration calls from ordinary scenario bodies, added an audit-backed exactly-once registration guard, centralized the complete suite on one Playwright/Chromium process, and added a source-policy gate forbidding additional launch sites;
 - the product journeys cover trusted-proxy identity/role rotation and bounded expiry; setup/scope; real namespace cursor round trips and exported JSON content; typed entry read/reveal/clipboard/CAS/TTL/persist/touch; bulk stale conflict, deterministic expiry, deletion, and replay rejection; exact 64-bit counter behavior; lock conflict recovery; Pub/Sub offline retention/resume/reveal/stop; live interruption/recovery/deduplication; desktop axe and viewport containment; cross-surface leakage; packaged response headers; and deterministic shutdown;
 - the complete 11-module reactor is green against PostgreSQL 15.17, 16.13, 17.11, and 18.3 after the browser-suite replacement.
 
@@ -600,6 +605,74 @@ Exit gate:
 - complete-reactor PostgreSQL 15-18 verification remains green;
 - documentation records exact test totals, toolchain, artifact evidence, known non-blocking warnings, and remaining external release-readiness actions;
 - Phase 8.3 is marked COMPLETE only after this evidence is recorded.
+
+### U11: Reference-parity migration (Ant Design, Recharts, RTK Query, no test fakes)
+
+**Status:** IN PROGRESS — U11.0 RED recorded, U11.1 and U11.2 GREEN in the UI module, 3 September 2026; Java Playwright gate for U11.2 pending
+
+U11.0 RED evidence, 3 September 2026 (sandbox `npm ci` with the pinned npm 10.9.4 on Node 22.22.2; baseline before the change: 31 files / 129 tests green, `npm run quality` clean):
+
+- focused command: `vitest run test/quality` — 3 of 5 guard files fail, 9 assertions, all for the intended missing behaviour: `component-library.guard` reports 18 component files that never import `antd`, 115 raw `<table>/<form>/<input>/<select>/<button>/<textarea>/<svg>` sites across `src/app` and every feature page, `src/components/Modal.tsx` present, and `@reduxjs/toolkit`, `antd`, `react-redux`, `recharts` declared but never imported; `no-test-fakes.guard` reports `vi.stubGlobal` in `monitoring-live.test.ts`/`pubsub-live.test.ts`, `vi.fn` in `preferences.test.ts`, `Fake*`/`implements *ClientPort` classes in nine page tests, and `*ClientPort` seams in `src/api` plus `client:` props on `OverviewPage`, `SetupsPage`, `NamespaceDetailsPage` and siblings; `zod-fixture.guard` reports 13 served bodies not produced by a `*Schema.parse` call and 12 page tests not served by `test/support/loopback-server`;
+- `no-direct-transport.guard` and `sensitive-dto.guard` are already GREEN — those properties hold in the U10 tree and the guards are retained as regression gates;
+- coverage command: `npm run test:coverage` (`@vitest/coverage-v8` 3.2.7 pinned, `reportOnFailure` on) — module-wide 86.85% statements / 79.51% branches; `src/api/**` branches 78.96% fails the 80% threshold, `src/state/**` passes;
+- `npm run quality` (tsc + eslint `--max-warnings 0`) remains clean with the guard sources included;
+- `axe-core` removed from `devDependencies`; `restoreMocks` removed from `vitest.config.ts` because mocks are now prohibited outright; Maven `frontend-test` now runs `test:coverage`; `npm run verify` runs `test:coverage`;
+- infrastructure notes, not RED evidence: the first sandbox `npm ci` was rejected by the exact `engines` pin (`npm 10.9.7` vs `10.9.4`) and was rerun with `npx npm@10.9.4`; the Windows checkout must run `npm ci` once after this change because the lockfile gained the coverage provider.
+
+
+**Trigger.** A 3 September 2026 review of this module against the reference `peegeeq-management-ui` found that the U1-U10 console was delivered without the stack this plan (§4.1) and the design (§3.1, §8.1, §8.2) mandate. `antd`, `@reduxjs/toolkit`, `react-redux`, and `recharts` are declared in `package.json` but no file under `src/` imports them; every table, form, card, modal, drawer, notification, and chart is hand-written (`src/styles/foundation.css`, `src/components/Modal.tsx`, an SVG polyline in `SessionTrendChart.tsx`). Page data flow uses injected `*ClientPort` objects instead of RTK Query, and the Vitest page tests exercise hand-built fakes of those ports with literal DTOs that never cross a Zod parser, which §5 already lists as prohibited. Two tests use `vi.stubGlobal('fetch')` despite §5 forbidding fetch replacement. The §6.1 static gates are promised but only the operation-manifest gate exists. The status line of this document claimed U11 complete while no U11 section existed. This phase corrects all of that. It does not reopen product behaviour, the OpenAPI contract, the security model, or the desktop-only viewport policy, and it must not reduce the 550-scenario Java Playwright catalogue.
+
+**What is cloned from the reference and what is deliberately not.** The reference's patterns to reproduce are: `antd` `Layout` with a dark collapsible `Sider`, `Menu`, and `Header`; `components/common` primitives (`StatCard`, `SetupScopeBar`, `FilterBar`, `ConfirmDialog`, `ConnectionStatus`, `ErrorBoundary`); page bodies built from `Card`, `Table`, `Descriptions`, `Form`, `Modal`, `Drawer`, `Tag`, `Alert`, `Statistic`, `Space`, `Typography`, and `message`/`notification`; Recharts `ResponsiveContainer` charts; an RTK Query `createApi` per resource family with `tagTypes`, `providesTags`/`invalidatesTags`, and `transformResponse` running the Zod parser; a Zustand store for scope, live-connection state, and the notification drawer. The reference's accidental structure is not copied: no `axios` or raw `fetch` in pages (all HTTP goes through `src/api` clients or RTK Query base query, keeping the §6.1 gate), no `data-testid` attributes (the Java suite queries by role and label and that stays), no `page.route` interception, no order-dependent specs, no retries, no duplicate `*Enhanced` page variants, and no coverage thresholds below the branch gate defined below.
+
+U11.1 evidence, 3 September 2026 (GREEN):
+
+- RED: `vitest run test/store.test.ts` failed to resolve `@src/store/api/inspectionApi` — the first test of a new boundary, accepted per §5; the six assertions cover a Zod-parsed `Overview` cached in the RTK Query slice after a real loopback round trip, the hook served from cache without a second request, a management problem mapped to a serialisable `{ status, code, message, correlationId }` error, a contract violation surfaced as `RESPONSE_CONTRACT_INVALID`, setup-list invalidation after `registerSetup` with the CSRF header on the wire, and no reveal endpoint plus no CSRF token or setup password in Redux state while a mutation is in flight or after it settles (verified against RTK's mutation sub-state, which stores results but not arguments);
+- GREEN: `test/store.test.ts` 6/6; `npm run quality` clean; `vite build` produces the production asset; module totals 37 files / 152 tests with the 9 U11.0 guard failures unchanged and the two already-green guards still green; `src/api/**` branch coverage 79.09% (unchanged, closes in U11.8);
+- design decision recorded: one `createApi` (`src/store/api/managementApi.ts`, reducer path `managementApi`) with per-family `injectEndpoints` modules (`setupsApi`, `inspectionApi`, `entriesApi`, `resourcesApi`, `pubSubApi`) rather than one `createApi` per family, because entry/counter/lock mutations must invalidate Overview, monitoring, activity, and namespace reads across families and RTK Query tags do not cross `createApi` boundaries; every endpoint is a `queryFn` delegating to the typed `src/api` client, so URL building, preconditions, CSRF, no-store handling, and the Zod parse remain in one place and "every consumed response crosses a Zod parser" holds by construction; the base query (`apiBase.ts`) delegates to `SessionClient.requestJson` and never `fetchBaseQuery`, enforced by `no-direct-transport.guard`;
+- sensitive paths excluded by design and by `sensitive-dto.guard`: entry value reveal, lock owner reveal, Pub/Sub payload reveal, and the whole backend-capability client stay on the no-store clients reached through `useManagementClients()`; no `capabilityApi` slice exists;
+- `App` now creates one store per session (`createManagementStore(createManagementClients(sessionClient))`), wraps the shell in `ManagementProvider`, and dispatches `managementApi.util.resetApiState()` on every session teardown so a later session never sees cached data from the previous one; the shell and pages still use their own client instances until their slices migrate;
+- `test/support/loopback-server.ts` is the shared fixture mandated by the testing standard: real `node:http`, `respond.json/problem/noContent/raw/sse`, request recording, `use()` to swap handlers mid-test, and `invalidBody()` for declared negative fixtures; `zod-fixture.guard` now also checks `respond.json(status, body)` arguments;
+- infrastructure note: Node's `fetch` has no cookie jar, so a cookie-echo assertion was replaced by an `accept` header assertion; cookie transport is proven by the Java Playwright suite.
+
+U11.2 evidence, 3 September 2026 (GREEN in the UI module; Java Playwright gate pending on Windows):
+
+- RED: `component-library.guard` listed `src/app/App.tsx`, `src/app/ErrorBoundary.tsx`, and `src/app/ManagementShell.tsx` as component files that never import `antd`, with 9 raw `<form>/<input>/<button>` sites between them (U11.0 RED block);
+- GREEN: those three files no longer appear in the guard output; `test/app.test.tsx` 3/3 (navigation landmark and links, identity, role badge, connection state, theme toggle sets `data-theme=dark`, notifications landmark, capability-gated route); `npm run quality` clean; `vite build` green; module totals 37 files / 152 tests with the remaining U11.0 failures confined to feature pages and test fakes;
+- implementation: `ManagementShell` is antd `ConfigProvider` (light/dark algorithm from preferences) + `Layout` with a dark `Sider` (`aria-label="Primary navigation"`, custom collapse `Button` instead of antd's unnamed trigger div) wrapping `<nav aria-label="Management sections">` + `Menu` whose items are react-router `Link`s, `Layout.Header` with a `role="group"` status cluster (`ConnectionStatus` = antd `Badge`, `Tag` role badge, theme/notification/session `Button`s), `Layout.Content id="main-content"` (antd renders the `main` landmark itself), and the session problem as antd `Alert`; capability lookup for a restored scope now goes through `useGetSetupCapabilitiesQuery` with the Zustand scope store still owning the selection; live-connection and notification state moved to `src/state/live-store.ts` (Zustand, envelopes only); `App`'s login, connecting, and unavailable gates are antd `Card`/`Form`/`Input.Password`/`Button`/`Spin`/`Alert`; `ErrorBoundary` is antd `Result`; `components/common/ConnectionStatus.tsx` is the first shared primitive; shell-specific rules were removed from `foundation.css`;
+- notifications follow the reference `Header.tsx` pattern exactly: an antd `Drawer` (title, `extra` Clear button, `Empty`, `List`) carrying `aria-label="Notifications"`, with an inner `<aside aria-label="Notifications">` holding the `Close notifications` button the browser suite addresses. This required the dependency alignment below (rc-drawer 6.5.2 under antd 5.12.8 could not name its dialog and failed axe `aria-dialog-name`; rc-drawer 7.3.0 forwards `aria-*`). A jsdom axe scan of the shell (closed and open) reports zero violations after the alignment; the navigation `Sider` carries `aria-label="Primary navigation"`;
+- browser-suite contract preserved by construction: `nav[aria-label="Management sections"]` with exact-name links, `[aria-label="Session and connection status"]` containing exact `Connected`/`Live`/`Live stale`/`Operator`/`Viewer` text, `Use dark theme`/`Use light theme`, `Open notifications`/`Close notifications` with `aria-expanded`, `End local session`, `[data-theme=dark]`, `complementary` named `Notifications`, headings `Connect to management console`/`Management server unavailable`, `role="alert"` diagnostics (antd `Alert`), label `Bootstrap token`, button `Connect`; locator changes expected in the Java suite: none;
+- dependency alignment (reviewed change under §4.1, directed by the project owner on 3 September 2026: clone the reference including its resolved versions): `antd` 5.12.8 → 5.26.5, `@ant-design/icons` 5.6.1 declared explicitly, `react`/`react-dom` 18.2.0 → 18.3.1, `@types/react` 18.3.23, `@types/react-dom` 18.3.7 — exactly what `peegeeq-management-ui/package-lock.json` resolves. Toolchain versions that this plan deliberately advanced beyond the reference (Node 22.22.2, ESLint 10, jsdom 30, Vite 6.4.3, Vitest 3.2.7, react-router-dom 7.18.2) are retained. Quality, build, and the 152-test module run are unchanged after the alignment;
+- `test/setup.ts` gained `matchMedia`/`ResizeObserver` shims — polyfills of browser APIs jsdom lacks (the reference's `vitest.setup.ts` does the same), not doubles of product code.
+
+**Ordered slices.** Each slice is one RED/GREEN increment with its own evidence entry. A slice is not started until the previous slice's owning gate is green and the 550-scenario catalogue is green.
+
+1. **U11.0 Directives and gates.** Amend §4.1, §5, §6.1, §6.2 of this plan, `PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md` §3.1/§8.1, and `PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md` §5 with the mandates below. Add `test/quality/` source-scanning guard tests that RED on the current tree: `component-library.guard.test.ts` (every file under `src/features` and `src/app` imports at least one `antd` component or is a pure presentation helper listed in an allowlist; no `<table>`, `<dialog>`, `<form>`, `<select>`, or `role="dialog"` JSX outside `src/components`), `no-test-fakes.guard.test.ts` (no `vi.mock`, `vi.stubGlobal`, `vi.fn`, `vi.spyOn`, no object literal typed as `*ClientPort`, no `implements *ClientPort` under `test/`), `no-direct-transport.guard.test.ts` (no `fetch(`, `new EventSource`, `new WebSocket`, `axios` outside `src/api`), `zod-fixture.guard.test.ts` (every fixture served by the loopback server is produced by a `*Schema.parse` call), and `sensitive-dto.guard.test.ts` (no field named `value`, `payload`, `owner`, `password`, `csrfToken`, `bootstrapToken` reaches `src/state`, URL builders, or notification/log helpers). Add `@vitest/coverage-v8` with a branch threshold of 80 percent on `src/api/**` and `src/state/**`, wired into `npm run verify` and the Maven `frontend-test` execution. Remove `axe-core` from the UI package (axe remains in `ManagementAccessibilityBrowserIT`). Fix the design doc route `/cache-setups` to `/setups`.
+2. **U11.1 Store and RTK Query foundation.** Add `src/store/index.ts` (`configureStore`, RTK Query middleware, `setupListeners`), `src/store/api/apiBase.ts` (a base query that delegates to the existing `src/api` session-aware fetch so CSRF, credentials, Origin, and no-store handling are not duplicated), and one `createApi` slice per resource family: `setupsApi`, `inspectionApi` (overview, namespaces, monitoring, activity), `entriesApi`, `countersApi`, `locksApi`, `pubSubApi`, `capabilityApi`. Every `transformResponse` calls the existing Zod schema. Sensitive read operations (entry reveal, lock owner reveal, Pub/Sub payload reveal) are **not** RTK Query endpoints; they stay on the existing no-store client path and component memory, per design §8.2. Zustand keeps scope, live-connection state, and notifications. `ManagementShell` is wrapped in `<Provider store>`. RED: a client test asserting `store.getState()[inspectionApi.reducerPath]` holds a parsed `Overview` after `useGetOverviewQuery` resolves against the loopback server.
+3. **U11.2 Shell.** Replace `ManagementShell` markup with `antd` `Layout`/`Sider`/`Menu`/`Header`, and add `components/common/ConnectionStatus`, `ErrorBoundary` (antd `Result`), and the notification `Drawer`. Preserve the current landmarks, accessible names, theme toggle, and role-aware controls so `ManagementShellBrowserIT`, `ManagementAccessibilityBrowserIT`, and `ManagementViewerBrowserIT` pass unchanged; where an antd primitive changes the DOM (for example `Menu` item roles), adjust the Java locator in the same change set and record it.
+4. **U11.3 Overview and monitoring.** `OverviewPage`, `OverviewMonitoring`, `MonitoringPage` on `Row`/`Col`/`Card`/`Statistic`/`Descriptions`/`Table`/`Alert`; `SessionTrendChart` on Recharts `AreaChart`; data via `inspectionApi`. `StatCard` and `SetupScopeBar` are introduced here.
+5. **U11.4 Setups and namespaces.** `SetupsPage`, `NamespacesPage`, `NamespaceDetailsPage` on `Table`/`Form`/`Modal`/`Tag`; `ConfirmDialog` introduced for detach/forget; `FilterBar` introduced for namespace filtering; export stays a validated download.
+6. **U11.5 Entries.** `EntriesPage`, `EntryDetailsPage`, `EntryValueFormatter` on `Table`/`Descriptions`/`Form`/`Modal`/`Drawer`; bulk preview and exact-confirmation dialogs on `ConfirmDialog`; reveal remains component memory with the existing auto-hide.
+7. **U11.6 Counters, locks, advanced.** `CountersPage`, `LocksPage`, `AdvancedOperationsPage` on `Table`/`Form`/`InputNumber` (with the existing BigInt-safe string handling; antd `InputNumber` must be configured `stringMode`)/`Modal`.
+8. **U11.7 Pub/Sub and settings.** `PubSubPage` on `Card`/`Form`/`Table`/`Tag`/`Alert` with live state from the Zustand connection store; `SettingsPage` on `Form`/`Switch`/`Select`/`Descriptions`.
+9. **U11.8 Test-layer conversion.** Rewrite every `test/*-page.test.tsx` to render the page inside the real store and router against the loopback `node:http` fixture (`test/support/loopback-server.ts`, extracted from the existing client tests), with fixtures produced by `*Schema.parse`. Replace the two `vi.stubGlobal('fetch')` tests with loopback equivalents. Delete `*ClientPort` interfaces once no page consumes them. All five guard tests go GREEN here and stay in the default gate.
+10. **U11.9 Cleanup and evidence.** Delete `foundation.css` rules that antd now owns (theme tokens via `ConfigProvider` remain), delete `src/components/Modal.tsx`, confirm `npm ls` shows every declared dependency imported, record totals, and run the complete reactor and the PostgreSQL 15-18 matrix.
+
+**Mandates introduced by this phase** (normative wording lives in the design doc and the testing standard; summarised here):
+
+- UI controls come from Ant Design 5 and charts from Recharts. Hand-written tables, forms, dialogs, drawers, selects, notifications, and charts are prohibited outside `src/components/common`, and that directory may only compose antd primitives.
+- REST read state is owned by RTK Query; scope, live-connection, and notification state by Zustand; sensitive revealed values by component memory only. Pages do not receive client objects as props.
+- Test doubles of any kind are prohibited in the UI module: no `vi.mock`, `vi.stubGlobal`, `vi.fn`, `vi.spyOn`, no hand-built port or client fakes, no literal DTOs. Components are tested through the real store and clients against a loopback `node:http` server whose responses are produced by the production Zod schemas.
+- Guard tests enforce the above statically and run in the default Vitest gate.
+
+**Exit gate:**
+
+- every declared production dependency is imported by `src/`; `antd`, `recharts`, `@reduxjs/toolkit`, and `react-redux` are in use; `axe-core` is gone from the UI package;
+- `src/components/Modal.tsx` and the control-level rules of `foundation.css` are deleted;
+- all five `test/quality` guard tests pass; `@vitest/coverage-v8` reports at least 80 percent branch coverage on `src/api/**` and `src/state/**`;
+- no `*ClientPort` type remains; no `vi.*` call remains under `test/`;
+- the Java Playwright catalogue passes 550/550 with any locator changes recorded per slice, and `ManagementAccessibilityBrowserIT` has no serious or critical axe violations at 1440x900;
+- the root `mvn verify` reactor is green and the PostgreSQL 15-18 matrix is rerun and green;
+- this plan's status line, §9, and §10 report the same evidence-backed status.
 
 ## 8. Required full-browser journeys
 
@@ -638,6 +711,7 @@ The final suite contains independent, named journeys for:
 | U9 Hardening | COMPLETE | Desktop axe, keyboard/focus/zoom, privacy, injection, screenshot, and packaged cross-surface leakage acceptance are implemented |
 | U10 Final acceptance | COMPLETE | Deterministic artifacts; 17 named browser journeys with executable ownership/runtime evidence for all 60 operations; active 550-scenario desktop-only catalogue; and the pre-expansion PostgreSQL 15.17, 16.13, 17.11, and 18.3 matrix are retained |
 
+| U11 Reference parity | IN PROGRESS | Directive/guard gates RED then GREEN; antd/Recharts/RTK Query in use with unused-dependency and fake-free tests proven by guard tests; 80 percent branch coverage on api/state; 550/550 Playwright with recorded locator changes; complete reactor and PostgreSQL 15-18 matrix green |
 Status changes occur only in the same change set as their evidence. `IN PROGRESS` means at least one valid RED test exists for the phase. `COMPLETE` means every exit criterion and owning regression gate is green. Planning or production code alone cannot close a phase.
 
 ## 10. Completion definition
@@ -654,4 +728,5 @@ Phase 8.3 is complete only when:
 - the shaded Java 21 runnable serves the complete UI from `/ui/*` under OpenJDK 26.0.2;
 - the complete reactor and PostgreSQL 15-18 matrix remain green;
 - no Mockito or substitute mocking framework has been introduced;
+- the UI module uses the mandated Ant Design 5, Recharts, RTK Query, and Zustand stack with no hand-written control equivalents, no test doubles, and green `test/quality` guard tests (U11);
 - the authoritative design, implementation plan, operations guide, and project roadmap all report the same evidence-backed status.

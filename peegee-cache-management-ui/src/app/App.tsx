@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Alert, Button, Card, Form, Input, Spin, Typography } from 'antd';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { ManagementClientError, SessionClient, type BrowserSession } from '../api/session-client';
+import { createManagementClients, createManagementStore, managementApi, ManagementProvider } from '../store';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ManagementShell } from './ManagementShell';
 
@@ -9,6 +11,7 @@ type AppProps = { apiBaseUrl?: string };
 
 export function App({ apiBaseUrl = '' }: AppProps) {
   const client = useMemo(() => new SessionClient(apiBaseUrl), [apiBaseUrl]);
+  const store = useMemo(() => createManagementStore(createManagementClients(client)), [client]);
   const [session, setSession] = useState<BrowserSession>();
   const [loading, setLoading] = useState(true);
   const [loginRequired, setLoginRequired] = useState(false);
@@ -24,6 +27,7 @@ export function App({ apiBaseUrl = '' }: AppProps) {
       })
       .catch((failure: unknown) => {
         client.clear();
+        store.dispatch(managementApi.util.resetApiState());
         setSession(undefined);
         if (failure instanceof ManagementClientError && failure.status === 401) {
           setLoginRequired(true);
@@ -45,6 +49,7 @@ export function App({ apiBaseUrl = '' }: AppProps) {
       .catch((failure: unknown) => {
         if (!active) return;
         client.clear();
+        store.dispatch(managementApi.util.resetApiState());
         setSession(undefined);
         if (failure instanceof ManagementClientError && failure.status === 401) {
           setLoginRequired(true);
@@ -58,7 +63,7 @@ export function App({ apiBaseUrl = '' }: AppProps) {
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, store]);
 
   useEffect(() => {
     if (session === undefined) return undefined;
@@ -75,13 +80,14 @@ export function App({ apiBaseUrl = '' }: AppProps) {
           return;
         }
         client.clear();
+        store.dispatch(managementApi.util.resetApiState());
         setSession(undefined);
         setLoginRequired(true);
       }, Math.max(1, Math.min(remaining, 2_147_483_647)));
     };
     scheduleExpiryCheck(expiresAt - Date.now());
     return () => window.clearTimeout(timer);
-  }, [client, session]);
+  }, [client, session, store]);
 
   const login = async (token: string) => {
     setProblem(undefined);
@@ -95,12 +101,14 @@ export function App({ apiBaseUrl = '' }: AppProps) {
     try {
       await client.logoutLocal();
       client.clear();
+      store.dispatch(managementApi.util.resetApiState());
       setSession(undefined);
       setLoginRequired(true);
     } catch (failure: unknown) {
       const clientFailure = asClientError(failure);
       if (clientFailure.status === 401) {
         client.clear();
+        store.dispatch(managementApi.util.resetApiState());
         setSession(undefined);
         setLoginRequired(true);
         return;
@@ -114,12 +122,14 @@ export function App({ apiBaseUrl = '' }: AppProps) {
     return (
       <ErrorBoundary>
         <BrowserRouter basename="/ui">
-          <ManagementShell
-            session={session}
-            sessionClient={client}
-            sessionProblem={problem}
-            onLogout={logout}
-          />
+          <ManagementProvider store={store}>
+            <ManagementShell
+              session={session}
+              sessionClient={client}
+              sessionProblem={problem}
+              onLogout={logout}
+            />
+          </ManagementProvider>
         </BrowserRouter>
       </ErrorBoundary>
     );
@@ -133,8 +143,7 @@ function LocalTokenLogin({ onLogin }: { onLogin: (token: string) => Promise<void
   const [submitting, setSubmitting] = useState(false);
   const [problem, setProblem] = useState<ManagementClientError>();
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submit = async () => {
     setSubmitting(true);
     setProblem(undefined);
     try {
@@ -148,41 +157,34 @@ function LocalTokenLogin({ onLogin }: { onLogin: (token: string) => Promise<void
   };
 
   return (
-    <main className="session-gate">
-      <section className="session-card">
-        <p className="console__eyebrow">PeeGeeQ Cache</p>
-        <h1>Connect to management console</h1>
-        <p>Enter the one-time bootstrap token printed by the local management server.</p>
-        <form onSubmit={(event) => void submit(event)}>
-          <label htmlFor="bootstrap-token">Bootstrap token</label>
-          <input
+    <SessionCard title="Connect to management console">
+      <Typography.Paragraph>Enter the one-time bootstrap token printed by the local management server.</Typography.Paragraph>
+      <Form layout="vertical" onFinish={() => void submit()}>
+        <Form.Item htmlFor="bootstrap-token" label="Bootstrap token">
+          <Input.Password
             autoComplete="off"
             id="bootstrap-token"
             onChange={(event) => setToken(event.target.value)}
             required
             spellCheck={false}
-            type="password"
             value={token}
           />
-          <button disabled={submitting || token.length === 0} type="submit">
-            {submitting ? 'Connecting…' : 'Connect'}
-          </button>
-        </form>
-        {problem !== undefined && <Diagnostics problem={problem} />}
-      </section>
-    </main>
+        </Form.Item>
+        <Button disabled={submitting || token.length === 0} htmlType="submit" type="primary">
+          {submitting ? 'Connecting…' : 'Connect'}
+        </Button>
+      </Form>
+      {problem !== undefined && <Diagnostics problem={problem} />}
+    </SessionCard>
   );
 }
 
 function SessionGate({ title }: { title: string }) {
   return (
-    <main className="session-gate" aria-busy="true">
-      <section className="session-card">
-        <p className="console__eyebrow">PeeGeeQ Cache</p>
-        <h1>{title}</h1>
-        <p>Establishing an authenticated browser session.</p>
-      </section>
-    </main>
+    <SessionCard busy title={title}>
+      <Spin />
+      <Typography.Paragraph>Establishing an authenticated browser session.</Typography.Paragraph>
+    </SessionCard>
   );
 }
 
@@ -191,24 +193,39 @@ function ProblemView({ problem, onRetry }: {
   onRetry: () => void;
 }) {
   return (
-    <main className="session-gate">
-      <section className="session-card">
-        <p className="console__eyebrow">PeeGeeQ Cache</p>
-        <h1>Management server unavailable</h1>
-        {problem !== undefined && <Diagnostics problem={problem} />}
-        <button onClick={onRetry} type="button">Retry connection</button>
-      </section>
+    <SessionCard title="Management server unavailable">
+      {problem !== undefined && <Diagnostics problem={problem} />}
+      <Button onClick={onRetry} type="primary">Retry connection</Button>
+    </SessionCard>
+  );
+}
+
+/** Centred pre-session surface (login, connecting, unavailable) built from antd `Card`. */
+function SessionCard({ busy, children, title }: { busy?: boolean; children: ReactNode; title: string }) {
+  return (
+    <main aria-busy={busy === true ? 'true' : undefined} className="session-gate">
+      <Card className="session-card">
+        <Typography.Text className="console__eyebrow" type="secondary">PeeGeeQ Cache</Typography.Text>
+        <Typography.Title level={1}>{title}</Typography.Title>
+        {children}
+      </Card>
     </main>
   );
 }
 
 function Diagnostics({ problem }: { problem: ManagementClientError }) {
   return (
-    <div className="diagnostics" role="alert">
-      <strong>{problem.code}</strong>
-      <p>{problem.message}</p>
-      {problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}
-    </div>
+    <Alert
+      description={(
+        <>
+          <p>{problem.message}</p>
+          {problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}
+        </>
+      )}
+      message={problem.code}
+      showIcon
+      type="error"
+    />
   );
 }
 

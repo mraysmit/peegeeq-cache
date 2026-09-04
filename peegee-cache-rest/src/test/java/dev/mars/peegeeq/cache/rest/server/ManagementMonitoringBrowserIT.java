@@ -129,8 +129,6 @@ class ManagementMonitoringBrowserIT {
                 true,
                 scenario.operations(),
                 context -> {
-                    ManagementConsolePostgresFixture.authenticate(context);
-                    ManagementConsolePostgresFixture.registerSetup(context);
                     Page page = context.page();
                     open(page, index < 22 ? "Monitoring" : "Settings");
                     verify(index, page);

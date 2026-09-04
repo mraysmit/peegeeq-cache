@@ -89,31 +89,35 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
 
     @Override
     public void testPlanExecutionFinished(TestPlan testPlan) {
-        if (RESULTS.isEmpty()) return;
-        Path report = reportPath();
-        List<ManagementBrowserEvidenceReport.ScenarioResult> results;
-        synchronized (RESULTS) {
-            results = RESULTS.stream()
-                    .sorted(Comparator.comparing(ManagementBrowserEvidenceReport.ScenarioResult::id))
-                    .toList();
-        }
-        Set<String> requested = config.requestedScenarioIds();
-        int expectedScenarios = !requested.isEmpty()
-                ? requested.size()
-                : config.focusedClassRun() ? 0 : config.expectedScenarios();
-        if (expectedScenarios > 0) assertExpectedScenarioCount(expectedScenarios, results.size());
-        Instant completedAt = Instant.now();
-        ManagementBrowserEvidenceReport evidence = new ManagementBrowserEvidenceReport(
-                "playwright-" + completedAt.toString().replace(':', '-'),
-                runStartedAt,
-                completedAt,
-                environment(),
-                results,
-                sensitiveCanaries());
         try {
-            ManagementBrowserEvidenceWriter.write(report, evidence);
-        } catch (IOException failure) {
-            throw new IllegalStateException("Could not write Playwright evidence report " + report, failure);
+            if (RESULTS.isEmpty()) return;
+            Path report = reportPath();
+            List<ManagementBrowserEvidenceReport.ScenarioResult> results;
+            synchronized (RESULTS) {
+                results = RESULTS.stream()
+                        .sorted(Comparator.comparing(ManagementBrowserEvidenceReport.ScenarioResult::id))
+                        .toList();
+            }
+            Set<String> requested = config.requestedScenarioIds();
+            int expectedScenarios = !requested.isEmpty()
+                    ? requested.size()
+                    : config.focusedClassRun() ? 0 : config.expectedScenarios();
+            if (expectedScenarios > 0) assertExpectedScenarioCount(expectedScenarios, results.size());
+            Instant completedAt = Instant.now();
+            ManagementBrowserEvidenceReport evidence = new ManagementBrowserEvidenceReport(
+                    "playwright-" + completedAt.toString().replace(':', '-'),
+                    runStartedAt,
+                    completedAt,
+                    environment(),
+                    results,
+                    sensitiveCanaries());
+            try {
+                ManagementBrowserEvidenceWriter.write(report, evidence);
+            } catch (IOException failure) {
+                throw new IllegalStateException("Could not write Playwright evidence report " + report, failure);
+            }
+        } finally {
+            ManagementBrowserPlaywrightSuite.close();
         }
     }
 

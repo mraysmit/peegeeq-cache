@@ -23,6 +23,8 @@ class ManagementBrowserSourcePolicyTest {
                 context.route("**/events", route -> route.abort());
                 page.setContent("<main>synthetic product</main>");
                 page.addInitScript("window.syntheticProduct = true");
+                Playwright.create();
+                playwright.chromium().launch();
                 """);
 
         List<String> violations = ManagementBrowserSourcePolicy.violations(temporaryDirectory);
@@ -33,7 +35,9 @@ class ManagementBrowserSourcePolicyTest {
                 "ProhibitedBrowserPatterns.java:2: context.route",
                 "ProhibitedBrowserPatterns.java:2: route.abort",
                 "ProhibitedBrowserPatterns.java:3: page.setContent",
-                "ProhibitedBrowserPatterns.java:4: page.addInitScript"), violations);
+                "ProhibitedBrowserPatterns.java:4: page.addInitScript",
+                "ProhibitedBrowserPatterns.java:5: Playwright.create outside suite owner",
+                "ProhibitedBrowserPatterns.java:6: Chromium launch outside suite owner"), violations);
     }
 
     @Test

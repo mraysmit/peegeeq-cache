@@ -121,8 +121,6 @@ class ManagementEntryInspectionBrowserIT {
         ManagementConsolePostgresFixture.run(
                 temporaryDirectory, POSTGRES.postgres(), true, scenario.operations(), context -> {
                     seedFor(index, context);
-                    ManagementConsolePostgresFixture.authenticate(context);
-                    ManagementConsolePostgresFixture.registerSetup(context);
                     openEntries(context.page());
                     verify(index, context);
                 });

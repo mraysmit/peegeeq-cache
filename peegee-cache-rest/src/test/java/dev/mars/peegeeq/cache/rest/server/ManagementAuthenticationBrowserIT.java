@@ -3,7 +3,6 @@ package dev.mars.peegeeq.cache.rest.server;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.AriaRole;
 import com.microsoft.playwright.options.Cookie;
 import com.microsoft.playwright.options.SameSiteAttribute;
@@ -39,7 +38,6 @@ class ManagementAuthenticationBrowserIT {
     private Vertx vertx;
     private ManagementHttpServer server;
     private LocalTokenSessionManager sessions;
-    private Playwright playwright;
     private Browser browser;
     private ManagementBrowserScenario currentScenario;
     private String bootstrapToken;
@@ -55,9 +53,7 @@ class ManagementAuthenticationBrowserIT {
                 ManagementServerResources.noop(), new LocalSessionRoutes(sessions,
                 new BrowserRequestSecurity(BrowserOriginPolicy.localToken(origin())), 16 * 1024));
         server.start().toCompletionStage().toCompletableFuture().get(30, TimeUnit.SECONDS);
-        playwright = Playwright.create(new Playwright.CreateOptions()
-                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
-        browser = playwright.chromium().launch(ManagementPlaywright.launchOptions());
+        browser = ManagementBrowserPlaywrightSuite.browser();
     }
 
     @BeforeEach
@@ -71,8 +67,6 @@ class ManagementAuthenticationBrowserIT {
 
     @AfterAll
     void stopWorker() throws Exception {
-        if (browser != null) browser.close();
-        if (playwright != null) playwright.close();
         if (server != null) server.stop().toCompletionStage().toCompletableFuture().get(30, TimeUnit.SECONDS);
         if (sessions != null) sessions.close();
         if (vertx != null) vertx.close().toCompletionStage().toCompletableFuture().get(30, TimeUnit.SECONDS);

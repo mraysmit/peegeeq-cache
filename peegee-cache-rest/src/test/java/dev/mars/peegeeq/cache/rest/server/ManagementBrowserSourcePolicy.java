@@ -23,7 +23,9 @@ final class ManagementBrowserSourcePolicy {
             pattern("route.abort", "\\broute\\s*\\.\\s*abort\\s*\\("),
             pattern("route.continue", "\\broute\\s*\\.\\s*continue\\s*\\("),
             pattern("page.setContent", "\\bpage\\s*\\.\\s*setContent\\s*\\("),
-            pattern("page.addInitScript", "\\bpage\\s*\\.\\s*addInitScript\\s*\\("));
+            pattern("page.addInitScript", "\\bpage\\s*\\.\\s*addInitScript\\s*\\("),
+            pattern("Playwright.create outside suite owner", "\\bPlaywright\\s*\\.\\s*create\\s*\\("),
+            pattern("Chromium launch outside suite owner", "\\.\\s*chromium\\s*\\(\\s*\\)\\s*\\.\\s*launch\\s*\\("));
 
     private ManagementBrowserSourcePolicy() {
     }
@@ -46,7 +48,8 @@ final class ManagementBrowserSourcePolicy {
             for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
                 String line = lines.get(lineIndex);
                 for (ProhibitedPattern prohibited : PROHIBITED_PATTERNS) {
-                    if (prohibited.pattern().matcher(line).find()) {
+                    if (prohibited.pattern().matcher(line).find()
+                            && !isSuiteBrowserOwner(source, prohibited)) {
                         violations.add(normalizedRelativePath(root, source)
                                 + ":" + (lineIndex + 1) + ": " + prohibited.label());
                     }
@@ -54,6 +57,14 @@ final class ManagementBrowserSourcePolicy {
             }
         }
         return List.copyOf(violations);
+    }
+
+    private static boolean isSuiteBrowserOwner(Path source, ProhibitedPattern prohibited) {
+        if (!source.getFileName().toString().equals("ManagementBrowserPlaywrightSuite.java")) {
+            return false;
+        }
+        return prohibited.label().equals("Playwright.create outside suite owner")
+                || prohibited.label().equals("Chromium launch outside suite owner");
     }
 
     private static boolean isScannedSource(Path path) {

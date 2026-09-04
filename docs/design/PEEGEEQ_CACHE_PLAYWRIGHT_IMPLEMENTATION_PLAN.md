@@ -13,7 +13,7 @@ Implementation evidence as of 3 September 2026:
 - negative accountability canaries prove that incomplete metadata, unknown operations, missing operation evidence, mutation without a PostgreSQL/audit oracle, and sensitive operations without leakage evidence fail validation;
 - the source-policy gate rejects Playwright request interception, response substitution, synthetic page content, and synthetic init-script patterns, with a negative canary for every prohibited construct;
 - a typed self-contained HTML evidence-report skeleton provides readable UTC dates, environment and per-scenario structure, atomic single-file output, HTML escaping, and registered-sensitive-canary rejection;
-- the PostgreSQL-backed browser journeys use one PostgreSQL 18.3 container per test worker/class, reset and migrate the schema before every scenario, and retain isolated server, Playwright, browser-context, and cleanup lifecycles; and
+- the complete browser suite uses exactly one Playwright instance and one Chromium process with a fresh browser context per scenario. Ordinary PostgreSQL-backed scenarios additionally share one PostgreSQL 18.3 container, one management server, one authenticated local session, and one registered setup; they receive deterministic mutable-data reset, process-local subscription cleanup, and an audit-backed exactly-once registration assertion, while lifecycle-mutating scenarios isolate only their server/session/setup state; and
 - the complete current 19-scenario headless browser baseline has passed on PostgreSQL 18.3 with zero failures, errors, or skips; together with the ten P0 harness/accountability tests, the focused acceptance run executed 29 tests in 56.942 seconds; and
 - the first Wave P1 shell tranche adds 21 distinct packaged-server scenarios (`PW-SHELL-002` through `PW-SHELL-022`), and its complete focused gate passed 21/21 with zero failures, errors, or skips in 45.77 seconds, bringing the accountable cumulative catalogue to 40 scenarios; and
 - the Wave P1 authentication tranche adds 40 distinct local-token and session-security scenarios (`PW-AUTH-007` through `PW-AUTH-046`), with runtime operation tracing and isolated browser contexts; its focused gate passed 40/40 in 19.50 seconds; and
@@ -38,6 +38,7 @@ Implementation evidence as of 3 September 2026:
 - PostgreSQL-backed scenarios now reject both missing and undeclared feature operations, while failed HTTP responses must match the exact expected status and canonical route rather than only an expected count; and
 - actual JUnit browser outcomes now produce one atomic self-contained `playwright-evidence.html` report with environment details and scenario metadata; PostgreSQL-backed failures additionally capture a DOM-sanitized full-page screenshot; and
 - the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The active desktop-only catalogue contains 550 scenarios, including `PW-BACKEND-001` for complete facade parity; its fresh 3 September 2026 cumulative gate passed **550/550** scenarios, plus all three runnable-artifact/evidence Failsafe checks, in the green 35-minute-49-second clean reactor; and
+- the 3 September 2026 fixture-lifecycle remediation removed authentication and setup-registration calls from ordinary test bodies, moved preparation into the shared fixture, added an audit-backed exactly-once registration guard, and centralized every scenario on one suite-owned Playwright/Chromium process. A source-policy gate rejects any additional Playwright or Chromium launch site; and
 - focused packaged PostgreSQL gates pass `PW-BACKEND-001` for existence, batch get/set, value scan, exact metrics, and owner-lock acquire/renew/ownership/release, and `PW-COUNTER-001` for create-if-missing signed adjustment with TTL and committed-state verification; and
 - report generation registers runtime bootstrap tokens, the fixture database password, and seeded revealed values as sensitive canaries, removes stale evidence before every browser test plan, and fails Maven verification unless a fresh canary-clean report is produced.
 
@@ -172,15 +173,17 @@ The suite remains owned by `peegee-cache-rest` and Java Playwright. It runs agai
 
 Performance must improve without weakening isolation:
 
-- use a bounded worker pool;
-- use one PostgreSQL container per worker rather than one container per scenario;
-- allocate a unique schema, setup ID, namespace, channel, and actor scope per scenario;
+- use exactly one Playwright instance and one Chromium process for the complete suite;
+- prohibit browser launch or close ownership in individual test classes;
+- use one PostgreSQL container for the complete Playwright suite;
+- reuse one management server, authenticated local session, browser process, audit sink, and registered setup for ordinary scenarios;
 - reset schema data and relevant sequences before each scenario;
 - create a fresh browser context per scenario;
 - never share a `Page` between scenarios;
-- use trusted-proxy sessions for most domain workflows so each context receives a real independently validated session;
-- retain dedicated server lifecycles for local-token, server-shutdown, startup, and absolute-session-lifetime scenarios; and
-- serialize scenarios that intentionally alter process-wide server state.
+- stop process-local subscriptions after their owning scenario;
+- assert from durable audit evidence that the shared setup was registered exactly once;
+- retain dedicated server/session/setup environments for setup registration/connect/detach/forget, local-token session deletion or expiry, advertised-capability variants, trusted-proxy identity variants, startup, and server shutdown while continuing to reuse the suite browser process; and
+- serialize scenarios that intentionally alter shared server state.
 
 ### 7.3 Fixture services
 

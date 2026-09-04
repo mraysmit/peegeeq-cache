@@ -95,8 +95,6 @@ class ManagementAccessibilityBrowserIT {
                 true,
                 scenario.operations(),
                 context -> {
-                    ManagementConsolePostgresFixture.authenticate(context);
-                    ManagementConsolePostgresFixture.registerSetup(context);
                     if (index == 11) {
                         ManagementConsolePostgresFixture.execute(context.postgres(), """
                                 INSERT INTO peegee_cache.cache_counters

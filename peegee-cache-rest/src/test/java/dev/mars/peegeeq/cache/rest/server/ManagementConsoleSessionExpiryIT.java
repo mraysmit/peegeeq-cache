@@ -1,9 +1,7 @@
 package dev.mars.peegeeq.cache.rest.server;
 
-import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.AriaRole;
 import dev.mars.peegeeq.cache.rest.security.BrowserOriginPolicy;
 import dev.mars.peegeeq.cache.rest.security.BrowserRequestSecurity;
@@ -24,7 +22,6 @@ import java.net.ServerSocket;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,11 +87,7 @@ class ManagementConsoleSessionExpiryIT {
         String token = bootstrap.token();
         ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
         List<String> browserErrors = new ArrayList<>();
-        try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
-                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
-             Browser browser = playwright.chromium().launch(
-                     ManagementPlaywright.launchOptions());
-            BrowserContext context = browser.newContext()) {
+        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext()) {
             Page page = context.newPage();
             page.onPageError(browserErrors::add);
             assertEquals(200, page.navigate(origin() + "/ui/").status());

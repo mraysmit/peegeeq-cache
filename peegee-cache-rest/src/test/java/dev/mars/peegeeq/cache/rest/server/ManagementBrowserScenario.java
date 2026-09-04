@@ -5,6 +5,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+
 /** Machine-readable accountability metadata for one distinct real-browser scenario. */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)

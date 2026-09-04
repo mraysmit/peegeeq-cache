@@ -209,8 +209,6 @@ class ManagementOverviewBrowserIT {
 
     private void overview(ManagementConsolePostgresFixture.Journey journey) throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
-            ManagementConsolePostgresFixture.authenticate(context);
-            ManagementConsolePostgresFixture.registerSetup(context);
             context.page().getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName("Overview")).click();
             heading(context.page(), "Overview");
             assertThat(metric(context.page(), "Live cache entries")).isVisible();

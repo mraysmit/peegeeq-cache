@@ -449,8 +449,6 @@ class ManagementShellBrowserIT {
     private void prepared(BrowserAction action) throws Exception {
         ManagementConsolePostgresFixture.run(
                 temporaryDirectory, POSTGRES.postgres(), true, context -> {
-                    ManagementConsolePostgresFixture.authenticate(context);
-                    ManagementConsolePostgresFixture.registerSetup(context);
                     action.run(context);
                 });
     }

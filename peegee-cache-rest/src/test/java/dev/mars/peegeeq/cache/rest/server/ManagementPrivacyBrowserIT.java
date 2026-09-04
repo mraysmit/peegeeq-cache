@@ -77,8 +77,6 @@ class ManagementPrivacyBrowserIT {
                 true,
                 scenario.operations(),
                 context -> {
-                    ManagementConsolePostgresFixture.authenticate(context);
-                    ManagementConsolePostgresFixture.registerSetup(context);
                     openEntry(context.page());
                     if (index == 9) {
                         context.page().getByLabel("Reveal reason (optional)")

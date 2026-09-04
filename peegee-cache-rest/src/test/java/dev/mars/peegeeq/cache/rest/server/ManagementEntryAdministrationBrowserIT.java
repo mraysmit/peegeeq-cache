@@ -115,8 +115,6 @@ class ManagementEntryAdministrationBrowserIT {
                         ManagementConsolePostgresFixture.execute(context.postgres(),
                                 "UPDATE peegee_cache.cache_entries SET expires_at=clock_timestamp()+interval '5 minutes' WHERE cache_key='customer:1'");
                     }
-                    ManagementConsolePostgresFixture.authenticate(context);
-                    ManagementConsolePostgresFixture.registerSetup(context);
                     openEntries(context.page());
                     verify(index, context);
                 });

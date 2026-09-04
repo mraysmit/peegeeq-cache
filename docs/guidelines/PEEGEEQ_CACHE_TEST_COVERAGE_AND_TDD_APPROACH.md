@@ -217,6 +217,31 @@ Desktop zoom and accessibility checks remain valid, but the browser viewport its
 within the supported desktop range. Graceful behavior outside that range is not a product contract
 and receives no scenario credit.
 
+### Browser fixture lifecycle
+
+> **Mandated: reuse one registered setup for ordinary Playwright scenarios.**
+>
+> Browser-test isolation must not replay expensive product prerequisites before every assertion.
+
+The complete Playwright run owns exactly one Playwright instance and one Chromium process. Every
+scenario receives a fresh browser context; no scenario may launch or close a browser process.
+Ordinary database-backed scenarios also share one PostgreSQL container, one management-server
+application, one authenticated local session, and one registered and connected setup, with a
+deterministic reset of mutable cache rows, counters, locks, and browser storage. Process-local
+subscriptions must be stopped after their owning scenario. Fixture traffic must never visibly test
+and register the same setup before every scenario, and the shared fixture must assert from durable
+audit evidence that exactly one setup registration occurred. A source-policy gate must reject
+`Playwright.create()` or browser launch calls outside the suite owner.
+
+An isolated management application, session, or setup is allowed only when the behavior under test changes
+global lifecycle state: empty-registry and setup registration, connect/detach/forget, authentication
+session deletion or expiry, advertised-capability variants, trusted-proxy identity variants, or
+deterministic server shutdown. These tests still use the suite Chromium process with fresh browser
+contexts. They must select the isolated server fixture explicitly; ordinary
+read, mutation, accessibility, privacy, navigation, and monitoring scenarios must use the shared
+setup. Executable fixture-policy tests must fail if a lifecycle-mutating operation is accidentally
+routed through the shared setup.
+
 The only exception is a test whose subject is the thin system-property adapter itself. Such a test
 must:
 
@@ -231,11 +256,42 @@ must:
 This rule is required for all new and modified tests. Existing global-property tests are migration
 debt and must be converted when touched; cleanup alone is not considered compliance.
 
+### Management UI component and client tests
+
+> **Mandated: no test doubles in `peegee-cache-management-ui`.**
+>
+> Vitest tests must exercise the real store, RTK Query middleware, router, Zustand stores, Zod
+> schemas, and `src/api` clients. `vi.mock`, `vi.stubGlobal`, `vi.fn`, `vi.spyOn`, fetch or module
+> replacement, and hand-built fakes of any client, port, transport, or store interface are
+> prohibited. Pages must not accept client or port objects as props.
+
+Every HTTP, SSE, or WebSocket response a component test needs is served by a purpose-built
+`node:http` server on an ephemeral loopback port (`test/support/loopback-server.ts`). Every fixture
+body that server returns is produced by the production Zod schema's `parse`, so a literal DTO that
+bypasses runtime validation cannot exist. Sensitive reveal paths are tested the same way; their
+values must be shown to be absent from stores, storage, URLs, and the DOM after cleanup.
+
+> **Mandated: Ant Design and Recharts only.**
+>
+> UI controls are Ant Design 5 components; charts are Recharts. Hand-written tables, forms, dialogs,
+> drawers, selects, tags, notifications, statistics, or charts are prohibited outside
+> `src/components/common`, which may only compose Ant Design primitives.
+
+The following `test/quality` guard tests run in the default Vitest gate and must stay green:
+`component-library.guard.test.ts`, `no-test-fakes.guard.test.ts`,
+`no-direct-transport.guard.test.ts`, `zod-fixture.guard.test.ts`, and
+`sensitive-dto.guard.test.ts`. `@vitest/coverage-v8` enforces at least 80 percent branch coverage
+on `src/api/**` and `src/state/**`. The Java Playwright catalogue continues to locate elements by
+role and label; `data-testid` attributes are not introduced.
+
 ### Testcontainers setup
 
 PostgreSQL via Testcontainers 2.0.2 and the standard `PostgreSQLContainer` integration. `peegeeq.test.postgres.image` selects the matrix image; the default remains `postgres:18.3-alpine`.
 
-Container lifecycle is managed per-test-class using `@BeforeAll` / `@AfterAll`. Tests apply the bundled bootstrap SQL through `BootstrapSqlRenderer` before exercising the database contract.
+Container lifecycle is normally managed per test class using `@BeforeAll` / `@AfterAll`. The
+Playwright suite is the deliberate exception: its JUnit root resource owns one PostgreSQL container
+for the complete browser run and closes it only after all browser classes. Tests apply the bundled
+bootstrap SQL through `BootstrapSqlRenderer` before exercising the database contract.
 
 ### Module install order
 

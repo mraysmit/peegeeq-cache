@@ -1,12 +1,8 @@
 package dev.mars.peegeeq.cache.rest.server;
 
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserType;
+import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
 import org.junit.jupiter.api.Test;
-
-import java.util.Map;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,11 +12,8 @@ class ManagementPlaywrightObservationIT {
 
     @Test
     void scenarioOverlayCoversSetupNavigationsAndIsRemovedWhenTheFeatureIsReady() {
-        try (Playwright playwright = Playwright.create(new Playwright.CreateOptions()
-                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
-             Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
-                     .setChannel("chrome").setHeadless(true))) {
-            Page page = browser.newPage();
+        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext()) {
+            Page page = context.newPage();
             ManagementPlaywright.ScenarioPresentation presentation =
                     ManagementPlaywright.beginScenario(
                             page, new ManagementPlaywright.Observation(false, 0, 0));

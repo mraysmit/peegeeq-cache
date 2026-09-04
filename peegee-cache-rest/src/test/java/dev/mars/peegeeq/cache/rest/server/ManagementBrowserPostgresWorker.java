@@ -5,26 +5,55 @@ import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/** JUnit worker resource that starts one reusable PostgreSQL container per browser test class. */
+/** JUnit resource that starts one PostgreSQL container for the complete browser-test suite. */
 final class ManagementBrowserPostgresWorker implements BeforeAllCallback, AfterAllCallback {
 
-    private final ManagementBrowserWorkerResource<PostgreSQLContainer> worker =
-            new ManagementBrowserWorkerResource<>(
-                    ManagementConsolePostgresFixture::newPostgresWorkerContainer,
-                    PostgreSQLContainer::start,
-                    PostgreSQLContainer::stop);
+    private static final ExtensionContext.Namespace NAMESPACE =
+            ExtensionContext.Namespace.create(ManagementBrowserPostgresWorker.class);
+    private static final String RESOURCE_KEY = "postgres-browser-suite";
+
+    private SuiteResource suiteResource;
 
     @Override
     public void beforeAll(ExtensionContext context) {
-        worker.start();
+        suiteResource = context.getRoot().getStore(NAMESPACE).getOrComputeIfAbsent(
+                RESOURCE_KEY,
+                ignored -> new SuiteResource(),
+                SuiteResource.class);
     }
 
     PostgreSQLContainer postgres() {
-        return worker.resource();
+        if (suiteResource == null) {
+            throw new IllegalStateException("Browser suite PostgreSQL resource is not running");
+        }
+        return suiteResource.postgres();
     }
 
     @Override
     public void afterAll(ExtensionContext context) {
-        worker.close();
+        // The root ExtensionContext owns the resource and closes it after the complete browser suite.
+    }
+
+    private static final class SuiteResource implements ExtensionContext.Store.CloseableResource {
+        private final ManagementBrowserWorkerResource<PostgreSQLContainer> worker =
+                new ManagementBrowserWorkerResource<>(
+                        ManagementConsolePostgresFixture::newPostgresWorkerContainer,
+                        PostgreSQLContainer::start,
+                        PostgreSQLContainer::stop);
+
+        private SuiteResource() {
+            worker.start();
+        }
+
+        private PostgreSQLContainer postgres() {
+            return worker.resource();
+        }
+
+        @Override
+        public void close() throws Exception {
+            PostgreSQLContainer postgres = worker.resource();
+            ManagementConsolePostgresFixture.closeShared(postgres);
+            worker.close();
+        }
     }
 }
