@@ -33,6 +33,11 @@ export class SessionClient {
     this.baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
   }
 
+  /** Origin prefix shared by the REST clients and the SSE/WebSocket transports ('' in production). */
+  get origin(): string {
+    return this.baseUrl;
+  }
+
   async load(): Promise<BrowserSession> {
     const response = await fetch(this.url('/api/v1/session'), {
       credentials: 'include',

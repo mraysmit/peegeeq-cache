@@ -23,6 +23,8 @@ export interface LoopbackRequest {
   readonly headers: IncomingMessage['headers'];
   readonly body: unknown;
   readonly rawBody: string;
+  /** Register a listener for the client closing or aborting this request (e.g. an SSE stream). */
+  onClose(listener: () => void): void;
 }
 
 export interface LoopbackRespond {
@@ -73,6 +75,7 @@ export async function startLoopbackServer(handler: LoopbackHandler): Promise<Loo
         headers: incoming.headers,
         body,
         rawBody,
+        onClose: (listener) => outgoing.once('close', listener),
       };
       requests.push(request);
       const respond: LoopbackRespond = {
@@ -130,6 +133,9 @@ export async function startLoopbackServer(handler: LoopbackHandler): Promise<Loo
     close: () => new Promise<void>((resolve, reject) => {
       for (const response of openResponses) response.destroy();
       server.close((error) => (error ? reject(error) : resolve()));
+      // Keep-alive sockets (undici's pool, a reconnecting SSE client) would otherwise hold the
+      // listener open until their idle timeout; the fixture's lifetime is the test's lifetime.
+      server.closeAllConnections();
     }),
   };
 }

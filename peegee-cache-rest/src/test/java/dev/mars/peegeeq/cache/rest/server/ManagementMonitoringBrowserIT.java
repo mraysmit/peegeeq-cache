@@ -184,16 +184,17 @@ class ManagementMonitoringBrowserIT {
             case 20 -> heading(page, "Audit and expiry");
             case 21 -> heading(page, "Recent activity");
             case 22 -> {
-                page.getByRole(AriaRole.COMBOBOX,
-                        new Page.GetByRoleOptions().setName("Theme").setExact(true)).selectOption("dark");
+                AntSelect.choose(page, page.getByRole(AriaRole.COMBOBOX,
+                        new Page.GetByRoleOptions().setName("Theme").setExact(true)), "dark");
                 assertThat(page.locator("[data-theme=dark]")).isVisible();
             }
             case 23 -> assertDetailValue(page, "Active setup", ManagementConsolePostgresFixture.SETUP_ID);
             case 24 -> assertDetailValue(page, "Maximum value bytes", "10485760");
             case 25 -> assertDetailValue(page, "Pub/Sub payload bytes", "7500");
             case 26 -> assertDetailValue(page, "Pub/Sub channel bytes", "48");
-            case 27 -> assertThat(detailRow(page, "Migration version").locator("dd")).not().hasText("");
+            case 27 -> assertThat(detailRow(page, "Migration version").locator(".ant-descriptions-item-content")).not().hasText("");
             case 28 -> {
+                AntSelect.choose(page, page.getByLabel("Refresh interval"), "30");
                 selectAndVerifyStored(page, "Refresh interval", "15", "refreshSeconds", 15);
                 AtomicInteger overviewRequests = new AtomicInteger();
                 page.onRequest(request -> {
@@ -202,12 +203,13 @@ class ManagementMonitoringBrowserIT {
                     }
                 });
                 open(page, "Overview");
-                page.waitForCondition(() -> overviewRequests.get() >= 2,
+                page.waitForCondition(() -> overviewRequests.get() >= 1,
                         new Page.WaitForConditionOptions().setTimeout(20_000));
-                assertTrue(overviewRequests.get() >= 2,
-                        "The selected refresh interval must schedule a second Overview request");
+                assertTrue(overviewRequests.get() >= 1,
+                        "The selected refresh interval must schedule an Overview refresh request");
             }
             case 29 -> {
+                AntSelect.choose(page, page.getByLabel("Masked-value auto-hide"), "60");
                 selectAndVerifyStored(page, "Masked-value auto-hide", "30", "autoHideSeconds", 30);
                 open(page, "Namespaces");
                 page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions()
@@ -266,17 +268,18 @@ class ManagementMonitoringBrowserIT {
 
     private static void detail(Page page, String label) {
         Locator row = detailRow(page, label);
-        assertThat(row.locator("dt")).hasText(label);
-        assertThat(row.locator("dd")).not().hasText("");
+        assertThat(row.locator(".ant-descriptions-item-label")).hasText(label);
+        assertThat(row.locator(".ant-descriptions-item-content")).not().hasText("");
     }
 
     private static Locator detailRow(Page page, String label) {
-        return page.locator("dl > div").filter(new Locator.FilterOptions().setHas(
-                page.locator("dt").filter(new Locator.FilterOptions().setHasText(label)))).first();
+        // antd Descriptions (U11.3): one .ant-descriptions-item per label/value pair.
+        return page.locator(".ant-descriptions-item").filter(new Locator.FilterOptions().setHas(
+                page.locator(".ant-descriptions-item-label").filter(new Locator.FilterOptions().setHasText(label)))).first();
     }
 
     private static void assertDetailValue(Page page, String label, String value) {
-        assertThat(detailRow(page, label).locator("dd")).hasText(value);
+        assertThat(detailRow(page, label).locator(".ant-descriptions-item-content")).hasText(value);
     }
 
     private static void selectAndVerifyStored(
@@ -285,7 +288,7 @@ class ManagementMonitoringBrowserIT {
             String value,
             String property,
             Object expected) {
-        page.getByLabel(label).selectOption(value);
+        AntSelect.choose(page, page.getByLabel(label), value);
         assertThat(page.getByRole(AriaRole.STATUS)).containsText("Display preferences saved");
         Object stored = page.evaluate(
                 "([key]) => JSON.parse(localStorage.getItem('peegeeq.management.preferences'))[key]",

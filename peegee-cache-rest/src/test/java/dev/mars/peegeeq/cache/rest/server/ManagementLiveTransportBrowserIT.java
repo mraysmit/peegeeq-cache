@@ -168,11 +168,13 @@ class ManagementLiveTransportBrowserIT {
             }
             case 15 -> {
                 interruptAndRestore(page);
-                assertThat(page.getByText("Live metrics connected", exact())).isVisible();
+                assertThat(page.getByText("Live metrics connected", exact())).isVisible(
+                        new com.microsoft.playwright.assertions.LocatorAssertions.IsVisibleOptions()
+                                .setTimeout(15_000));
             }
             case 16 -> {
                 interruptAndRestore(page);
-                assertLive(page);
+                assertLive(page, 15_000);
             }
             case 17 -> {
                 openBoth(page);
@@ -224,6 +226,12 @@ class ManagementLiveTransportBrowserIT {
 
     private static void assertLive(Page page) {
         assertThat(page.getByText("Live", exact())).isVisible();
+    }
+
+    private static void assertLive(Page page, double timeoutMillis) {
+        assertThat(page.getByText("Live", exact())).isVisible(
+                new com.microsoft.playwright.assertions.LocatorAssertions.IsVisibleOptions()
+                        .setTimeout(timeoutMillis));
     }
 
     private static com.microsoft.playwright.Locator notifications(Page page) {

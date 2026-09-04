@@ -1,48 +1,262 @@
+import { Alert, Button, Card, Empty, Form, Input, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 
-import type { PubSubClientPort } from '../../api/pubsub-client';
 import type { PubSubMessageMetadata, RevealedPubSubPayload, SubscriptionSummary } from '../../api/pubsub-schemas';
-import { FetchSseTransport, type LiveStream, type PubSubStreamPort } from '../../api/live-transport';
 import { ManagementClientError } from '../../api/session-client';
 import { formatDisplayInstant } from '../../presentation/display-time';
+import { useLiveStore } from '../../state/live-store';
 import { effectiveAutoHideMillis } from '../../state/preferences';
+import { useManagementClients } from '../../store';
+import { isManagementQueryError, toQueryError, type ManagementQueryError } from '../../store/api/apiBase';
+import { useCreateSubscriptionMutation, useDeleteSubscriptionMutation, usePublishMessageMutation } from '../../store/api/pubSubApi';
 
-const defaultStream = new FetchSseTransport();
+const { Title, Text, Paragraph } = Typography;
 
-export function PubSubPage({ canOperate, canReveal, client, maximumChannelBytes, maximumPayloadBytes, selectedSetupId, stream = defaultStream }: {
-  readonly canOperate: boolean; readonly canReveal: boolean; readonly client: PubSubClientPort;
-  readonly maximumChannelBytes: number; readonly maximumPayloadBytes: number; readonly selectedSetupId?: string; readonly stream?: PubSubStreamPort;
-}) {
-  const [channel, setChannel] = useState(''); const [bufferLimit, setBufferLimit] = useState(20);
-  const [subscription, setSubscription] = useState<SubscriptionSummary>(); const [connection, setConnection] = useState('STOPPED');
-  const [messages, setMessages] = useState<PubSubMessageMetadata[]>([]); const [revealed, setRevealed] = useState<RevealedPubSubPayload>();
-  const [publishChannel, setPublishChannel] = useState(''); const [payload, setPayload] = useState(''); const [contentType, setContentType] = useState('');
-  const [status, setStatus] = useState(''); const [problem, setProblem] = useState<ManagementClientError>(); const [busy, setBusy] = useState(false);
-  const channelBytes = utf8Bytes(channel); const publishChannelBytes = utf8Bytes(publishChannel); const payloadBytes = utf8Bytes(payload); const wirePayloadBytes = encodedPayloadBytes(payload, contentType);
-
-  useEffect(() => { if (subscription === undefined) return undefined; const live: LiveStream = stream.connect(subscription.streamPath, { onMessage: (message) => setMessages((current) => [message, ...current.filter((item) => item.messageId !== message.messageId)].slice(0, subscription.bufferLimit)), onState: setConnection, onReset: (reason) => { setMessages([]); setStatus(reason); }, onError: (message) => setStatus(message) }); return () => live.stop(); }, [stream, subscription]);
-  useEffect(() => { if (revealed === undefined) return undefined; const timer = window.setTimeout(() => setRevealed(undefined), effectiveAutoHideMillis(revealed.autoHideAfterMillis)); return () => window.clearTimeout(timer); }, [revealed]);
-  useEffect(() => { const hide = () => { if (document.hidden) setRevealed(undefined); }; document.addEventListener('visibilitychange', hide); return () => document.removeEventListener('visibilitychange', hide); }, []);
-
-  const start = async () => { if (selectedSetupId === undefined) return; setBusy(true); setProblem(undefined); try { setSubscription(await client.createSubscription(selectedSetupId, channel, bufferLimit)); setMessages([]); setStatus('Non-durable console subscription started. Messages are retained only in a bounded process-local buffer.'); } catch (failure) { setProblem(asError(failure)); } finally { setBusy(false); } };
-  const stop = async () => { if (selectedSetupId === undefined || subscription === undefined) return; setBusy(true); try { await client.deleteSubscription(selectedSetupId, subscription.subscriptionId); setSubscription(undefined); setMessages([]); setRevealed(undefined); setConnection('STOPPED'); setStatus('Subscription stopped and its retained messages were discarded.'); } catch (failure) { setProblem(asError(failure)); } finally { setBusy(false); } };
-  const publish = async () => { if (selectedSetupId === undefined) return; setBusy(true); setProblem(undefined); try { const accepted = await client.publish(selectedSetupId, publishChannel, payload, contentType); setStatus(`Accepted by PostgreSQL at ${formatDisplayInstant(accepted.publishedAt)}.`); setPayload(''); } catch (failure) { setProblem(asError(failure)); } finally { setBusy(false); } };
-  const reveal = async (message: PubSubMessageMetadata) => { if (selectedSetupId === undefined || subscription === undefined) return; setBusy(true); setRevealed(undefined); try { setRevealed(await client.revealPayload(selectedSetupId, subscription.subscriptionId, message.messageId)); } catch (failure) { setProblem(asError(failure)); } finally { setBusy(false); } };
-
-  if (selectedSetupId === undefined) return <Workspace><p>Select a connected setup before using Pub/Sub.</p></Workspace>;
-  return <Workspace>
-    {problem !== undefined && <div className="diagnostics" role="alert"><strong>{problem.code}</strong><p>{problem.message}</p></div>}
-    {status !== '' && <p role="status">{status}</p>}
-    {subscription === undefined ? <section className="details-section" aria-labelledby="subscribe-title"><h2 id="subscribe-title">Subscribe</h2><p>Subscriptions are non-durable and bounded. They end when this console session or setup closes.</p><label className="field" htmlFor="pubsub-channel">Channel<input id="pubsub-channel" maxLength={maximumChannelBytes} onChange={(event) => setChannel(event.target.value)} value={channel} /></label><p>{channelBytes} / {maximumChannelBytes} UTF-8 bytes</p><label className="field" htmlFor="pubsub-buffer">Buffer entries<input id="pubsub-buffer" max={500} min={1} onChange={(event) => setBufferLimit(Number(event.target.value))} type="number" value={bufferLimit} /></label><button className="button" disabled={busy || channelBytes < 1 || channelBytes > maximumChannelBytes || bufferLimit < 1 || bufferLimit > 500} onClick={() => void start()} type="button">Start subscription</button></section> : <section className="details-section" aria-labelledby="subscription-title"><h2 id="subscription-title">Subscription: {subscription.channel}</h2><p>Non-durable · {connection} · bounded to {subscription.bufferLimit} messages</p><button className="button button--danger" disabled={busy} onClick={() => void stop()} type="button">Stop subscription</button><div aria-label="Retained Pub/Sub messages" className="table-scroll" role="region" tabIndex={0}><table className="data-table"><thead><tr><th>Message</th><th>Received</th><th>Content type</th><th>Bytes</th><th>Payload</th>{canReveal && <th>Actions</th>}</tr></thead><tbody>{messages.map((message) => <tr key={message.messageId}><td>{message.messageId}</td><td>{formatDisplayInstant(message.receivedAt)}</td><td>{message.contentType ?? 'Not supplied'}</td><td>{message.payloadBytes}</td><td>Masked</td>{canReveal && <td><button className="button button--quiet" disabled={busy} onClick={() => void reveal(message)} type="button">Reveal payload {message.messageId}</button></td>}</tr>)}</tbody></table></div>{messages.length === 0 && <p>No retained message metadata.</p>}</section>}
-    {revealed !== undefined && <section className="details-section" aria-labelledby="payload-title"><h2 id="payload-title">Revealed payload</h2><p><strong>Content type:</strong> {revealed.contentType ?? 'Not supplied'}</p><pre className="value-content">{revealed.payload}</pre><button className="button" onClick={() => setRevealed(undefined)} type="button">Hide payload</button></section>}
-    {canOperate && <section className="details-section" aria-labelledby="publish-title"><h2 id="publish-title">Publish</h2><p>Success means accepted by PostgreSQL; it does not prove subscriber delivery. A content type is preserved for PeeGeeQ Cache subscribers.</p><label className="field" htmlFor="publish-channel">Publish channel<input id="publish-channel" maxLength={maximumChannelBytes} onChange={(event) => setPublishChannel(event.target.value)} value={publishChannel} /></label><p>{publishChannelBytes} / {maximumChannelBytes} channel UTF-8 bytes</p><label className="field" htmlFor="publish-content-type">Content type (optional)<input id="publish-content-type" maxLength={255} onChange={(event) => setContentType(event.target.value)} placeholder="application/json" value={contentType} /></label><label className="field field--wide" htmlFor="publish-payload">Payload<textarea id="publish-payload" onChange={(event) => setPayload(event.target.value)} value={payload} /></label><p>{payloadBytes} raw · {wirePayloadBytes} / {maximumPayloadBytes} wire bytes</p><button className="button" disabled={busy || publishChannelBytes < 1 || publishChannelBytes > maximumChannelBytes || wirePayloadBytes > maximumPayloadBytes} onClick={() => void publish()} type="button">Publish</button></section>}
-  </Workspace>;
+interface PubSubPageProps {
+  readonly canOperate: boolean;
+  readonly canReveal: boolean;
+  readonly maximumChannelBytes: number;
+  readonly maximumPayloadBytes: number;
+  readonly selectedSetupId?: string;
 }
 
-function Workspace({ children }: { readonly children: ReactNode }) { return <section className="workspace" aria-labelledby="pubsub-title"><p className="workspace__context">Process-local live messaging</p><h1 id="pubsub-title">Pub/Sub</h1>{children}</section>; }
-function asError(value: unknown) { return value instanceof ManagementClientError ? value : new ManagementClientError(0, 'CONNECTION_FAILED', 'Pub/Sub operation failed'); }
-function utf8Bytes(value: string) { return new TextEncoder().encode(value).byteLength; }
-function encodedPayloadBytes(payload: string, contentType: string) {
+/**
+ * Pub/Sub. Subscription creation, deletion, and publish are RTK Query mutations; the live message
+ * stream is an SSE transport whose connection state and bounded metadata buffer live in the
+ * Zustand live store (design §8.2). Payload reveal is sensitive: it goes through the no-store
+ * client and is held only in this component's state with auto-hide.
+ */
+export function PubSubPage({ canOperate, canReveal, maximumChannelBytes, maximumPayloadBytes, selectedSetupId }: PubSubPageProps) {
+  const clients = useManagementClients();
+  const connection = useLiveStore((state) => state.pubSubConnection);
+  const messages = useLiveStore((state) => state.pubSubMessages);
+  const setConnection = useLiveStore((state) => state.setPubSubConnection);
+  const receiveMessage = useLiveStore((state) => state.receivePubSubMessage);
+  const clearMessages = useLiveStore((state) => state.clearPubSubMessages);
+  const stopLive = useLiveStore((state) => state.stopPubSub);
+  const [createSubscription] = useCreateSubscriptionMutation();
+  const [deleteSubscription] = useDeleteSubscriptionMutation();
+  const [publishMessage] = usePublishMessageMutation();
+
+  const [channel, setChannel] = useState('');
+  const [bufferLimit, setBufferLimit] = useState('20');
+  const [subscription, setSubscription] = useState<SubscriptionSummary>();
+  const [revealed, setRevealed] = useState<RevealedPubSubPayload>();
+  const [publishChannel, setPublishChannel] = useState('');
+  const [payload, setPayload] = useState('');
+  const [contentType, setContentType] = useState('');
+  const [status, setStatus] = useState('');
+  const [problem, setProblem] = useState<ManagementQueryError>();
+  const [busy, setBusy] = useState(false);
+
+  const channelBytes = utf8Bytes(channel);
+  const publishChannelBytes = utf8Bytes(publishChannel);
+  const payloadBytes = utf8Bytes(payload);
+  const wirePayloadBytes = encodedPayloadBytes(payload, contentType);
+  const bufferEntries = Number(bufferLimit);
+  const bufferValid = Number.isSafeInteger(bufferEntries) && bufferEntries >= 1 && bufferEntries <= 500;
+
+  useEffect(() => {
+    if (subscription === undefined) return undefined;
+    const live = clients.pubSubStream.connect(`${clients.origin}${subscription.streamPath}`, {
+      onMessage: (message) => receiveMessage(message, subscription.bufferLimit),
+      onState: setConnection,
+      onReset: (reason) => { clearMessages(); setStatus(reason); },
+      onError: (message) => setStatus(message),
+    });
+    return () => { live.stop(); stopLive(); };
+  }, [clearMessages, clients, receiveMessage, setConnection, stopLive, subscription]);
+
+  useEffect(() => {
+    if (revealed === undefined) return undefined;
+    const timer = window.setTimeout(() => setRevealed(undefined), effectiveAutoHideMillis(revealed.autoHideAfterMillis));
+    return () => window.clearTimeout(timer);
+  }, [revealed]);
+
+  useEffect(() => {
+    const hideWhenBackgrounded = () => { if (document.hidden) setRevealed(undefined); };
+    document.addEventListener('visibilitychange', hideWhenBackgrounded);
+    return () => document.removeEventListener('visibilitychange', hideWhenBackgrounded);
+  }, []);
+
+  const run = async (operation: () => Promise<void>) => {
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      await operation();
+    } catch (failure: unknown) {
+      setProblem(asQueryError(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const start = () => {
+    if (selectedSetupId === undefined) return;
+    void run(async () => {
+      const created = await createSubscription({ setupId: selectedSetupId, channel, bufferLimit: bufferEntries }).unwrap();
+      clearMessages();
+      setSubscription(created);
+      setStatus('Non-durable console subscription started. Messages are retained only in a bounded process-local buffer.');
+    });
+  };
+
+  const stop = () => {
+    if (selectedSetupId === undefined || subscription === undefined) return;
+    void run(async () => {
+      await deleteSubscription({ setupId: selectedSetupId, subscriptionId: subscription.subscriptionId }).unwrap();
+      setSubscription(undefined);
+      setRevealed(undefined);
+      setStatus('Subscription stopped and its retained messages were discarded.');
+    });
+  };
+
+  const publish = () => {
+    if (selectedSetupId === undefined) return;
+    void run(async () => {
+      const accepted = await publishMessage({ setupId: selectedSetupId, channel: publishChannel, payload, contentType }).unwrap();
+      setStatus(`Accepted by PostgreSQL at ${formatDisplayInstant(accepted.publishedAt)}.`);
+      setPayload('');
+    });
+  };
+
+  const reveal = (message: PubSubMessageMetadata) => {
+    if (selectedSetupId === undefined || subscription === undefined || !canReveal) return;
+    setRevealed(undefined);
+    void run(async () => { setRevealed(await clients.pubSub.revealPayload(selectedSetupId, subscription.subscriptionId, message.messageId)); });
+  };
+
+  if (selectedSetupId === undefined) {
+    return <Workspace><Card><Empty description={<Title level={2} style={{ fontSize: 18 }}>Pub/Sub unavailable</Title>}><Text type="secondary">Select a connected setup before using Pub/Sub.</Text></Empty></Card></Workspace>;
+  }
+
+  const columns = [
+    { title: 'Message', dataIndex: 'messageId', key: 'messageId' },
+    { title: 'Received', key: 'receivedAt', render: (_value: unknown, message: PubSubMessageMetadata) => formatDisplayInstant(message.receivedAt) },
+    { title: 'Content type', key: 'contentType', render: (_value: unknown, message: PubSubMessageMetadata) => message.contentType ?? 'Not supplied' },
+    { title: 'Bytes', dataIndex: 'payloadBytes', key: 'payloadBytes' },
+    { title: 'Payload', key: 'payload', render: () => <Tag>Masked</Tag> },
+    ...(canReveal ? [{
+      title: 'Actions', key: 'actions',
+      render: (_value: unknown, message: PubSubMessageMetadata) => <Button disabled={busy} onClick={() => reveal(message)} size="small" type="link">Reveal payload {message.messageId}</Button>,
+    }] : []),
+  ];
+
+  return (
+    <Workspace>
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        {problem !== undefined && <ProblemAlert problem={problem} />}
+        {status !== '' && <Alert message={status} role="status" showIcon type="info" />}
+
+        {subscription === undefined ? (
+          <section aria-labelledby="subscribe-title" className="details-section">
+            <Card title={<Title id="subscribe-title" level={2} style={{ margin: 0, fontSize: 18 }}>Subscribe</Title>}>
+              <Paragraph>Subscriptions are non-durable and bounded. They end when this console session or setup closes.</Paragraph>
+              <Form layout="vertical">
+                <Form.Item htmlFor="pubsub-channel" label="Channel">
+                  <Input id="pubsub-channel" maxLength={maximumChannelBytes} onChange={(event) => setChannel(event.target.value)} value={channel} />
+                </Form.Item>
+                <Text>{channelBytes} / {maximumChannelBytes} UTF-8 bytes</Text>
+                <Form.Item htmlFor="pubsub-buffer" label="Buffer entries" style={{ marginTop: 16 }}>
+                  <Input id="pubsub-buffer" max={500} min={1} onChange={(event) => setBufferLimit(event.target.value)} type="number" value={bufferLimit} />
+                </Form.Item>
+                <Button disabled={busy || channelBytes < 1 || channelBytes > maximumChannelBytes || !bufferValid} onClick={start} type="primary">Start subscription</Button>
+              </Form>
+            </Card>
+          </section>
+        ) : (
+          <section aria-labelledby="subscription-title" className="details-section">
+            <Card
+              extra={<Button danger disabled={busy} onClick={stop}>Stop subscription</Button>}
+              title={<Title id="subscription-title" level={2} style={{ margin: 0, fontSize: 18 }}>Subscription: {subscription.channel}</Title>}
+            >
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Text>Non-durable · {connection} · bounded to {subscription.bufferLimit} messages</Text>
+                {messages.length === 0
+                  ? <Text>No retained message metadata.</Text>
+                  : (
+                    <div aria-label="Retained Pub/Sub messages" className="table-scroll" role="region" tabIndex={0}>
+                      <Table columns={columns} dataSource={messages} pagination={false} rowKey="messageId" size="small" />
+                    </div>
+                  )}
+              </Space>
+            </Card>
+          </section>
+        )}
+
+        {revealed !== undefined && (
+          <section aria-labelledby="payload-title" className="details-section">
+            <Card
+              extra={<Button onClick={() => setRevealed(undefined)} type="primary">Hide payload</Button>}
+              title={<Title id="payload-title" level={2} style={{ margin: 0, fontSize: 18 }}>Revealed payload</Title>}
+            >
+              <p><strong>Content type:</strong> {revealed.contentType ?? 'Not supplied'}</p>
+              <pre className="value-content">{revealed.payload}</pre>
+            </Card>
+          </section>
+        )}
+
+        {canOperate && (
+          <section aria-labelledby="publish-title" className="details-section">
+            <Card title={<Title id="publish-title" level={2} style={{ margin: 0, fontSize: 18 }}>Publish</Title>}>
+              <Paragraph>Success means accepted by PostgreSQL; it does not prove subscriber delivery. A content type is preserved for PeeGeeQ Cache subscribers.</Paragraph>
+              <Form layout="vertical">
+                <Form.Item htmlFor="publish-channel" label="Publish channel">
+                  <Input id="publish-channel" maxLength={maximumChannelBytes} onChange={(event) => setPublishChannel(event.target.value)} value={publishChannel} />
+                </Form.Item>
+                <Text>{publishChannelBytes} / {maximumChannelBytes} channel UTF-8 bytes</Text>
+                <Form.Item htmlFor="publish-content-type" label="Content type (optional)" style={{ marginTop: 16 }}>
+                  <Input id="publish-content-type" maxLength={255} onChange={(event) => setContentType(event.target.value)} placeholder="application/json" value={contentType} />
+                </Form.Item>
+                <Form.Item htmlFor="publish-payload" label="Payload">
+                  <Input.TextArea id="publish-payload" onChange={(event) => setPayload(event.target.value)} rows={4} value={payload} />
+                </Form.Item>
+                <Text>{payloadBytes} raw · {wirePayloadBytes} / {maximumPayloadBytes} wire bytes</Text>
+                <div style={{ marginTop: 16 }}>
+                  <Button disabled={busy || publishChannelBytes < 1 || publishChannelBytes > maximumChannelBytes || wirePayloadBytes > maximumPayloadBytes} onClick={publish} type="primary">Publish</Button>
+                </div>
+              </Form>
+            </Card>
+          </section>
+        )}
+      </Space>
+    </Workspace>
+  );
+}
+
+function Workspace({ children }: { readonly children: ReactNode }) {
+  return (
+    <section aria-labelledby="pubsub-title" className="workspace">
+      <div className="workspace__heading" style={{ marginBottom: 16 }}>
+        <Text className="workspace__context" type="secondary">Process-local live messaging</Text>
+        <Title id="pubsub-title" level={1} style={{ marginTop: 4 }}>Pub/Sub</Title>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ProblemAlert({ problem }: { readonly problem: ManagementQueryError }) {
+  return (
+    <Alert
+      description={<>{problem.message}{problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}</>}
+      message={problem.code}
+      role="alert"
+      showIcon
+      type="error"
+    />
+  );
+}
+
+function asQueryError(failure: unknown): ManagementQueryError {
+  if (isManagementQueryError(failure)) return failure;
+  if (failure instanceof ManagementClientError) return toQueryError(failure);
+  return { status: 0, code: 'CONNECTION_FAILED', message: 'Pub/Sub operation failed' };
+}
+
+function utf8Bytes(value: string): number { return new TextEncoder().encode(value).byteLength; }
+
+function encodedPayloadBytes(payload: string, contentType: string): number {
   const payloadBytes = utf8Bytes(payload);
   const normalizedType = contentType.trim();
   if (normalizedType === '' && !payload.startsWith('__PGQ_CACHE_TYPED_V1__:')) return payloadBytes;

@@ -3,7 +3,7 @@ import { Alert, Badge, Button, ConfigProvider, Drawer, Empty, Layout, List, Menu
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 
-import type { BrowserSession, ManagementClientError, SessionClient } from '../api/session-client';
+import type { BrowserSession, ManagementClientError } from '../api/session-client';
 import type { SetupCapabilities } from '../api/setup-schemas';
 import { BrowserMonitoringSocket } from '../api/monitoring-live';
 import { OverviewPage } from '../features/overview/OverviewPage';
@@ -22,7 +22,6 @@ import { useSetupScopeStore } from '../state/scope-store';
 import { useLiveStore } from '../state/live-store';
 import { loadPreferences, PREFERENCES_CHANGED_EVENT, savePreferences } from '../state/preferences';
 import { formatDisplayInstant } from '../presentation/display-time';
-import { useManagementClients } from '../store';
 import { useGetSetupCapabilitiesQuery } from '../store/api/setupsApi';
 import { ConnectionStatus } from '../components/common/ConnectionStatus';
 
@@ -31,8 +30,6 @@ const { Text, Title } = Typography;
 
 type ManagementShellProps = {
   session: BrowserSession;
-  /** Retained until every page reads through RTK Query (U11.3-U11.7); the shell itself no longer uses it. */
-  sessionClient?: SessionClient;
   sessionProblem?: ManagementClientError;
   onLogout: () => Promise<void>;
 };
@@ -75,7 +72,6 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
   const [collapsed, setCollapsed] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
   const location = useLocation();
-  const clients = useManagementClients();
   const selectedSetupId = useSetupScopeStore((state) => state.setupId);
   const selectedNamespace = useSetupScopeStore((state) => state.namespace);
   const selectedCapabilities = useSetupScopeStore((state) => state.capabilities);
@@ -163,8 +159,20 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
     ? 'Connected'
     : connectionState === 'CONNECTED' ? 'Live' : connectionState === 'STALE' ? 'Live stale' : 'Connecting';
 
+  // `virtual={false}`: every console Select is a short, fixed option list. Without virtual
+  // scrolling rc-select renders each visible option with role="option" instead of a hidden
+  // three-item accessibility shadow list, so assistive technology and role-based locators see
+  // the whole list — the accessibility contract the browser suite asserts.
   return (
-    <ConfigProvider theme={{ algorithm: theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm }}>
+    <ConfigProvider
+      theme={{
+        algorithm: theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        token: theme === 'dark'
+          ? { colorError: '#ff7875', colorPrimary: '#85a5ff', colorTextSecondary: '#c8d2e1', colorTextTertiary: '#b5c1d2' }
+          : { colorError: '#b42318', colorPrimary: '#0b57b7', colorTextSecondary: '#475569', colorTextTertiary: '#526176' },
+      }}
+      virtual={false}
+    >
       <div className="console" data-theme={theme}>
         <Layout style={{ minHeight: '100vh' }}>
           <Sider aria-label="Primary navigation" collapsed={collapsed} collapsible theme="dark" trigger={null} width={240}>
@@ -218,7 +226,7 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
                   <Button
                     aria-expanded={notificationsOpen}
                     aria-label={notificationsOpen ? 'Close notifications' : 'Open notifications'}
-                    icon={<BellOutlined />}
+                    icon={<BellOutlined aria-hidden="true" />}
                     onClick={toggleNotifications}
                     size="small"
                   >
@@ -254,11 +262,11 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
               )}
               <Routes>
                 <Route
-                  element={<OverviewPage client={clients.inspection} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />}
+                  element={<OverviewPage key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />}
                   path="/"
                 />
                 <Route
-                  element={gated('namespaceInspection', 'Namespaces', 'namespace inspection', <NamespacesPage client={clients.inspection} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)}
+                  element={gated('namespaceInspection', 'Namespaces', 'namespace inspection', <NamespacesPage key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)}
                   path="/namespaces"
                 />
                 <Route
@@ -273,7 +281,6 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
                 <Route
                   element={(
                     <SetupsPage
-                      client={clients.setup}
                       onSelectSetup={selectSetup}
                       selectedSetupId={selectedSetupId}
                       session={session}
@@ -282,18 +289,18 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
                   path="/setups"
                 />
                 <Route
-                  element={gated('entryInspection', 'Keys', 'entry inspection', <EntriesPage administrationClient={clients.entryAdministration} canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkEntryDelete === true} canInspectExpired={selectedCapabilities?.capabilities.expiredEntryInspection === true} canOperate={isOperator && selectedCapabilities?.capabilities.entryMutation === true} client={clients.inspection} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />)}
+                  element={gated('entryInspection', 'Keys', 'entry inspection', <EntriesPage canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkEntryDelete === true} canInspectExpired={selectedCapabilities?.capabilities.expiredEntryInspection === true} canOperate={isOperator && selectedCapabilities?.capabilities.entryMutation === true} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />)}
                   path="/keys"
                 />
                 <Route
                   element={gated('entryInspection', 'Keys', 'entry inspection', <EntryDetailsRoute canOperate={isOperator && selectedCapabilities?.capabilities.entryMutation === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.entryValueReveal === true} selectedSetupId={selectedSetupId} />)}
                   path="/keys/:encodedNamespace/:encodedKey"
                 />
-                <Route element={gated('counterInspection', 'Counters', 'counter inspection', <CountersPage canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkCounterDelete === true} canOperate={isOperator && selectedCapabilities?.capabilities.counterMutation === true} client={clients.resource} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/counters" />
-                <Route element={gated('lockInspection', 'Locks', 'lock inspection', <LocksPage canOperate={isOperator && selectedCapabilities?.capabilities.forcedLockRelease === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.lockOwnerReveal === true} client={clients.resource} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/locks" />
-                <Route element={gated('pubSub', 'Pub/Sub', 'Pub/Sub', <PubSubPage canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.pubSubPayloadReveal === true} client={clients.pubSub} key={selectedSetupId ?? 'no-setup'} maximumChannelBytes={selectedCapabilities?.limits.pubSubChannelMaxBytes ?? 63} maximumPayloadBytes={selectedCapabilities?.limits.pubSubPayloadMaxBytes ?? 7_500} selectedSetupId={selectedSetupId} />)} path="/pubsub" />
-                <Route element={<MonitoringPage client={clients.inspection} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/monitoring" />
-                <Route element={gated('entryInspection', 'Advanced operations', 'backend operations', <AdvancedOperationsPage canBatch={selectedCapabilities?.capabilities.batchEntryOperations === true} canMetrics={selectedCapabilities?.capabilities.cacheMetrics === true} canOperate={isOperator} canOwnLocks={selectedCapabilities?.capabilities.ownerLockOperations === true} canReveal={isOperator && session.features.sensitiveReveal} canScan={selectedCapabilities?.capabilities.valueScan === true} client={clients.backendCapability} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/advanced" />
+                <Route element={gated('counterInspection', 'Counters', 'counter inspection', <CountersPage canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkCounterDelete === true} canOperate={isOperator && selectedCapabilities?.capabilities.counterMutation === true} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/counters" />
+                <Route element={gated('lockInspection', 'Locks', 'lock inspection', <LocksPage canOperate={isOperator && selectedCapabilities?.capabilities.forcedLockRelease === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.lockOwnerReveal === true} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/locks" />
+                <Route element={gated('pubSub', 'Pub/Sub', 'Pub/Sub', <PubSubPage canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.pubSubPayloadReveal === true} key={selectedSetupId ?? 'no-setup'} maximumChannelBytes={selectedCapabilities?.limits.pubSubChannelMaxBytes ?? 63} maximumPayloadBytes={selectedCapabilities?.limits.pubSubPayloadMaxBytes ?? 7_500} selectedSetupId={selectedSetupId} />)} path="/pubsub" />
+                <Route element={<MonitoringPage key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/monitoring" />
+                <Route element={gated('entryInspection', 'Advanced operations', 'backend operations', <AdvancedOperationsPage canBatch={selectedCapabilities?.capabilities.batchEntryOperations === true} canMetrics={selectedCapabilities?.capabilities.cacheMetrics === true} canOperate={isOperator} canOwnLocks={selectedCapabilities?.capabilities.ownerLockOperations === true} canReveal={isOperator && session.features.sensitiveReveal} canScan={selectedCapabilities?.capabilities.valueScan === true} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/advanced" />
                 <Route element={<SettingsPage capabilities={selectedCapabilities} selectedSetupId={selectedSetupId} session={session} />} path="/settings" />
                 <Route element={<Navigate replace to="/" />} path="*" />
               </Routes>
@@ -306,16 +313,18 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
           extra={(
             <Button
               disabled={notifications.length === 0}
-              icon={<ClearOutlined />}
+              icon={<ClearOutlined aria-hidden="true" />}
               onClick={clearNotifications}
               size="small"
             >
               Clear
             </Button>
           )}
+          mask={false}
           onClose={closeNotifications}
           open={notificationsOpen}
           placement="right"
+          rootClassName="notifications-drawer"
           title="Notifications"
           width={360}
         >
@@ -323,7 +332,7 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
             <Button
               aria-expanded={notificationsOpen}
               aria-label="Close notifications"
-              icon={<CloseOutlined />}
+              icon={<CloseOutlined aria-hidden="true" />}
               onClick={closeNotifications}
               size="small"
             >
@@ -376,18 +385,16 @@ function EntryDetailsRoute({ canOperate, canReveal, selectedSetupId }: {
   readonly canReveal: boolean;
   readonly selectedSetupId?: string;
 }) {
-  const clients = useManagementClients();
   const { encodedNamespace, encodedKey } = useParams();
   if (encodedNamespace === undefined || encodedKey === undefined) return <Navigate replace to="/keys" />;
-  return <EntryDetailsPage administrationClient={clients.entryAdministration} canOperate={canOperate} canReveal={canReveal} client={clients.inspection} encodedKey={encodedKey} encodedNamespace={encodedNamespace} key={`${selectedSetupId ?? 'no-setup'}:${encodedNamespace}:${encodedKey}`} selectedSetupId={selectedSetupId} />;
+  return <EntryDetailsPage canOperate={canOperate} canReveal={canReveal} encodedKey={encodedKey} encodedNamespace={encodedNamespace} key={`${selectedSetupId ?? 'no-setup'}:${encodedNamespace}:${encodedKey}`} selectedSetupId={selectedSetupId} />;
 }
 
 function NamespaceDetailsRoute({ selectedSetupId, onSelectNamespace }: {
   readonly selectedSetupId?: string;
   readonly onSelectNamespace: (namespace?: string) => void;
 }) {
-  const clients = useManagementClients();
   const { encodedNamespace } = useParams();
   if (encodedNamespace === undefined) return <Navigate replace to="/namespaces" />;
-  return <NamespaceDetailsPage client={clients.inspection} encodedNamespace={encodedNamespace} key={`${selectedSetupId ?? 'no-setup'}:${encodedNamespace}`} onSelectNamespace={onSelectNamespace} selectedSetupId={selectedSetupId} />;
+  return <NamespaceDetailsPage encodedNamespace={encodedNamespace} key={`${selectedSetupId ?? 'no-setup'}:${encodedNamespace}`} onSelectNamespace={onSelectNamespace} selectedSetupId={selectedSetupId} />;
 }

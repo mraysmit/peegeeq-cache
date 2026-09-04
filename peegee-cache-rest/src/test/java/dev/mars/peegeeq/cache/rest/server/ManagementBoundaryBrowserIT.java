@@ -21,8 +21,8 @@ class ManagementBoundaryBrowserIT {
     @ManagementBrowserScenario(id = "PW-COUNTER-046",
             requirement = "UI design: counter inventory follows the server's opaque pagination cursor",
             area = ManagementBrowserArea.COUNTER, risk = ManagementBrowserRisk.HIGH,
-            action = "Seed more than one counter page, open Counters, and request the next page",
-            expectedResult = "The browser appends counters available only after following the server cursor",
+            action = "Seed more than one counter page, open Counters, and navigate to the next page",
+            expectedResult = "The browser replaces the table with counters available only after following the server cursor",
             cleanup = "Reset the seeded counters and close browser, server, and PostgreSQL resources",
             operations = {"listCounters"},
             evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION,
@@ -43,7 +43,7 @@ class ManagementBoundaryBrowserIT {
                     assertThat(page.getByText("pager-060", new Page.GetByTextOptions().setExact(true)))
                             .hasCount(0);
                     page.getByRole(AriaRole.BUTTON,
-                            new Page.GetByRoleOptions().setName("Load more counters")).click();
+                            new Page.GetByRoleOptions().setName("Next page")).click();
                     assertThat(page.getByText("pager-060", new Page.GetByTextOptions().setExact(true)))
                             .isVisible();
                 });

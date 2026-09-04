@@ -106,5 +106,6 @@ export const {
   useExecuteCounterBulkDeleteMutation,
   useGetLocksQuery,
   useGetLockQuery,
+  useLazyGetLockQuery,
   useForceReleaseLockMutation,
 } = resourcesApi;

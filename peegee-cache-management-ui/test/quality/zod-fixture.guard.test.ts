@@ -21,7 +21,12 @@ const SCHEMA_PARSE = /\b\w+Schema\s*\.\s*parse\s*\(/;
 
 function identifiersBoundFromSchemaParse(source: ScannedSource): Set<string> {
   const bound = new Set<string>();
-  for (const match of source.code.matchAll(/\b(?:const|let)\s+(\w+)\s*(?::[^=]+)?=\s*\w+Schema\s*\.\s*parse\s*\(/g)) bound.add(match[1]!);
+  // `const x = fooSchema.parse(...)`
+  for (const match of source.code.matchAll(/\b(?:const|let)\s+(\w+)\s*(?::[^=;\n]+)?=\s*\w+Schema\s*\.\s*parse\s*\(/g)) bound.add(match[1]!);
+  // `const build = (...) => fooSchema.parse(...)` — a fixture factory whose body is the parse call
+  for (const match of source.code.matchAll(/\b(?:const|let)\s+(\w+)\s*=\s*\([^)]*\)\s*(?::[^=;\n]+)?=>\s*\w+Schema\s*\.\s*parse\s*\(/g)) bound.add(match[1]!);
+  // `function build(...) { return fooSchema.parse(...)`
+  for (const match of source.code.matchAll(/\bfunction\s+(\w+)\s*\([^)]*\)\s*(?::[^{]+)?\{\s*return\s+\w+Schema\s*\.\s*parse\s*\(/g)) bound.add(match[1]!);
   return bound;
 }
 
@@ -43,15 +48,38 @@ function stringifyArguments(source: ScannedSource): Array<{ line: number; argume
       else if (char === ')') depth -= 1;
       index += 1;
     }
-    const argument = source.code.slice(start, index - 1).trim();
+    // The body is the first argument; `respond.json(status, body, headers)` may carry response headers after it.
+    const argument = firstArgument(source.code.slice(start, index - 1)).trim();
     const line = source.code.slice(0, match.index!).split('\n').length;
     out.push({ line, argument });
   }
   return out;
 }
 
+/** Cuts an argument list at its first top-level comma (outside parentheses, brackets, braces, and strings). */
+function firstArgument(argumentList: string): string {
+  let depth = 0;
+  let quote: string | undefined;
+  for (let index = 0; index < argumentList.length; index += 1) {
+    const char = argumentList[index]!;
+    if (quote !== undefined) {
+      if (char === '\\') index += 1;
+      else if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === '\'' || char === '"' || char === '`') quote = char;
+    else if (char === '(' || char === '[' || char === '{') depth += 1;
+    else if (char === ')' || char === ']' || char === '}') depth -= 1;
+    else if (char === ',' && depth === 0) return argumentList.slice(0, index);
+  }
+  return argumentList;
+}
+
+/** Modules that serve fixtures over real HTTP: the loopback server or a shared `*-fixture` built on it. */
+const LOOPBACK_IMPORT = /from\s+['"]\.\/support\/(?:loopback-server|[a-z-]+-fixture)['"]/;
+
 function servesHttp(source: ScannedSource): boolean {
-  return /\bcreateServer\s*\(/.test(source.code) || /from\s+['"]\.\/support\/loopback-server['"]/.test(source.code);
+  return /\bcreateServer\s*\(/.test(source.code) || LOOPBACK_IMPORT.test(source.code);
 }
 
 /** A test that renders a page or the shell. Pure presentation components (formatters) need no server. */
@@ -66,6 +94,10 @@ describe('U11 zod-fixture guard', () => {
     const violations: Violation[] = [];
     for (const source of testSources) {
       if (!servesHttp(source)) continue;
+      // The loopback transport itself serialises whatever `respond.json(status, body)` receives;
+      // that argument is checked at every call site below, so the transport's own
+      // `outgoing.end(JSON.stringify(payload))` is the wire, not a fixture.
+      if (source.path === 'test/support/loopback-server.ts') continue;
       const bound = identifiersBoundFromSchemaParse(source);
       for (const { line, argument } of stringifyArguments(source)) {
         const first = argument.split(/[.[(\s]/)[0]!;
@@ -86,8 +118,8 @@ describe('U11 zod-fixture guard', () => {
     const violations: Violation[] = [];
     for (const source of testSources) {
       if (!rendersComponent(source)) continue;
-      if (!/from\s+['"]\.\/support\/loopback-server['"]/.test(source.code)) {
-        violations.push({ file: source.path, line: 1, label: 'renders a page/shell without test/support/loopback-server — fixtures must be served over HTTP by Zod-produced bodies' });
+      if (!LOOPBACK_IMPORT.test(source.code)) {
+        violations.push({ file: source.path, line: 1, label: 'renders a page/shell without test/support/loopback-server (or a shared *-fixture built on it) — fixtures must be served over HTTP by Zod-produced bodies' });
       }
     }
     expect(formatViolations(violations)).toBe('');

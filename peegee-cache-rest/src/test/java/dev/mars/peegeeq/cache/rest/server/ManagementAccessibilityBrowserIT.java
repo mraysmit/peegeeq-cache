@@ -112,6 +112,8 @@ class ManagementAccessibilityBrowserIT {
             page.setViewportSize(1440, 900);
             assertEquals(200, page.navigate(origin + route.path()).status());
             heading(page, route.heading());
+            assertThat(page.locator("[aria-busy='true']")).hasCount(0);
+            assertThat(page.locator(".ant-spin-spinning")).hasCount(0);
             assertNoAxeViolations(page);
             return;
         }
@@ -161,11 +163,13 @@ class ManagementAccessibilityBrowserIT {
         Locator dialog = page.getByRole(AriaRole.DIALOG,
                 new Page.GetByRoleOptions().setName("Manage count"));
         assertThat(dialog).isVisible();
+        dialog.getByRole(AriaRole.BUTTON,
+                new Locator.GetByRoleOptions().setName("Close").setExact(true)).focus();
         page.keyboard().press("Shift+Tab");
         assertTrue((Boolean) dialog.evaluate("element => element.contains(document.activeElement)"));
         page.keyboard().press("Escape");
         assertThat(dialog).hasCount(0);
-        assertTrue((Boolean) trigger.evaluate("element => element === document.activeElement"));
+        assertThat(trigger).isFocused();
     }
 
     private static void openCounters(Page page) {

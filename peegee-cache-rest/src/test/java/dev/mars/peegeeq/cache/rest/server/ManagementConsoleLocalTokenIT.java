@@ -44,11 +44,19 @@ class ManagementConsoleLocalTokenIT {
                 bootstrap.manager(),
                 new BrowserRequestSecurity(BrowserOriginPolicy.localToken(origin)),
                 16 * 1024);
+        SetupRegistry registry = new SetupRegistry(
+                (definition, secret) -> Future.failedFuture("Setup connection is not expected"),
+                reference -> null);
         server = new ManagementHttpServer(
                 vertx,
                 TestManagementConfigurations.local(port),
                 ManagementServerResources.noop(),
-                ManagementRequestRouter.firstOf(this::failLogoutOnce, sessions));
+                ManagementRequestRouter.firstOf(
+                        this::failLogoutOnce,
+                        sessions,
+                        new SetupReadRoutes(
+                                registry,
+                                new LocalSessionRequestAuthenticator(bootstrap.manager()))));
         server.start()
                 .onSuccess(ignored -> context.completeNow())
                 .onFailure(context::failNow);
@@ -136,7 +144,7 @@ class ManagementConsoleLocalTokenIT {
                     new Page.GetByRoleOptions().setName("Connect to management console"))).isVisible();
             assertFalse(context.cookies().stream()
                     .anyMatch(cookie -> cookie.name.equals("PGQMGMTSESSION")));
-            assertEquals(List.of("401 /api/v1/session"), failedResponses);
+            assertEquals(List.of("401 /api/v1/session", "401 /api/v1/setups"), failedResponses);
             assertEquals(List.of(), browserErrors);
             operationTrace.assertObserved("getSession", "exchangeLocalToken", "deleteLocalSession");
         }

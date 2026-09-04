@@ -16,17 +16,7 @@ import {
 import type { EntryMetadata } from './inspection-schemas';
 import { ManagementClientError, SessionClient } from './session-client';
 
-export interface EntryAdministrationClientPort {
-  setEntry(setupId: string, encodedNamespace: string, encodedKey: string, body: EntrySetBody, observedVersion?: string): Promise<EntrySetResult>;
-  expireEntry(setupId: string, encodedNamespace: string, encodedKey: string, version: string, ttlMillis: number): Promise<EntryMetadata>;
-  persistEntry(setupId: string, encodedNamespace: string, encodedKey: string, version: string): Promise<EntryMetadata>;
-  touchEntry(setupId: string, encodedNamespace: string, encodedKey: string, version: string, refreshTtlMillis: number | null): Promise<EntryMetadata>;
-  deleteEntry(setupId: string, encodedNamespace: string, encodedKey: string, version: string): Promise<void>;
-  previewBulkDelete(setupId: string, encodedNamespace: string, selection: EntryDeleteSelection): Promise<BulkDeletePreview>;
-  executeBulkDelete(setupId: string, encodedNamespace: string, confirmation: ConfirmedEntryDelete): Promise<BulkDeleteResult>;
-}
-
-export class EntryAdministrationClient implements EntryAdministrationClientPort {
+export class EntryAdministrationClient {
   constructor(private readonly sessionClient: SessionClient) {}
 
   async setEntry(setupId: string, encodedNamespace: string, encodedKey: string, body: EntrySetBody, observedVersion?: string): Promise<EntrySetResult> {

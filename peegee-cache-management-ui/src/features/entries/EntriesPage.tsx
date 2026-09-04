@@ -1,64 +1,80 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { PlusOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Checkbox, Empty, Form, Input, Modal, Space, Table, Tag, Typography } from 'antd';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
-import type { EntryAdministrationClientPort } from '../../api/entry-administration-client';
-import type { BulkDeletePreview, EntrySetBody } from '../../api/entry-administration-schemas';
+import type { BulkDeletePreview } from '../../api/entry-administration-schemas';
 import { encodeKey, encodeNamespace } from '../../api/identifier-codec';
-import type { EntryClientPort, EntryQuery } from '../../api/inspection-client';
-import type { CacheValue, EntryPage } from '../../api/inspection-schemas';
-import { ManagementClientError } from '../../api/session-client';
-import { Modal } from '../../components/Modal';
+import type { EntryQuery } from '../../api/inspection-client';
+import type { EntryPage } from '../../api/inspection-schemas';
+import { SetupScopeBar } from '../../components/common/SetupScopeBar';
+import { ValueSelect } from '../../components/common/ValueSelect';
 import { formatDisplayBytes } from '../../presentation/display-bytes';
+import { formatDecimal, humanize } from '../../presentation/display-format';
 import { formatDisplayInstant } from '../../presentation/display-time';
+import { isManagementQueryError, type ManagementQueryError } from '../../store/api/apiBase';
+import { useExecuteEntryBulkDeleteMutation, usePreviewEntryBulkDeleteMutation, useSetEntryMutation } from '../../store/api/entriesApi';
+import { useGetEntriesQuery } from '../../store/api/inspectionApi';
+import {
+  ENTRY_TTL_STATE_OPTIONS,
+  ENTRY_VALUE_TYPE_FILTER_OPTIONS,
+  ENTRY_VALUE_TYPE_OPTIONS,
+  EntryInputError,
+  cacheValueFor,
+  formatTtl,
+  positiveInteger,
+  type EntryTtlState,
+  type EntryValueType,
+  type EntryValueTypeFilter,
+} from './entry-filters';
+
+const { Title, Text } = Typography;
 
 interface EntriesPageProps {
-  readonly administrationClient?: EntryAdministrationClientPort;
   readonly canBulkDelete?: boolean;
   readonly canInspectExpired?: boolean;
   readonly canOperate?: boolean;
-  readonly client: EntryClientPort;
   readonly selectedNamespace?: string;
   readonly selectedSetupId?: string;
 }
 
-export function EntriesPage({ administrationClient, canOperate = false, canBulkDelete = canOperate, canInspectExpired = true, client, selectedNamespace, selectedSetupId }: EntriesPageProps) {
+/**
+ * Key Browser (reference layout: filter card, Table with row selection, Modal forms). Entry
+ * metadata is an RTK Query read keyed by setup, namespace, filters, and cursor; create and bulk
+ * delete are mutations whose tag invalidations refresh the page from PostgreSQL truth.
+ */
+export function EntriesPage({ canOperate = false, canBulkDelete = canOperate, canInspectExpired = true, selectedNamespace, selectedSetupId }: EntriesPageProps) {
   const [draftPrefix, setDraftPrefix] = useState('');
-  const [draftValueType, setDraftValueType] = useState<'ALL' | NonNullable<EntryQuery['valueType']>>('ALL');
-  const [draftTtlState, setDraftTtlState] = useState<NonNullable<EntryQuery['ttlState']>>('ALL_LIVE');
+  const [draftValueType, setDraftValueType] = useState<EntryValueTypeFilter>('ALL');
+  const [draftTtlState, setDraftTtlState] = useState<EntryTtlState>('ALL_LIVE');
   const [query, setQuery] = useState<EntryQuery>({ ttlState: 'ALL_LIVE', sort: 'key:asc', limit: 50 });
   const [cursor, setCursor] = useState<string>();
   const [history, setHistory] = useState<Array<string | null>>([]);
-  const [page, setPage] = useState<EntryPage>();
-  const [loading, setLoading] = useState(selectedSetupId !== undefined && selectedNamespace !== undefined);
-  const [problem, setProblem] = useState<ManagementClientError>();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<BulkDeletePreview>();
   const [confirmation, setConfirmation] = useState('');
   const [operationStatus, setOperationStatus] = useState('');
-  const [mutating, setMutating] = useState(false);
-  const [reload, setReload] = useState(0);
+  const [mutationProblem, setMutationProblem] = useState<ManagementQueryError>();
   const [now, setNow] = useState(0);
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState('');
-  const [newType, setNewType] = useState<EntrySetBody['value']['type']>('STRING');
+  const [newType, setNewType] = useState<EntryValueType>('STRING');
   const [newValue, setNewValue] = useState('');
   const [newTtl, setNewTtl] = useState('');
 
-  useEffect(() => {
-    if (selectedSetupId === undefined || selectedNamespace === undefined) return undefined;
-    let active = true;
-    const encodedNamespace = encodeNamespace(selectedNamespace);
-    void client.entries(selectedSetupId, encodedNamespace, { ...query, cursor })
-      .then((loaded) => {
-        if (!active) return;
-        setPage(loaded);
-        setProblem(undefined);
-        setSelected(new Set());
-      })
-      .catch((failure: unknown) => { if (active) setProblem(asClientError(failure)); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [client, cursor, query, reload, selectedNamespace, selectedSetupId]);
+  const scoped = selectedSetupId !== undefined && selectedNamespace !== undefined;
+  const encodedNamespace = selectedNamespace === undefined ? '' : encodeNamespace(selectedNamespace);
+  const entries = useGetEntriesQuery(
+    { setupId: selectedSetupId ?? '', encodedNamespace, query: { ...query, cursor } },
+    { skip: !scoped },
+  );
+  const [setEntry, setEntryState] = useSetEntryMutation();
+  const [previewBulkDelete, previewState] = usePreviewEntryBulkDeleteMutation();
+  const [executeBulkDelete, executeState] = useExecuteEntryBulkDeleteMutation();
+  const mutating = setEntryState.isLoading || previewState.isLoading || executeState.isLoading;
+  const page = entries.data;
+  const loading = entries.isFetching;
+  const problem = mutationProblem ?? (isManagementQueryError(entries.error) ? entries.error : undefined);
 
   useEffect(() => {
     if (preview === undefined) return undefined;
@@ -66,9 +82,7 @@ export function EntriesPage({ administrationClient, canOperate = false, canBulkD
     return () => window.clearInterval(timer);
   }, [preview]);
 
-  const applyFilters = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoading(true);
+  const applyFilters = () => {
     setHistory([]);
     setCursor(undefined);
     setSelected(new Set());
@@ -82,135 +96,268 @@ export function EntriesPage({ administrationClient, canOperate = false, canBulkD
   };
 
   const next = () => {
-    if (page?.nextCursor === null || page?.nextCursor === undefined) return;
-    setLoading(true);
+    const nextCursor = page?.nextCursor;
+    if (nextCursor === null || nextCursor === undefined) return;
     setHistory((current) => [...current, cursor ?? null]);
-    setCursor(page.nextCursor);
+    setCursor(nextCursor);
+    setSelected(new Set());
   };
 
   const previous = () => {
     const prior = history.at(-1);
     if (prior === undefined) return;
-    setLoading(true);
     setHistory((current) => current.slice(0, -1));
     setCursor(prior ?? undefined);
+    setSelected(new Set());
   };
 
   const previewDeletion = async (filterScope: boolean) => {
-    if (administrationClient === undefined || selectedSetupId === undefined || selectedNamespace === undefined || page === undefined) return;
-    setMutating(true);
-    setProblem(undefined);
+    if (selectedSetupId === undefined || page === undefined) return;
+    setMutationProblem(undefined);
     setOperationStatus('');
     try {
-      const selection = filterScope ? {
-        selection: {
-          type: 'FILTER' as const,
-          prefix: query.prefix,
-          valueType: query.valueType,
-          ttlState: query.ttlState ?? 'ALL_LIVE',
-        },
-      } : {
-        selection: {
-          type: 'EXPLICIT' as const,
-          targets: page.items.filter((item) => selected.has(item.encodedKey)).map((item) => ({ key: item.key, version: item.version })),
-        },
-      };
-      const loaded = await administrationClient.previewBulkDelete(selectedSetupId, encodeNamespace(selectedNamespace), selection);
+      const selection = filterScope
+        ? { selection: { type: 'FILTER' as const, prefix: query.prefix, valueType: query.valueType, ttlState: query.ttlState ?? 'ALL_LIVE' } }
+        : { selection: { type: 'EXPLICIT' as const, targets: page.items.filter((item) => selected.has(item.encodedKey)).map((item) => ({ key: item.key, version: item.version })) } };
+      const loaded = await previewBulkDelete({ setupId: selectedSetupId, encodedNamespace, selection }).unwrap();
       setPreview(loaded);
       setConfirmation('');
       setNow(Date.now());
     } catch (failure: unknown) {
-      setProblem(asClientError(failure));
-    } finally {
-      setMutating(false);
+      setMutationProblem(asQueryError(failure));
     }
   };
 
   const executeDeletion = async () => {
-    if (administrationClient === undefined || selectedSetupId === undefined || selectedNamespace === undefined || preview === undefined) return;
+    if (selectedSetupId === undefined || preview === undefined) return;
     if (previewExpired(preview, now) || confirmation !== preview.confirmationPhrase) return;
-    setMutating(true);
-    setProblem(undefined);
+    setMutationProblem(undefined);
     try {
-      const result = await administrationClient.executeBulkDelete(selectedSetupId, encodeNamespace(selectedNamespace), {
-        previewToken: preview.previewToken,
-        confirmationPhrase: confirmation,
-      });
+      const result = await executeBulkDelete({ setupId: selectedSetupId, encodedNamespace, confirmation: { previewToken: preview.previewToken, confirmationPhrase: confirmation } }).unwrap();
       setOperationStatus(`Deleted ${result.deletedCount} of ${result.processedCount} previewed entries · conflicts ${result.conflictCount} · missing ${result.missingCount} · failed ${result.failedCount}.`);
       setPreview(undefined);
       setConfirmation('');
       setSelected(new Set());
-      setReload((value) => value + 1);
     } catch (failure: unknown) {
-      setProblem(asClientError(failure));
-    } finally {
-      setMutating(false);
+      setMutationProblem(asQueryError(failure));
     }
   };
 
-  const createEntry = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (administrationClient === undefined || selectedSetupId === undefined || selectedNamespace === undefined) return;
-    setMutating(true);
-    setProblem(undefined);
+  const createEntry = async () => {
+    if (selectedSetupId === undefined) return;
+    setMutationProblem(undefined);
     try {
-      const result = await administrationClient.setEntry(selectedSetupId, encodeNamespace(selectedNamespace), encodeKey(newKey), {
-        value: valueFor(newType, newValue),
-        ttlMode: newTtl === '' ? 'REMOVE' : 'REPLACE',
-        ttlMillis: newTtl === '' ? null : positiveInteger(newTtl),
-        setMode: 'ONLY_IF_ABSENT',
-      });
+      const result = await setEntry({
+        setupId: selectedSetupId,
+        encodedNamespace,
+        encodedKey: encodeKey(newKey),
+        body: {
+          value: cacheValueFor(newType, newValue),
+          ttlMode: newTtl === '' ? 'REMOVE' : 'REPLACE',
+          ttlMillis: newTtl === '' ? null : positiveInteger(newTtl),
+          setMode: 'ONLY_IF_ABSENT',
+        },
+      }).unwrap();
       setOperationStatus(`Entry created at ${formatDisplayInstant(result.updatedAt)} · version ${result.version}.`);
       setCreating(false);
       setNewKey('');
       setNewValue('');
       setNewTtl('');
-      setReload((value) => value + 1);
     } catch (failure: unknown) {
-      setProblem(asClientError(failure));
-    } finally {
-      setMutating(false);
+      setMutationProblem(asQueryError(failure));
     }
   };
 
-  if (selectedSetupId === undefined) return <EntriesWorkspace><Empty title="Select a connected setup">Entry inspection requires an active database setup.</Empty></EntriesWorkspace>;
-  if (selectedNamespace === undefined) return <EntriesWorkspace><Empty title="Select a namespace">Choose a namespace before browsing cache entries.</Empty></EntriesWorkspace>;
+  const toggle = (encodedKey: string) => {
+    const nextSelection = new Set(selected);
+    if (nextSelection.has(encodedKey)) nextSelection.delete(encodedKey); else nextSelection.add(encodedKey);
+    setSelected(nextSelection);
+  };
 
-  return <EntriesWorkspace namespace={selectedNamespace} actions={canOperate && administrationClient !== undefined ? <button className="button" onClick={() => setCreating(true)} type="button">Create entry</button> : undefined}>
-    <form className="filter-bar filter-bar--entries" onSubmit={applyFilters}>
-      <label className="field" htmlFor="entry-prefix">Key prefix<input id="entry-prefix" maxLength={1024} onChange={(event) => setDraftPrefix(event.target.value)} value={draftPrefix} /></label>
-      <label className="field" htmlFor="entry-value-type">Value type<select id="entry-value-type" onChange={(event) => setDraftValueType(event.target.value as typeof draftValueType)} value={draftValueType}><option value="ALL">All</option><option value="STRING">String</option><option value="JSON">JSON</option><option value="LONG">Long</option><option value="BYTES">Bytes</option></select></label>
-      <label className="field" htmlFor="entry-ttl-state">TTL state<select id="entry-ttl-state" onChange={(event) => setDraftTtlState(event.target.value as NonNullable<EntryQuery['ttlState']>)} value={draftTtlState}><option value="ALL_LIVE">All live</option><option value="PERSISTENT">Persistent</option><option value="EXPIRING">Expiring</option>{canInspectExpired && <option value="INCLUDE_EXPIRED">Include expired</option>}</select></label>
-      <button className="button" disabled={loading} type="submit">Apply filters</button>
-    </form>
-    {canBulkDelete && administrationClient !== undefined && <div className="workspace__actions"><button className="button button--danger" disabled={selected.size === 0 || mutating} onClick={() => void previewDeletion(false)} type="button">Preview selected deletion</button><button className="button button--secondary" disabled={mutating} onClick={() => void previewDeletion(true)} type="button">Preview matching-filter deletion</button></div>}
-    {operationStatus !== '' && <p role="status">{operationStatus}</p>}
-    {problem !== undefined && <Problem problem={problem} stale={page !== undefined} />}
-    {page === undefined && loading && <p aria-busy="true">Loading entries…</p>}
-    {page !== undefined && page.items.length === 0 && <Empty title="No entries matched">Change the current key, value-type, or TTL filter.</Empty>}
-    {page !== undefined && page.items.length > 0 && <EntryTable canSelect={canBulkDelete && administrationClient !== undefined} page={page} selected={selected} setSelected={setSelected} />}
-    {page !== undefined && <nav className="pagination" aria-label="Entry pages"><button className="button button--secondary" disabled={history.length === 0 || loading} onClick={previous} type="button">Previous page</button><span>Page {history.length + 1}</span><button className="button button--secondary" disabled={!page.hasMore || loading} onClick={next} type="button">Next page</button></nav>}
-    {preview !== undefined && <BulkDialog confirmation={confirmation} execute={executeDeletion} expired={previewExpired(preview, now)} mutating={mutating} preview={preview} setConfirmation={setConfirmation} setPreview={setPreview} />}
-    {creating && <CreateDialog createEntry={createEntry} mutating={mutating} newKey={newKey} newTtl={newTtl} newType={newType} newValue={newValue} setCreating={setCreating} setNewKey={setNewKey} setNewTtl={setNewTtl} setNewType={setNewType} setNewValue={setNewValue} />}
-  </EntriesWorkspace>;
+  if (selectedSetupId === undefined) {
+    return <EntriesWorkspace><SetupScopeBar /><EmptyState title="Select a connected setup">Entry inspection requires an active database setup.</EmptyState></EntriesWorkspace>;
+  }
+  if (selectedNamespace === undefined) {
+    return <EntriesWorkspace><SetupScopeBar /><EmptyState title="Select a namespace">Choose a namespace before browsing cache entries.</EmptyState></EntriesWorkspace>;
+  }
+
+  const canSelect = canBulkDelete;
+  const columns = [
+    ...(canSelect ? [{
+      title: 'Selection', key: 'selection',
+      render: (_value: unknown, item: EntryPage['items'][number]) => (
+        <Checkbox aria-label={`Select ${item.key}`} checked={selected.has(item.encodedKey)} onChange={() => toggle(item.encodedKey)} />
+      ),
+    }] : []),
+    { title: 'Key', key: 'key', render: (_value: unknown, item: EntryPage['items'][number]) => <Link to={`/keys/${item.encodedNamespace}/${item.encodedKey}`}>{item.key}</Link> },
+    { title: 'Type', dataIndex: 'valueType', key: 'valueType' },
+    { title: 'Size', dataIndex: 'sizeBytes', key: 'sizeBytes', render: (value: string) => formatDisplayBytes(value) },
+    { title: 'Version', dataIndex: 'version', key: 'version', render: (value: string) => formatDecimal(value) },
+    { title: 'Created', dataIndex: 'createdAt', key: 'createdAt', render: (value: string) => formatDisplayInstant(value) },
+    { title: 'Updated', dataIndex: 'updatedAt', key: 'updatedAt', render: (value: string) => formatDisplayInstant(value) },
+    { title: 'Expires', key: 'expires', render: (_value: unknown, item: EntryPage['items'][number]) => (item.ttl.expiresAt === null ? 'Never' : formatDisplayInstant(item.ttl.expiresAt)) },
+    { title: 'Remaining TTL', key: 'ttl', render: (_value: unknown, item: EntryPage['items'][number]) => formatTtl(item.ttl.ttlMillis) },
+    {
+      title: 'Status', key: 'status',
+      render: (_value: unknown, item: EntryPage['items'][number]) => (
+        <Tag color={item.ttl.state === 'EXPIRED' ? 'red' : item.ttl.state === 'EXPIRING' ? 'gold' : 'green'}>{humanize(item.ttl.state)}</Tag>
+      ),
+    },
+  ];
+
+  return (
+    <EntriesWorkspace
+      actions={canOperate ? <Button icon={<PlusOutlined aria-hidden="true" />} onClick={() => setCreating(true)} type="primary">Create entry</Button> : undefined}
+      namespace={selectedNamespace}
+    >
+      <SetupScopeBar />
+      <Card className="filter-bar filter-bar--entries" size="small" style={{ marginBottom: 16 }}>
+        <Form layout="inline" onFinish={applyFilters}>
+          <Form.Item htmlFor="entry-prefix" label="Key prefix">
+            <Input id="entry-prefix" maxLength={1024} onChange={(event) => setDraftPrefix(event.target.value)} style={{ width: 240 }} value={draftPrefix} />
+          </Form.Item>
+          <Form.Item htmlFor="entry-value-type" label="Value type">
+            <ValueSelect<EntryValueTypeFilter> id="entry-value-type" onChange={setDraftValueType} options={ENTRY_VALUE_TYPE_FILTER_OPTIONS} style={{ width: 140 }} value={draftValueType} />
+          </Form.Item>
+          <Form.Item htmlFor="entry-ttl-state" label="TTL state">
+            <ValueSelect<EntryTtlState>
+              id="entry-ttl-state"
+              onChange={setDraftTtlState}
+              options={ENTRY_TTL_STATE_OPTIONS.filter((option) => canInspectExpired || option.value !== 'INCLUDE_EXPIRED')}
+              style={{ width: 170 }}
+              value={draftTtlState}
+            />
+          </Form.Item>
+          <Form.Item>
+            <Button disabled={loading} htmlType="submit" type="primary">Apply filters</Button>
+          </Form.Item>
+        </Form>
+      </Card>
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        {canBulkDelete && (
+          <Space className="workspace__actions" wrap>
+            <Button danger disabled={selected.size === 0 || mutating} onClick={() => void previewDeletion(false)}>Preview selected deletion</Button>
+            <Button disabled={mutating} onClick={() => void previewDeletion(true)}>Preview matching-filter deletion</Button>
+          </Space>
+        )}
+        {operationStatus !== '' && <Alert message={operationStatus} role="status" showIcon type="success" />}
+        {problem !== undefined && <ProblemAlert problem={problem} stale={page !== undefined && mutationProblem === undefined} />}
+        {page === undefined && entries.isLoading && <Text aria-busy="true">Loading entries…</Text>}
+        {page !== undefined && page.items.length === 0 && <EmptyState title="No entries matched">Change the current key, value-type, or TTL filter.</EmptyState>}
+        {page !== undefined && page.items.length > 0 && (
+          <div aria-label="Entry results" className="table-scroll" role="region" tabIndex={0}>
+            <Table
+              columns={columns}
+              dataSource={page.items}
+              loading={loading}
+              pagination={false}
+              rowClassName={(item) => (selected.has(item.encodedKey) ? 'entry-row--selected' : '')}
+              rowKey="encodedKey"
+              size="small"
+            />
+          </div>
+        )}
+        {page !== undefined && (
+          <nav aria-label="Entry pages" className="pagination">
+            <Space>
+              <Button disabled={history.length === 0 || loading} onClick={previous}>Previous page</Button>
+              <Text>Page {history.length + 1}</Text>
+              <Button disabled={!page.hasMore || loading} onClick={next}>Next page</Button>
+            </Space>
+          </nav>
+        )}
+      </Space>
+
+      <Modal
+        closable={false}
+        destroyOnHidden
+        footer={null}
+        onCancel={() => setPreview(undefined)}
+        open={preview !== undefined}
+        title={<Title id="bulk-entry-title" level={2} style={{ margin: 0, fontSize: 20 }}>Confirm bulk entry deletion</Title>}
+      >
+        {preview !== undefined && (
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Text>Setup <strong>{preview.setupId}</strong> · namespace <strong>{preview.namespace}</strong></Text>
+            <Text>Resolved {preview.resolvedCount} entries ({formatDisplayBytes(preview.totalBytes)}). Preview expires at {formatDisplayInstant(preview.expiresAt)}.</Text>
+            {preview.sampleKeys.length > 0 && <Text>Sample: {preview.sampleKeys.join(', ')}</Text>}
+            <Text>Required phrase: <strong>{preview.confirmationPhrase}</strong></Text>
+            {previewExpired(preview, now) && <Alert description="Close this dialog and request a new preview." message="Preview expired" role="alert" showIcon type="error" />}
+            <Form layout="vertical">
+              <Form.Item htmlFor="bulk-entry-confirmation" label="Type confirmation phrase">
+                <Input autoComplete="off" id="bulk-entry-confirmation" onChange={(event) => setConfirmation(event.target.value)} value={confirmation} />
+              </Form.Item>
+            </Form>
+            <Space className="modal__actions" style={{ justifyContent: 'flex-end', width: '100%' }}>
+              <Button onClick={() => setPreview(undefined)}>Cancel</Button>
+              <Button danger disabled={previewExpired(preview, now) || mutating || confirmation !== preview.confirmationPhrase} onClick={() => void executeDeletion()} type="primary">Delete previewed entries</Button>
+            </Space>
+          </Space>
+        )}
+      </Modal>
+
+      <Modal
+        closable={false}
+        destroyOnHidden
+        footer={null}
+        onCancel={() => setCreating(false)}
+        open={creating}
+        title={<Title id="create-entry-title" level={2} style={{ margin: 0, fontSize: 20 }}>Create entry</Title>}
+      >
+        <Text>The key must be absent when PostgreSQL commits this request.</Text>
+        <Form className="form-grid" layout="vertical" onFinish={() => void createEntry()} style={{ marginTop: 16 }}>
+          <Form.Item htmlFor="new-entry-key" label="Key"><Input id="new-entry-key" maxLength={1024} onChange={(event) => setNewKey(event.target.value)} required value={newKey} /></Form.Item>
+          <Form.Item htmlFor="new-entry-type" label="Value type"><ValueSelect<EntryValueType> id="new-entry-type" onChange={setNewType} options={ENTRY_VALUE_TYPE_OPTIONS} value={newType} /></Form.Item>
+          <Form.Item htmlFor="new-entry-ttl" label="TTL milliseconds (blank for persistent)"><Input id="new-entry-ttl" min={1} onChange={(event) => setNewTtl(event.target.value)} type="number" value={newTtl} /></Form.Item>
+          <Form.Item htmlFor="new-entry-value" label="Value"><Input.TextArea id="new-entry-value" onChange={(event) => setNewValue(event.target.value)} required rows={4} value={newValue} /></Form.Item>
+          <Space className="modal__actions" style={{ justifyContent: 'flex-end', width: '100%' }}>
+            <Button onClick={() => setCreating(false)}>Cancel</Button>
+            <Button disabled={mutating} htmlType="submit" type="primary">Create entry</Button>
+          </Space>
+        </Form>
+      </Modal>
+    </EntriesWorkspace>
+  );
 }
 
-function EntryTable({ canSelect, page, selected, setSelected }: { canSelect: boolean; page: EntryPage; selected: Set<string>; setSelected: (value: Set<string>) => void }) {
-  const toggle = (encodedKey: string) => { const next = new Set(selected); if (next.has(encodedKey)) next.delete(encodedKey); else next.add(encodedKey); setSelected(next); };
-  return <div aria-label="Entry results" className="table-scroll" role="region" tabIndex={0}><table className="data-table"><thead><tr>{canSelect && <th>Selection</th>}<th>Key</th><th>Type</th><th>Size</th><th>Version</th><th>Created</th><th>Updated</th><th>Expires</th><th>Remaining TTL</th><th>Status</th></tr></thead><tbody>{page.items.map((item) => <tr data-selected={selected.has(item.encodedKey) || undefined} key={item.encodedKey}>{canSelect && <td><input aria-label={`Select ${item.key}`} checked={selected.has(item.encodedKey)} onChange={() => toggle(item.encodedKey)} type="checkbox" /></td>}<td><Link to={`/keys/${item.encodedNamespace}/${item.encodedKey}`}>{item.key}</Link></td><td>{item.valueType}</td><td>{formatDisplayBytes(item.sizeBytes)}</td><td>{formatDecimal(item.version)}</td><td>{formatDisplayInstant(item.createdAt)}</td><td>{formatDisplayInstant(item.updatedAt)}</td><td>{item.ttl.expiresAt === null ? 'Never' : formatDisplayInstant(item.ttl.expiresAt)}</td><td>{formatTtl(item.ttl.ttlMillis)}</td><td><span className={`badge badge--${item.ttl.state === 'EXPIRED' ? 'negative' : item.ttl.state === 'EXPIRING' ? 'warning' : 'positive'}`}>{humanize(item.ttl.state)}</span></td></tr>)}</tbody></table></div>;
+function EntriesWorkspace({ namespace, actions, children }: { readonly namespace?: string; readonly actions?: ReactNode; readonly children: ReactNode }) {
+  return (
+    <section aria-labelledby="entries-title" className="workspace">
+      <div className="workspace__heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
+        <div>
+          <Text className="workspace__context" type="secondary">Metadata-only entry inspection</Text>
+          <Title id="entries-title" level={1} style={{ marginTop: 4 }}>Key Browser</Title>
+          {namespace !== undefined && <Text>Namespace: <strong>{namespace}</strong></Text>}
+        </div>
+        {actions !== undefined && <Space className="workspace__actions">{actions}</Space>}
+      </div>
+      {children}
+    </section>
+  );
 }
 
-function BulkDialog({ confirmation, execute, expired, mutating, preview, setConfirmation, setPreview }: { confirmation: string; execute: () => Promise<void>; expired: boolean; mutating: boolean; preview: BulkDeletePreview; setConfirmation: (value: string) => void; setPreview: (value?: BulkDeletePreview) => void }) { const close = () => setPreview(undefined); return <Modal labelId="bulk-entry-title" onDismiss={close}><h2 id="bulk-entry-title">Confirm bulk entry deletion</h2><p>Setup <strong>{preview.setupId}</strong> · namespace <strong>{preview.namespace}</strong></p><p>Resolved {preview.resolvedCount} entries ({formatDisplayBytes(preview.totalBytes)}). Preview expires at {formatDisplayInstant(preview.expiresAt)}.</p>{preview.sampleKeys.length > 0 && <p>Sample: {preview.sampleKeys.join(', ')}</p>}<p>Required phrase: <strong>{preview.confirmationPhrase}</strong></p>{expired && <div className="diagnostics" role="alert"><strong>Preview expired</strong><p>Close this dialog and request a new preview.</p></div>}<label className="field" htmlFor="bulk-entry-confirmation">Type confirmation phrase<input autoComplete="off" id="bulk-entry-confirmation" onChange={(event) => setConfirmation(event.target.value)} value={confirmation} /></label><div className="modal__actions"><button className="button button--secondary" onClick={close} type="button">Cancel</button><button className="button button--danger" disabled={expired || mutating || confirmation !== preview.confirmationPhrase} onClick={() => void execute()} type="button">Delete previewed entries</button></div></Modal>; }
+function EmptyState({ title, children }: { readonly title: string; readonly children: ReactNode }) {
+  return <Card><Empty description={<Title level={2} style={{ fontSize: 18 }}>{title}</Title>}><Text type="secondary">{children}</Text></Empty></Card>;
+}
 
-function CreateDialog({ createEntry, mutating, newKey, newTtl, newType, newValue, setCreating, setNewKey, setNewTtl, setNewType, setNewValue }: { createEntry: (event: FormEvent<HTMLFormElement>) => Promise<void>; mutating: boolean; newKey: string; newTtl: string; newType: EntrySetBody['value']['type']; newValue: string; setCreating: (value: boolean) => void; setNewKey: (value: string) => void; setNewTtl: (value: string) => void; setNewType: (value: EntrySetBody['value']['type']) => void; setNewValue: (value: string) => void }) { const close = () => setCreating(false); return <Modal labelId="create-entry-title" onDismiss={close}><h2 id="create-entry-title">Create entry</h2><p>The key must be absent when PostgreSQL commits this request.</p><form className="form-grid" onSubmit={(event) => void createEntry(event)}><label className="field field--wide" htmlFor="new-entry-key">Key<input id="new-entry-key" maxLength={1024} onChange={(event) => setNewKey(event.target.value)} required value={newKey} /></label><label className="field" htmlFor="new-entry-type">Value type<select id="new-entry-type" onChange={(event) => setNewType(event.target.value as EntrySetBody['value']['type'])} value={newType}><option value="STRING">String</option><option value="JSON">JSON</option><option value="LONG">Long</option><option value="BYTES">Bytes (Base64)</option></select></label><label className="field" htmlFor="new-entry-ttl">TTL milliseconds (blank for persistent)<input id="new-entry-ttl" min="1" onChange={(event) => setNewTtl(event.target.value)} type="number" value={newTtl} /></label><label className="field field--wide" htmlFor="new-entry-value">Value<textarea id="new-entry-value" onChange={(event) => setNewValue(event.target.value)} required value={newValue} /></label><div className="modal__actions field--wide"><button className="button button--secondary" onClick={close} type="button">Cancel</button><button className="button" disabled={mutating} type="submit">Create entry</button></div></form></Modal>; }
+function ProblemAlert({ problem, stale }: { readonly problem: ManagementQueryError; readonly stale: boolean }) {
+  return (
+    <Alert
+      description={<>{problem.message}{problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}</>}
+      message={stale ? `Stale data · ${problem.code}` : problem.code}
+      role="alert"
+      showIcon
+      type={stale ? 'warning' : 'error'}
+    />
+  );
+}
 
-function EntriesWorkspace({ namespace, actions, children }: { readonly namespace?: string; readonly actions?: ReactNode; readonly children: ReactNode }) { return <section className="workspace" aria-labelledby="entries-title"><div className="workspace__heading"><div><p className="workspace__context">Metadata-only entry inspection</p><h1 id="entries-title">Key Browser</h1>{namespace !== undefined && <p>Namespace: <strong>{namespace}</strong></p>}</div>{actions !== undefined && <div className="workspace__actions">{actions}</div>}</div>{children}</section>; }
-function Empty({ title, children }: { readonly title: string; readonly children: ReactNode }) { return <div className="empty-state"><h2>{title}</h2><p>{children}</p></div>; }
-function Problem({ problem, stale }: { readonly problem: ManagementClientError; readonly stale: boolean }) { return <div className="diagnostics" role="alert"><strong>{stale ? `Stale data · ${problem.code}` : problem.code}</strong><p>{problem.message}</p>{problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}</div>; }
-function asClientError(failure: unknown): ManagementClientError { return failure instanceof ManagementClientError ? failure : new ManagementClientError(0, 'CONNECTION_FAILED', 'Entry administration could not be completed'); }
-function previewExpired(preview: BulkDeletePreview, now: number): boolean { return Date.parse(preview.expiresAt) <= now; }
-function positiveInteger(value: string): number { const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 1) throw new ManagementClientError(400, 'VALIDATION_FAILED', 'TTL must be a positive integer'); return parsed; }
-function valueFor(type: EntrySetBody['value']['type'], value: string): CacheValue { switch (type) { case 'STRING': return { type, text: value }; case 'JSON': try { JSON.parse(value); } catch { throw new ManagementClientError(400, 'JSON_VALUE_INVALID', 'Value must be valid JSON'); } return { type, text: value }; case 'LONG': if (!/^-?(?:0|[1-9][0-9]*)$/u.test(value)) throw new ManagementClientError(400, 'VALUE_TYPE_MISMATCH', 'Value must be a signed decimal integer'); return { type, decimal: value }; case 'BYTES': return { type, base64: value }; } }
-function formatDecimal(value: string): string { return BigInt(value).toLocaleString('en-US'); }
-function formatTtl(value: number | null): string { return value === null ? 'Persistent' : value < 1_000 ? `${value} ms` : `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)} s`; }
-function humanize(value: string): string { return value.toLowerCase().replace(/^./u, (letter) => letter.toUpperCase()); }
+function asQueryError(failure: unknown): ManagementQueryError {
+  if (isManagementQueryError(failure)) return failure;
+  if (failure instanceof EntryInputError) return { status: 400, code: failure.code, message: failure.message };
+  return { status: 0, code: 'CONNECTION_FAILED', message: 'Entry administration could not be completed' };
+}
+
+function previewExpired(preview: BulkDeletePreview, now: number): boolean {
+  return Date.parse(preview.expiresAt) <= now;
+}

@@ -217,10 +217,10 @@ class ManagementEntryInspectionBrowserIT {
     private static void hide(Page page) { page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Hide value").setExact(true)).click(); assertThat(page.getByText("Value hidden", exact())).isVisible(); }
     private static Locator link(Page page, String key) { return page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName(key).setExact(true)); }
     private static Locator row(Page page, String key) { return page.getByRole(AriaRole.ROW).filter(new Locator.FilterOptions().setHasText(key)); }
-    private static Locator details(Page page) { return page.locator("dl[aria-label='Entry metadata']"); }
+    private static Locator details(Page page) { return page.locator("[aria-label='Entry metadata']"); }
     private static Page.GetByTextOptions exact() { return new Page.GetByTextOptions().setExact(true); }
-    private static List<String> options(Page page, String selector) { return page.locator(selector + " option").all().stream().map(option -> option.getAttribute("value")).toList(); }
-    private static void filter(Page page, String prefix, String type, String ttl) { page.getByLabel("Key prefix").fill(prefix); page.locator("#entry-value-type").selectOption(type); page.locator("#entry-ttl-state").selectOption(ttl); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Apply filters")).click(); }
+    private static List<String> options(Page page, String selector) { return AntSelect.values(page, page.locator(selector)); }
+    private static void filter(Page page, String prefix, String type, String ttl) { page.getByLabel("Key prefix").fill(prefix); AntSelect.choose(page, page.locator("#entry-value-type"), type); AntSelect.choose(page, page.locator("#entry-ttl-state"), ttl); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Apply filters")).click(); }
     private static void assertSingleFilter(Page page, String prefix, String type, String ttl, String key) { filter(page, prefix, type, ttl); assertThat(link(page, key)).isVisible(); assertThat(page.locator("tbody tr")).hasCount(1); }
     private static String encoded(String value) { return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8)); }
     private static String stringSql(String key, String value) { return stringSqlOfType(key, "STRING", value); }

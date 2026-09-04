@@ -1,6 +1,6 @@
+import { Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Form, Input, Row, Space, Typography } from 'antd';
 import { useEffect, useState, type ReactNode } from 'react';
 
-import type { BackendCapabilityClientPort } from '../../api/backend-capability-client';
 import type {
   BatchDeleteResult,
   BatchGetResult,
@@ -12,19 +12,29 @@ import type {
 import { batchSetRequestSchema } from '../../api/backend-capability-schemas';
 import { encodeKey, encodeNamespace } from '../../api/identifier-codec';
 import { ManagementClientError } from '../../api/session-client';
+import { useManagementClients } from '../../store';
+import { toQueryError, type ManagementQueryError } from '../../store/api/apiBase';
 
-type Props = {
+const { Title, Text, Paragraph } = Typography;
+
+interface AdvancedOperationsPageProps {
   readonly canOperate: boolean;
   readonly canReveal: boolean;
   readonly canBatch: boolean;
   readonly canScan: boolean;
   readonly canMetrics: boolean;
   readonly canOwnLocks: boolean;
-  readonly client: BackendCapabilityClientPort;
   readonly selectedSetupId?: string;
-};
+}
 
-export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canScan, canMetrics, canOwnLocks, client, selectedSetupId }: Props) {
+/**
+ * Advanced operations: direct workflows over the complete backend service surface. Every call
+ * here carries or returns sensitive material (values, owner tokens, exact metrics), so nothing on
+ * this page goes through RTK Query: the no-store backend-capability client is used directly and
+ * every result lives only in component state, cleared on visibility loss and unmount (design §8.2).
+ */
+export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canScan, canMetrics, canOwnLocks, selectedSetupId }: AdvancedOperationsPageProps) {
+  const { backendCapability: client } = useManagementClients();
   const [namespace, setNamespace] = useState('');
   const [key, setKey] = useState('');
   const [exists, setExists] = useState<boolean>();
@@ -48,7 +58,7 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
   const [reentrant, setReentrant] = useState(false);
   const [fencing, setFencing] = useState(true);
   const [lockResult, setLockResult] = useState('');
-  const [problem, setProblem] = useState<ManagementClientError>();
+  const [problem, setProblem] = useState<ManagementQueryError>();
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -86,39 +96,30 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
       await operation();
       setStatus(message);
     } catch (failure: unknown) {
-      setProblem(asError(failure));
+      setProblem(asQueryError(failure));
     } finally {
       setBusy(false);
     }
   };
 
   if (selectedSetupId === undefined) {
-    return <Workspace><p>Select a connected setup before using advanced operations.</p></Workspace>;
+    return <Workspace><Card><Empty description={<Title level={2} style={{ fontSize: 18 }}>Advanced operations unavailable</Title>}><Text type="secondary">Select a connected setup before using advanced operations.</Text></Empty></Card></Workspace>;
   }
 
   const checkExists = () => void run(async () => {
-    setExists(await client.entryExists(
-      selectedSetupId, encodeNamespace(required(namespace, 'Namespace')), encodeKey(required(key, 'Key')),
-    ));
+    setExists(await client.entryExists(selectedSetupId, encodeNamespace(required(namespace, 'Namespace')), encodeKey(required(key, 'Key'))));
   }, 'Existence check completed');
 
   const getMany = () => void run(async () => {
-    setBatchGet(await client.batchGetEntries(selectedSetupId, {
-      keys: parseKeys(batchKeys),
-      reason: required(reason, 'Reason'),
-    }));
+    setBatchGet(await client.batchGetEntries(selectedSetupId, { keys: parseKeys(batchKeys), reason: required(reason, 'Reason') }));
   }, 'Batch get completed');
 
   const setMany = () => void run(async () => {
-    setBatchSet(await client.batchSetEntries(selectedSetupId, {
-      entries: parseSetEntries(batchValues),
-    }));
+    setBatchSet(await client.batchSetEntries(selectedSetupId, { entries: parseSetEntries(batchValues) }));
   }, 'Batch set completed');
 
   const deleteMany = () => void run(async () => {
-    setBatchDelete(await client.batchDeleteEntries(selectedSetupId, {
-      keys: parseKeys(batchDeleteKeys),
-    }));
+    setBatchDelete(await client.batchDeleteEntries(selectedSetupId, { keys: parseKeys(batchDeleteKeys) }));
   }, 'Batch delete completed');
 
   const scanEntries = (cursor: string | null = null) => void run(async () => {
@@ -133,49 +134,24 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
     }));
   }, 'Backend scan completed');
 
-  const loadMetrics = () => void run(async () => {
-    setMetrics(await client.cacheMetrics(selectedSetupId));
-  }, 'Core metrics refreshed');
+  const loadMetrics = () => void run(async () => { setMetrics(await client.cacheMetrics(selectedSetupId)); }, 'Core metrics refreshed');
 
   const acquire = () => void run(async () => {
-    const result = await client.acquireLock(
-      selectedSetupId,
-      encodeNamespace(required(lockNamespace, 'Lock namespace')),
-      encodeKey(required(lockKey, 'Lock key')),
-      {
-        ownerToken: required(ownerToken, 'Owner token'),
-        leaseTtlMillis: positiveInt(leaseTtl, Number.MAX_SAFE_INTEGER, 'Lease TTL'),
-        reentrantForSameOwner: reentrant,
-        issueFencingToken: fencing,
-      },
-    );
-    setLockResult(result.acquired
-      ? `Acquired · fencing ${result.fencingToken ?? 'not requested'} · expires ${result.leaseExpiresAt ?? 'unknown'}`
-      : 'Not acquired');
-  }, 'Lock acquisition completed');
-
-  const renew = () => lockBoolean(
-    () => client.renewLock(selectedSetupId, encodedLockNamespace(), encodedLockKey(), {
+    const result = await client.acquireLock(selectedSetupId, encodedLockNamespace(), encodedLockKey(), {
       ownerToken: required(ownerToken, 'Owner token'),
       leaseTtlMillis: positiveInt(leaseTtl, Number.MAX_SAFE_INTEGER, 'Lease TTL'),
-    }),
-    'Renewed',
-    'Not renewed',
-  );
-  const release = () => lockBoolean(
-    () => client.releaseLock(
-      selectedSetupId, encodedLockNamespace(), encodedLockKey(), required(ownerToken, 'Owner token'),
-    ),
-    'Released by owner',
-    'Not released',
-  );
-  const ownership = () => lockBoolean(
-    () => client.isLockHeldBy(
-      selectedSetupId, encodedLockNamespace(), encodedLockKey(), required(ownerToken, 'Owner token'),
-    ),
-    'Owner token holds this lock',
-    'Owner token does not hold this lock',
-  );
+      reentrantForSameOwner: reentrant,
+      issueFencingToken: fencing,
+    });
+    setLockResult(result.acquired ? `Acquired · fencing ${result.fencingToken ?? 'not requested'} · expires ${result.leaseExpiresAt ?? 'unknown'}` : 'Not acquired');
+  }, 'Lock acquisition completed');
+
+  const renew = () => lockBoolean(() => client.renewLock(selectedSetupId, encodedLockNamespace(), encodedLockKey(), {
+    ownerToken: required(ownerToken, 'Owner token'),
+    leaseTtlMillis: positiveInt(leaseTtl, Number.MAX_SAFE_INTEGER, 'Lease TTL'),
+  }), 'Renewed', 'Not renewed');
+  const release = () => lockBoolean(() => client.releaseLock(selectedSetupId, encodedLockNamespace(), encodedLockKey(), required(ownerToken, 'Owner token')), 'Released by owner', 'Not released');
+  const ownership = () => lockBoolean(() => client.isLockHeldBy(selectedSetupId, encodedLockNamespace(), encodedLockKey(), required(ownerToken, 'Owner token')), 'Owner token holds this lock', 'Owner token does not hold this lock');
 
   function encodedLockNamespace() { return encodeNamespace(required(lockNamespace, 'Lock namespace')); }
   function encodedLockKey() { return encodeKey(required(lockKey, 'Lock key')); }
@@ -183,79 +159,156 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
     void run(async () => setLockResult(await operation() ? yes : no), 'Lock operation completed');
   }
 
-  return <Workspace>
-    <p>Direct workflows for the complete public cache, scan, lock, and metrics service surface.</p>
-    {problem !== undefined && <div className="diagnostics" role="alert"><strong>{problem.code}</strong><p>{problem.message}</p></div>}
-    {status !== '' && <p role="status">{status}</p>}
+  return (
+    <Workspace>
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Paragraph>Direct workflows for the complete public cache, scan, lock, and metrics service surface.</Paragraph>
+        {problem !== undefined && <ProblemAlert problem={problem} />}
+        {status !== '' && <Alert message={status} role="status" showIcon type="success" />}
 
-    <Panel title="Existence and scan">
-      <TwoColumns>
-        <Field id="advanced-namespace" label="Namespace" onChange={setNamespace} value={namespace} />
-        <Field id="advanced-key" label="Key" onChange={setKey} value={key} />
-      </TwoColumns>
-      <button className="button" disabled={busy || namespace.trim() === '' || key.trim() === ''} onClick={checkExists} type="button">Check entry existence</button>
-      {exists !== undefined && <p><strong>Exists:</strong> {exists ? 'Yes' : 'No'}</p>}
-      {canReveal && canScan && <>
-        <TwoColumns>
-          <Field id="scan-prefix" label="Scan key prefix (optional)" onChange={setScanPrefix} value={scanPrefix} />
-          <Field id="scan-limit" label="Scan page size" onChange={setScanLimit} type="number" value={scanLimit} />
-        </TwoColumns>
-        <label><input checked={scanValues} onChange={(event) => setScanValues(event.target.checked)} type="checkbox" /> Include values</label>{' '}
-        <label><input checked={scanExpired} onChange={(event) => setScanExpired(event.target.checked)} type="checkbox" /> Include expired entries</label>
-        <div><button className="button" disabled={busy || namespace.trim() === ''} onClick={() => scanEntries()} type="button">Run backend scan</button></div>
-        {scan !== undefined && <Result title="Scan result" value={scan} />}
-        {scan?.hasMore === true && <button className="button button--secondary" disabled={busy} onClick={() => scanEntries(scan.nextCursor)} type="button">Load next scan page</button>}
-      </>}
-    </Panel>
+        <Panel title="Existence and scan">
+          <Form layout="vertical">
+            <Row gutter={16}>
+              <Col span={12}><Form.Item htmlFor="advanced-namespace" label="Namespace"><Input id="advanced-namespace" maxLength={128} onChange={(event) => setNamespace(event.target.value)} value={namespace} /></Form.Item></Col>
+              <Col span={12}><Form.Item htmlFor="advanced-key" label="Key"><Input id="advanced-key" maxLength={1024} onChange={(event) => setKey(event.target.value)} value={key} /></Form.Item></Col>
+            </Row>
+            <Space className="workspace__actions" wrap><Button disabled={busy || namespace.trim() === '' || key.trim() === ''} onClick={checkExists} type="primary">Check entry existence</Button></Space>
+            {exists !== undefined && <p><strong>Exists:</strong> {exists ? 'Yes' : 'No'}</p>}
+            {canReveal && canScan && (
+              <>
+                <Row gutter={16} style={{ marginTop: 16 }}>
+                  <Col span={12}><Form.Item htmlFor="scan-prefix" label="Scan key prefix (optional)"><Input id="scan-prefix" maxLength={1024} onChange={(event) => setScanPrefix(event.target.value)} value={scanPrefix} /></Form.Item></Col>
+                  <Col span={12}><Form.Item htmlFor="scan-limit" label="Scan page size"><Input id="scan-limit" max={200} min={1} onChange={(event) => setScanLimit(event.target.value)} type="number" value={scanLimit} /></Form.Item></Col>
+                </Row>
+                <Space wrap>
+                  <Checkbox checked={scanValues} onChange={(event) => setScanValues(event.target.checked)}>Include values</Checkbox>
+                  <Checkbox checked={scanExpired} onChange={(event) => setScanExpired(event.target.checked)}>Include expired entries</Checkbox>
+                </Space>
+                <Space className="workspace__actions" style={{ marginTop: 16 }} wrap>
+                  <Button disabled={busy || namespace.trim() === ''} onClick={() => scanEntries()} type="primary">Run backend scan</Button>
+                  {scan?.hasMore === true && <Button disabled={busy} onClick={() => scanEntries(scan.nextCursor)}>Load next scan page</Button>}
+                </Space>
+                {scan !== undefined && <Result title="Scan result" value={scan} />}
+              </>
+            )}
+          </Form>
+        </Panel>
 
-    {canReveal && canBatch && <Panel title="Batch get">
-      <p>One entry per line: <code>namespace[TAB]key</code>.</p>
-      <TextArea id="batch-keys" label="Batch get keys" onChange={setBatchKeys} value={batchKeys} />
-      <Field id="advanced-reason" label="Audit reason" onChange={setReason} value={reason} />
-      <button className="button" disabled={busy || batchKeys.trim() === ''} onClick={getMany} type="button">Get entry batch</button>
-      {batchGet !== undefined && <Result title="Batch get result" value={batchGet} />}
-    </Panel>}
+        {canReveal && canBatch && (
+          <Panel title="Batch get">
+            <Form layout="vertical">
+              <Paragraph>One entry per line: <code>namespace[TAB]key</code>.</Paragraph>
+              <Form.Item htmlFor="batch-keys" label="Batch get keys"><Input.TextArea id="batch-keys" onChange={(event) => setBatchKeys(event.target.value)} rows={6} value={batchKeys} /></Form.Item>
+              <Form.Item htmlFor="advanced-reason" label="Audit reason"><Input id="advanced-reason" maxLength={240} minLength={3} onChange={(event) => setReason(event.target.value)} value={reason} /></Form.Item>
+              <Space className="workspace__actions" wrap><Button disabled={busy || batchKeys.trim() === ''} onClick={getMany} type="primary">Get entry batch</Button></Space>
+              {batchGet !== undefined && <Result title="Batch get result" value={batchGet} />}
+            </Form>
+          </Panel>
+        )}
 
-    {canOperate && canBatch && <Panel title="Batch set">
-      <p>Provide a JSON array. Every entry independently specifies namespace, key, typed value, TTL, set mode, expected version, and whether to return its previous value.</p>
-      <TextArea id="batch-values" label="Batch set entries (JSON)" onChange={setBatchValues} value={batchValues} />
-      <div><button className="button" disabled={busy || batchValues.trim() === ''} onClick={setMany} type="button">Set entry batch</button></div>
-      {batchSet !== undefined && <Result title="Batch set result" value={batchSet} />}
-    </Panel>}
+        {canOperate && canBatch && (
+          <Panel title="Batch set">
+            <Form layout="vertical">
+              <Paragraph>Provide a JSON array. Every entry independently specifies namespace, key, typed value, TTL, set mode, expected version, and whether to return its previous value.</Paragraph>
+              <Form.Item htmlFor="batch-values" label="Batch set entries (JSON)"><Input.TextArea id="batch-values" onChange={(event) => setBatchValues(event.target.value)} rows={6} value={batchValues} /></Form.Item>
+              <Space className="workspace__actions" wrap><Button disabled={busy || batchValues.trim() === ''} onClick={setMany} type="primary">Set entry batch</Button></Space>
+              {batchSet !== undefined && <Result title="Batch set result" value={batchSet} />}
+            </Form>
+          </Panel>
+        )}
 
-    {canOperate && canBatch && <Panel title="Cross-namespace batch delete">
-      <p>One entry per line: <code>namespace[TAB]key</code>. This invokes the core cache service’s exact multi-key delete operation.</p>
-      <TextArea id="batch-delete-keys" label="Batch delete keys" onChange={setBatchDeleteKeys} value={batchDeleteKeys} />
-      <button className="button button--danger" disabled={busy || batchDeleteKeys.trim() === ''} onClick={deleteMany} type="button">Delete entry batch</button>
-      {batchDelete !== undefined && <Result title="Batch delete result" value={batchDelete} />}
-    </Panel>}
+        {canOperate && canBatch && (
+          <Panel title="Cross-namespace batch delete">
+            <Form layout="vertical">
+              <Paragraph>One entry per line: <code>namespace[TAB]key</code>. This invokes the core cache service’s exact multi-key delete operation.</Paragraph>
+              <Form.Item htmlFor="batch-delete-keys" label="Batch delete keys"><Input.TextArea id="batch-delete-keys" onChange={(event) => setBatchDeleteKeys(event.target.value)} rows={6} value={batchDeleteKeys} /></Form.Item>
+              <Space className="workspace__actions" wrap><Button danger disabled={busy || batchDeleteKeys.trim() === ''} onClick={deleteMany}>Delete entry batch</Button></Space>
+              {batchDelete !== undefined && <Result title="Batch delete result" value={batchDelete} />}
+            </Form>
+          </Panel>
+        )}
 
-    {canMetrics && <Panel title="Exact core metrics">
-      <button className="button" disabled={busy} onClick={loadMetrics} type="button">Refresh core metrics</button>
-      {metrics !== undefined && <dl className="details-list">{Object.entries(metrics).map(([name, value]) => <div key={name}><dt>{words(name)}</dt><dd>{BigInt(value).toLocaleString('en-US')}</dd></div>)}</dl>}
-    </Panel>}
+        {canMetrics && (
+          <Panel title="Exact core metrics">
+            <Space className="workspace__actions" wrap><Button disabled={busy} onClick={loadMetrics} type="primary">Refresh core metrics</Button></Space>
+            {metrics !== undefined && (
+              <Descriptions column={3} size="small" style={{ marginTop: 16 }}>
+                {Object.entries(metrics).map(([name, value]) => <Descriptions.Item key={name} label={words(name)}>{BigInt(value).toLocaleString('en-US')}</Descriptions.Item>)}
+              </Descriptions>
+            )}
+          </Panel>
+        )}
 
-    {canOperate && canOwnLocks && <Panel title="Owner lock lifecycle">
-      <TwoColumns>
-        <Field id="lock-namespace" label="Lock namespace" onChange={setLockNamespace} value={lockNamespace} />
-        <Field id="lock-key" label="Lock key" onChange={setLockKey} value={lockKey} />
-        <Field id="lock-owner" label="Owner token" onChange={setOwnerToken} type="password" value={ownerToken} />
-        <Field id="lock-lease" label="Lease TTL milliseconds" onChange={setLeaseTtl} type="number" value={leaseTtl} />
-      </TwoColumns>
-      <label><input checked={reentrant} onChange={(event) => setReentrant(event.target.checked)} type="checkbox" /> Reentrant for the same owner</label>{' '}
-      <label><input checked={fencing} onChange={(event) => setFencing(event.target.checked)} type="checkbox" /> Issue fencing token</label>
-      <div className="workspace__actions"><button className="button" disabled={busy} onClick={acquire} type="button">Acquire lock</button><button className="button" disabled={busy} onClick={renew} type="button">Renew lock</button><button className="button" disabled={busy} onClick={release} type="button">Release by owner</button>{canReveal && <button className="button button--secondary" disabled={busy} onClick={ownership} type="button">Check ownership</button>}<button className="button button--secondary" onClick={clearSensitive} type="button">Clear sensitive state</button></div>
-      {lockResult !== '' && <p><strong>Lock result:</strong> {lockResult}</p>}
-    </Panel>}
-  </Workspace>;
+        {canOperate && canOwnLocks && (
+          <Panel title="Owner lock lifecycle">
+            <Form layout="vertical">
+              <Row gutter={16}>
+                <Col span={12}><Form.Item htmlFor="lock-namespace" label="Lock namespace"><Input id="lock-namespace" maxLength={128} onChange={(event) => setLockNamespace(event.target.value)} value={lockNamespace} /></Form.Item></Col>
+                <Col span={12}><Form.Item htmlFor="lock-key" label="Lock key"><Input id="lock-key" maxLength={1024} onChange={(event) => setLockKey(event.target.value)} value={lockKey} /></Form.Item></Col>
+                <Col span={12}><Form.Item htmlFor="lock-owner" label="Owner token"><Input.Password autoComplete="off" id="lock-owner" maxLength={4096} onChange={(event) => setOwnerToken(event.target.value)} value={ownerToken} visibilityToggle={false} /></Form.Item></Col>
+                <Col span={12}><Form.Item htmlFor="lock-lease" label="Lease TTL milliseconds"><Input id="lock-lease" min={1} onChange={(event) => setLeaseTtl(event.target.value)} type="number" value={leaseTtl} /></Form.Item></Col>
+              </Row>
+              <Space wrap>
+                <Checkbox checked={reentrant} onChange={(event) => setReentrant(event.target.checked)}>Reentrant for the same owner</Checkbox>
+                <Checkbox checked={fencing} onChange={(event) => setFencing(event.target.checked)}>Issue fencing token</Checkbox>
+              </Space>
+              <Space className="workspace__actions" style={{ marginTop: 16 }} wrap>
+                <Button disabled={busy} onClick={acquire} type="primary">Acquire lock</Button>
+                <Button disabled={busy} onClick={renew}>Renew lock</Button>
+                <Button disabled={busy} onClick={release}>Release by owner</Button>
+                {canReveal && <Button disabled={busy} onClick={ownership}>Check ownership</Button>}
+                <Button onClick={clearSensitive}>Clear sensitive state</Button>
+              </Space>
+              {lockResult !== '' && <p><strong>Lock result:</strong> {lockResult}</p>}
+            </Form>
+          </Panel>
+        )}
+      </Space>
+    </Workspace>
+  );
 }
 
-function Workspace({ children }: { readonly children: ReactNode }) { return <section aria-labelledby="advanced-title" className="workspace"><div className="workspace__heading"><div><p className="workspace__context">Complete backend service exposure</p><h1 id="advanced-title">Advanced operations</h1></div></div>{children}</section>; }
-function Panel({ children, title }: { readonly children: ReactNode; readonly title: string }) { const id = `advanced-${title.toLowerCase().replaceAll(' ', '-')}`; return <section aria-labelledby={id} className="overview-panel"><h2 id={id}>{title}</h2>{children}</section>; }
-function TwoColumns({ children }: { readonly children: ReactNode }) { return <div className="form-grid">{children}</div>; }
-function Field({ id, label, onChange, type = 'text', value }: { readonly id: string; readonly label: string; readonly onChange: (value: string) => void; readonly type?: string; readonly value: string }) { return <label className="field" htmlFor={id}>{label}<input id={id} onChange={(event) => onChange(event.target.value)} type={type} value={value} /></label>; }
-function TextArea({ id, label, onChange, value }: { readonly id: string; readonly label: string; readonly onChange: (value: string) => void; readonly value: string }) { return <label className="field" htmlFor={id}>{label}<textarea id={id} onChange={(event) => onChange(event.target.value)} rows={6} value={value} /></label>; }
-function Result({ title, value }: { readonly title: string; readonly value: unknown }) { return <section aria-label={title}><div className="workspace__actions"><h3>{title}</h3></div><pre>{JSON.stringify(value, null, 2)}</pre></section>; }
+function Workspace({ children }: { readonly children: ReactNode }) {
+  return (
+    <section aria-labelledby="advanced-title" className="workspace">
+      <div className="workspace__heading" style={{ marginBottom: 16 }}>
+        <Text className="workspace__context" type="secondary">Complete backend service exposure</Text>
+        <Title id="advanced-title" level={1} style={{ marginTop: 4 }}>Advanced operations</Title>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Panel({ children, title }: { readonly children: ReactNode; readonly title: string }) {
+  const id = `advanced-${title.toLowerCase().replaceAll(' ', '-')}`;
+  return (
+    <section aria-labelledby={id} className="overview-panel">
+      <Card title={<Title id={id} level={2} style={{ margin: 0, fontSize: 18 }}>{title}</Title>}>{children}</Card>
+    </section>
+  );
+}
+
+function Result({ title, value }: { readonly title: string; readonly value: unknown }) {
+  return (
+    <section aria-label={title} style={{ marginTop: 16 }}>
+      <Title level={3} style={{ fontSize: 16 }}>{title}</Title>
+      <pre className="value-content">{JSON.stringify(value, null, 2)}</pre>
+    </section>
+  );
+}
+
+function ProblemAlert({ problem }: { readonly problem: ManagementQueryError }) {
+  return (
+    <Alert
+      description={<>{problem.message}{problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}</>}
+      message={problem.code}
+      role="alert"
+      showIcon
+      type="error"
+    />
+  );
+}
 
 function parseKeys(value: string) {
   return lines(value).map((line) => {
@@ -281,5 +334,8 @@ function lines(value: string) { const parsed = value.split(/\r?\n/u).filter((lin
 function required(value: string, label: string) { if (value.trim() === '') throw validation(`${label} is required`); return value; }
 function positiveInt(value: string, maximum: number, label: string) { const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) throw validation(`${label} must be a positive integer`); return parsed; }
 function validation(message: string) { return new ManagementClientError(400, 'VALIDATION_FAILED', message); }
-function asError(value: unknown) { return value instanceof ManagementClientError ? value : new ManagementClientError(0, 'OPERATION_FAILED', 'Advanced operation failed'); }
+function asQueryError(failure: unknown): ManagementQueryError {
+  if (failure instanceof ManagementClientError) return toQueryError(failure);
+  return { status: 0, code: 'OPERATION_FAILED', message: 'Advanced operation failed' };
+}
 function words(value: string) { return value.replaceAll(/([A-Z])/gu, ' $1').replace(/^./u, (character) => character.toUpperCase()); }

@@ -1,46 +1,45 @@
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { BackendCapabilityClientPort } from '@src/api/backend-capability-client';
-import type { AcquireLockRequest, BatchDeleteRequest, BatchGetRequest, BatchSetRequest, RenewLockRequest, ScanEntriesRequest } from '@src/api/backend-capability-schemas';
 import { AdvancedOperationsPage } from '@src/features/advanced/AdvancedOperationsPage';
-
-class BackendFake implements BackendCapabilityClientPort {
-  batchGets: BatchGetRequest[] = [];
-  batchSets: BatchSetRequest[] = [];
-  batchDeletes: BatchDeleteRequest[] = [];
-  scans: ScanEntriesRequest[] = [];
-  lockActions: string[] = [];
-  async entryExists() { return true; }
-  async batchGetEntries(_setup: string, request: BatchGetRequest) { this.batchGets.push(request); return { items: request.keys.map((key) => ({ ...key, found: false, entry: null })) }; }
-  async batchSetEntries(_setup: string, request: BatchSetRequest) { this.batchSets.push(request); return { items: request.entries.map((entry) => ({ namespace: entry.namespace, key: entry.key, applied: true, newVersion: '2', previousEntry: null })) }; }
-  async batchDeleteEntries(_setup: string, request: BatchDeleteRequest) { this.batchDeletes.push(request); return { deletedCount: String(request.keys.length) }; }
-  async scanEntries(_setup: string, request: ScanEntriesRequest) { this.scans.push(request); return { entries: [], nextCursor: null, hasMore: false }; }
-  async acquireLock(_s: string, _n: string, _k: string, request: AcquireLockRequest) { this.lockActions.push(`acquire:${request.ownerToken}`); return { acquired: true, namespace: 'orders', key: 'processor', ownerToken: request.ownerToken, fencingToken: '7', leaseExpiresAt: '2099-01-01T00:00:00Z' }; }
-  async renewLock(_s: string, _n: string, _k: string, request: RenewLockRequest) { this.lockActions.push(`renew:${request.ownerToken}`); return true; }
-  async releaseLock(_s: string, _n: string, _k: string, owner: string) { this.lockActions.push(`release:${owner}`); return true; }
-  async isLockHeldBy(_s: string, _n: string, _k: string, owner: string) { this.lockActions.push(`ownership:${owner}`); return true; }
-  async cacheMetrics() { return { cacheGets: '1', cacheHits: '1', cacheMisses: '0', cacheSets: '1', cacheSetsApplied: '1', cacheDeletes: '0', counterIncrements: '0', counterSets: '0', counterDeletes: '0', lockAcquires: '1', lockAcquiresGranted: '1', lockRenewals: '0', lockReleases: '0', publishes: '0', subscribes: '0' }; }
-}
+import { renderWithProviders } from './support/render';
+import { startResourceFixture, type ResourceFixture } from './support/resource-fixture';
 
 describe('complete backend desktop workflows', () => {
-  it('runs existence, value-inclusive scan, batch get/set, and exact metrics', async () => {
-    const client = new BackendFake();
+  let fixture: ResourceFixture;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    fixture = await startResourceFixture();
+  });
+  afterEach(async () => { await fixture.close(); });
+
+  const page = (props: Partial<Parameters<typeof AdvancedOperationsPage>[0]> = {}) => renderWithProviders(
+    <AdvancedOperationsPage canBatch canMetrics canOperate canOwnLocks canReveal canScan selectedSetupId="primary-cache" {...props} />,
+    { store: fixture.store },
+  );
+  const requests = (method: string, suffix: string) => fixture.requests((request) => request.method === method && request.path.endsWith(suffix));
+
+  it('runs existence, value-inclusive scan, batch get/set, and exact metrics through the no-store client', async () => {
     const user = userEvent.setup();
-    render(<AdvancedOperationsPage canBatch canMetrics canOperate canOwnLocks canReveal canScan client={client} selectedSetupId="primary-cache" />);
+    page();
 
     await user.type(screen.getByLabelText('Namespace'), 'orders');
     await user.type(screen.getByLabelText('Key'), 'one');
     await user.click(screen.getByRole('button', { name: 'Check entry existence' }));
     expect(await screen.findByText('Yes')).toBeVisible();
+    expect(requests('GET', '/exists')[0]!.path).toBe('/api/v1/setups/primary-cache/namespaces/b3JkZXJz/entries/b25l/exists');
 
     await user.click(screen.getByRole('button', { name: 'Run backend scan' }));
-    expect(client.scans[0]).toMatchObject({ namespace: 'orders', includeValues: true, includeExpired: false });
+    expect(await screen.findByRole('region', { name: 'Scan result' })).toBeVisible();
+    expect(requests('POST', '/entries/scan')[0]!.body).toEqual({ namespace: 'orders', prefix: null, cursor: null, limit: 50, includeValues: true, includeExpired: false, reason: 'Interactive console operation' });
 
     await user.type(screen.getByLabelText('Batch get keys'), 'orders\tone');
     await user.click(screen.getByRole('button', { name: 'Get entry batch' }));
-    expect(client.batchGets[0]?.keys).toEqual([{ namespace: 'orders', key: 'one' }]);
+    expect(await screen.findByRole('region', { name: 'Batch get result' })).toHaveTextContent('"found": false');
+    expect(requests('POST', '/entries/batch-get')[0]!.body).toEqual({ keys: [{ namespace: 'orders', key: 'one' }], reason: 'Interactive console operation' });
 
     await user.click(screen.getByLabelText('Batch set entries (JSON)'));
     await user.paste(JSON.stringify([
@@ -48,32 +47,69 @@ describe('complete backend desktop workflows', () => {
       { namespace: 'customers', key: 'two', value: { type: 'STRING', text: 'line one\nline two' }, ttlMillis: null, setMode: 'ONLY_IF_ABSENT', expectedVersion: null, returnPreviousValue: false },
     ]));
     await user.click(screen.getByRole('button', { name: 'Set entry batch' }));
-    expect(client.batchSets[0]?.entries[0]).toMatchObject({ returnPreviousValue: true, value: { type: 'LONG', decimal: '9223372036854775807' } });
-    expect(client.batchSets[0]?.entries[1]).toMatchObject({ namespace: 'customers', ttlMillis: null, setMode: 'ONLY_IF_ABSENT', returnPreviousValue: false });
+    expect(await screen.findByRole('region', { name: 'Batch set result' })).toHaveTextContent('"applied": true');
+    const batchSet = requests('POST', '/entries/batch-set')[0]!.body as { entries: Array<Record<string, unknown>> };
+    expect(batchSet.entries[0]).toMatchObject({ returnPreviousValue: true, value: { type: 'LONG', decimal: '9223372036854775807' } });
+    expect(batchSet.entries[1]).toMatchObject({ namespace: 'customers', ttlMillis: null, setMode: 'ONLY_IF_ABSENT', returnPreviousValue: false });
 
     await user.type(screen.getByLabelText('Batch delete keys'), 'orders\tone\ncustomers\ttwo');
     await user.click(screen.getByRole('button', { name: 'Delete entry batch' }));
-    expect(client.batchDeletes[0]?.keys).toEqual([{ namespace: 'orders', key: 'one' }, { namespace: 'customers', key: 'two' }]);
     expect(await screen.findByText(/"deletedCount": "2"/u)).toBeVisible();
+    expect(requests('POST', '/entries/batch-delete')[0]!.body).toEqual({ keys: [{ namespace: 'orders', key: 'one' }, { namespace: 'customers', key: 'two' }] });
 
     await user.click(screen.getByRole('button', { name: 'Refresh core metrics' }));
     expect(await screen.findByText('Cache Gets')).toBeVisible();
-  }, 10_000);
+    expect(screen.getByText('Cache Sets')).toBeVisible();
+    expect(requests('GET', '/cache-metrics')).toHaveLength(1);
+    expect(JSON.stringify(fixture.store.getState())).not.toContain('deletedCount');
+  }, 15_000);
+
+  it('rejects malformed batch input locally before any request leaves the browser', async () => {
+    const user = userEvent.setup();
+    page();
+    await user.type(screen.getByLabelText('Batch get keys'), 'no-tab-here');
+    await user.click(screen.getByRole('button', { name: 'Get entry batch' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('VALIDATION_FAILED');
+    await user.type(screen.getByLabelText('Batch set entries (JSON)'), 'not json');
+    await user.click(screen.getByRole('button', { name: 'Set entry batch' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Batch set entries must be a valid JSON array');
+    expect(fixture.requests((request) => request.method === 'POST')).toHaveLength(0);
+  });
+
+  it('withholds capability-gated panels', async () => {
+    page({ canBatch: false, canMetrics: false, canOwnLocks: false, canScan: false });
+    expect(await screen.findByRole('button', { name: 'Check entry existence' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Batch get' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Batch set' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Exact core metrics' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Owner lock lifecycle' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Run backend scan' })).not.toBeInTheDocument();
+  });
 
   it('operates the complete owner-token lock lifecycle and clears the token', async () => {
-    const client = new BackendFake();
     const user = userEvent.setup();
-    render(<AdvancedOperationsPage canBatch canMetrics canOperate canOwnLocks canReveal canScan client={client} selectedSetupId="primary-cache" />);
+    page();
     const panel = screen.getByRole('region', { name: 'Owner lock lifecycle' });
     await user.type(within(panel).getByLabelText('Lock namespace'), 'orders');
     await user.type(within(panel).getByLabelText('Lock key'), 'processor');
     await user.type(within(panel).getByLabelText('Owner token'), 'owner-secret');
+    expect(within(panel).getByLabelText('Owner token')).toHaveAttribute('type', 'password');
     await user.click(within(panel).getByRole('button', { name: 'Acquire lock' }));
+    expect(await screen.findByText(/Acquired · fencing 7/u)).toBeVisible();
     await user.click(within(panel).getByRole('button', { name: 'Renew lock' }));
+    expect(await screen.findByText('Renewed')).toBeVisible();
     await user.click(within(panel).getByRole('button', { name: 'Check ownership' }));
+    expect(await screen.findByText('Owner token holds this lock')).toBeVisible();
     await user.click(within(panel).getByRole('button', { name: 'Release by owner' }));
-    expect(client.lockActions).toEqual(['acquire:owner-secret', 'renew:owner-secret', 'ownership:owner-secret', 'release:owner-secret']);
+    expect(await screen.findByText('Released by owner')).toBeVisible();
+
+    const lockCalls = fixture.requests((request) => request.method === 'POST' && request.path.includes('/locks/'));
+    expect(lockCalls.map((request) => request.path.split('/').at(-1))).toEqual(['acquire', 'renew', 'ownership', 'release']);
+    expect(lockCalls[0]!.body).toEqual({ ownerToken: 'owner-secret', leaseTtlMillis: 30_000, reentrantForSameOwner: false, issueFencingToken: true });
+    expect(lockCalls[3]!.body).toEqual({ ownerToken: 'owner-secret' });
+    expect(JSON.stringify(fixture.store.getState())).not.toContain('owner-secret');
     await user.click(within(panel).getByRole('button', { name: 'Clear sensitive state' }));
     expect(within(panel).getByLabelText('Owner token')).toHaveValue('');
+    expect(document.body).not.toHaveTextContent('Released by owner');
   });
 });

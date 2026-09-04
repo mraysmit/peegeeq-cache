@@ -36,9 +36,7 @@ export const monitoringEnvelopeSchema = z.discriminatedUnion('type', [
 export type MonitoringEnvelope = z.infer<typeof monitoringEnvelopeSchema>;
 export type MonitoringConnectionState = 'CONNECTING' | 'CONNECTED' | 'STALE' | 'STOPPED';
 export interface MonitoringSocket { stop(): void; }
-export interface MonitoringSocketPort { connect(setupId: string, onEvent: (event: MonitoringEnvelope) => void, onState: (state: MonitoringConnectionState) => void): MonitoringSocket; }
-
-export class BrowserMonitoringSocket implements MonitoringSocketPort {
+export class BrowserMonitoringSocket {
   connect(setupId: string, onEvent: (event: MonitoringEnvelope) => void, onState: (state: MonitoringConnectionState) => void): MonitoringSocket {
     let socket: InstanceType<typeof globalThis.WebSocket> | undefined;
     let stopped = false;

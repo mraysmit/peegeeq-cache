@@ -72,7 +72,7 @@ class ManagementSetupBrowserIT {
         unregistered(context -> {
             Page page = setups(context);
             Locator dialog = registration(page, "Register setup");
-            page.keyboard().press("Escape");
+            dialog.getByLabel("Close registration").press("Escape");
             assertThat(dialog).hasCount(0);
             assertThat(page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Register setup"))).isFocused();
         });
@@ -135,31 +135,31 @@ class ManagementSetupBrowserIT {
         unregistered(context -> assertThat(field(registration(setups(context), "Register setup"), "Host")).hasAttribute("maxlength", "253"));
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-015", requirement = "Management API: database port is numeric", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Inspect the Port input type", expectedResult = "Port uses a number input", cleanup = "Close the validation context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-015", requirement = "Management API: database port is numeric", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Inspect the Port accessibility role", expectedResult = "Port exposes the numeric spinbutton role", cleanup = "Close the validation context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void databasePortUsesNumericInput() throws Exception {
-        unregistered(context -> assertThat(field(registration(setups(context), "Register setup"), "Port")).hasAttribute("type", "number"));
+        unregistered(context -> assertThat(field(registration(setups(context), "Register setup"), "Port")).hasAttribute("role", "spinbutton"));
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-016", requirement = "Management API: database port excludes zero", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Enter port zero and inspect native validity", expectedResult = "The browser rejects zero against minimum one", cleanup = "Clear the invalid port and close the context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-016", requirement = "Management API: database port excludes zero", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Enter port zero and inspect the numeric boundary", expectedResult = "The control exposes minimum one and clamps zero to one", cleanup = "Close the validation context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void databasePortRejectsZero() throws Exception {
         unregistered(context -> {
             Locator input = field(registration(setups(context), "Register setup"), "Port");
             input.fill("0");
-            assertThat(input).hasAttribute("min", "1");
-            assertEquals(false, input.evaluate("element => element.checkValidity()"));
+            assertThat(input).hasAttribute("aria-valuemin", "1");
+            assertThat(input).hasValue("1");
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-017", requirement = "Management API: database port excludes values above 65535", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Enter port 65536 and inspect native validity", expectedResult = "The browser rejects the value against the TCP maximum", cleanup = "Clear the invalid port and close the context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-017", requirement = "Management API: database port excludes values above 65535", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Enter port 65536 and inspect the numeric boundary", expectedResult = "The control exposes the TCP maximum and clamps 65536 to 65535", cleanup = "Close the validation context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void databasePortRejectsAboveTcpMaximum() throws Exception {
         unregistered(context -> {
             Locator input = field(registration(setups(context), "Register setup"), "Port");
             input.fill("65536");
-            assertThat(input).hasAttribute("max", "65535");
-            assertEquals(false, input.evaluate("element => element.checkValidity()"));
+            assertThat(input).hasAttribute("aria-valuemax", "65535");
+            assertThat(input).hasValue("65535");
         });
     }
 
@@ -247,31 +247,31 @@ class ManagementSetupBrowserIT {
         unregistered(context -> assertThat(field(registration(setups(context), "Register setup"), "Trust profile")).hasAttribute("maxlength", "128"));
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-032", requirement = "Management API: pool size is numeric", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Inspect Pool size input type", expectedResult = "Pool size uses a number input", cleanup = "Close the validation context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-032", requirement = "Management API: pool size is numeric", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Inspect the Pool size accessibility role", expectedResult = "Pool size exposes the numeric spinbutton role", cleanup = "Close the validation context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void poolSizeUsesNumericInput() throws Exception {
-        unregistered(context -> assertThat(field(registration(setups(context), "Register setup"), "Pool size")).hasAttribute("type", "number"));
+        unregistered(context -> assertThat(field(registration(setups(context), "Register setup"), "Pool size")).hasAttribute("role", "spinbutton"));
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-033", requirement = "Management API: pool size excludes zero", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Enter pool size zero and inspect native validity", expectedResult = "The browser rejects zero against minimum one", cleanup = "Clear the invalid value and close the context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-033", requirement = "Management API: pool size excludes zero", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Enter pool size zero and inspect the numeric boundary", expectedResult = "The control exposes minimum one and clamps zero to one", cleanup = "Close the validation context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void poolSizeRejectsZero() throws Exception {
         unregistered(context -> {
             Locator input = field(registration(setups(context), "Register setup"), "Pool size");
             input.fill("0");
-            assertThat(input).hasAttribute("min", "1");
-            assertEquals(false, input.evaluate("element => element.checkValidity()"));
+            assertThat(input).hasAttribute("aria-valuemin", "1");
+            assertThat(input).hasValue("1");
         });
     }
 
-    @ManagementBrowserScenario(id = "PW-SETUP-034", requirement = "Management API: pool size is capped at 100", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Enter pool size 101 and inspect native validity", expectedResult = "The browser rejects 101 against the maximum", cleanup = "Clear the invalid value and close the context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
+    @ManagementBrowserScenario(id = "PW-SETUP-034", requirement = "Management API: pool size is capped at 100", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Enter pool size 101 and inspect the numeric boundary", expectedResult = "The control exposes maximum 100 and clamps 101 to 100", cleanup = "Close the validation context", operations = {"listSetups"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void poolSizeRejectsAboveMaximum() throws Exception {
         unregistered(context -> {
             Locator input = field(registration(setups(context), "Register setup"), "Pool size");
             input.fill("101");
-            assertThat(input).hasAttribute("max", "100");
-            assertEquals(false, input.evaluate("element => element.checkValidity()"));
+            assertThat(input).hasAttribute("aria-valuemax", "100");
+            assertThat(input).hasValue("100");
         });
     }
 
@@ -431,7 +431,7 @@ class ManagementSetupBrowserIT {
     @ManagementBrowserScenario(id = "PW-SETUP-051", requirement = "UI design: setup details expose installed migration version", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Migration", expectedResult = "A numeric migration version is displayed", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void detailsShowsMigrationVersion() throws Exception {
-        registered(context -> assertThat(details(context.page()).locator("dl").first()).containsText("Migration"));
+        registered(context -> assertThat(details(context.page()).locator(".ant-descriptions").first()).containsText("Migration"));
     }
 
     @ManagementBrowserScenario(id = "PW-SETUP-052", requirement = "UI design: setup details expose effective runtime pool size", area = ManagementBrowserArea.SETUP, risk = ManagementBrowserRisk.HIGH, action = "Open setup details and inspect Pool size", expectedResult = "The configured pool size 3 is displayed", cleanup = "Close details and reset PostgreSQL", operations = {"getSetup", "getSetupHealth", "getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.DATABASE, ManagementBrowserEvidence.RESOURCE_CLEANUP})
@@ -524,7 +524,9 @@ class ManagementSetupBrowserIT {
 
     private static void testConnection(Locator dialog) {
         dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Test connection")).click();
-        assertThat(dialog.getByRole(AriaRole.STATUS)).containsText("Connection succeeded");
+        assertThat(dialog.getByRole(AriaRole.STATUS)).containsText("Connection succeeded",
+                new com.microsoft.playwright.assertions.LocatorAssertions.ContainsTextOptions()
+                        .setTimeout(15_000));
     }
 
     private static Locator setupRow(Page page) {

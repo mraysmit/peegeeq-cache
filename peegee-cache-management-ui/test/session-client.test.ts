@@ -1,9 +1,11 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { revealedEntryValueSchema } from '@src/api/inspection-schemas';
+import { currentSessionSchema } from '@src/api/protocol-schemas';
 import { ManagementClientError, SessionClient } from '@src/api/session-client';
+import { invalidBody, route, startLoopbackServer, type LoopbackServer } from './support/loopback-server';
 
-const sessionBody = {
+const sessionBody = currentSessionSchema.parse({
   user: 'local-operator',
   roles: ['viewer', 'operator'],
   serverVersion: '0.1.0-SNAPSHOT',
@@ -16,159 +18,131 @@ const sessionBody = {
     setupRegistration: true,
     sensitiveReveal: true,
   },
-};
+});
+
+const revealed = revealedEntryValueSchema.parse({
+  key: 'order:1', version: '3', value: { type: 'STRING', text: 'transient-value' }, revealedAt: '2026-08-29T10:01:30Z', autoHideAfterMillis: 60_000,
+});
+
+const NO_STORE = { 'cache-control': 'private, no-store, no-cache, must-revalidate', pragma: 'no-cache' } as const;
 
 describe('U1 session client', () => {
-  let server: Server;
-  let baseUrl: string;
-  let handler: (request: IncomingMessage, response: ServerResponse) => void;
+  let server: LoopbackServer;
 
   beforeEach(async () => {
-    handler = (_request, response) => {
-      response.writeHead(500).end();
-    };
-    server = createServer((request, response) => handler(request, response));
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    if (address === null || typeof address === 'string') throw new Error('HTTP fixture did not bind');
-    baseUrl = `http://127.0.0.1:${address.port}`;
     localStorage.clear();
     sessionStorage.clear();
+    server = await startLoopbackServer((request, respond) => {
+      if (route('GET', '/api/v1/session', request)) return respond.json(200, sessionBody);
+      return respond.problem(500, 'FIXTURE_UNROUTED', `no fixture for ${request.method} ${request.path}`);
+    });
   });
 
-  afterEach(async () => {
-    await new Promise<void>((resolve, reject) => server.close((error) => {
-      if (error) reject(error);
-      else resolve();
-    }));
-  });
+  afterEach(async () => { await server.close(); });
 
   it('exchanges the bootstrap token and keeps token and CSRF material out of browser storage', async () => {
     const bootstrapToken = 'one-time-bootstrap-secret';
-    let receivedToken = '';
-    let receivedCsrf = '';
-    handler = (request, response) => {
-      if (request.method === 'POST') {
-        let body = '';
-        request.setEncoding('utf8');
-        request.on('data', (chunk: string) => { body += chunk; });
-        request.on('end', () => {
-          receivedToken = (JSON.parse(body) as { token: string }).token;
-          response.writeHead(200, { 'content-type': 'application/json' });
-          response.end(JSON.stringify(sessionBody));
-        });
-        return;
-      }
-      receivedCsrf = String(request.headers['x-peegeeq-csrf'] ?? '');
-      response.writeHead(204).end();
-    };
-    const client = new SessionClient(baseUrl);
+    server.use((request, respond) => {
+      if (route('POST', '/api/v1/session/local', request)) return respond.json(200, sessionBody);
+      if (route('DELETE', '/api/v1/session/local', request)) return respond.noContent();
+      return respond.problem(500, 'FIXTURE_UNROUTED', request.path);
+    });
+    const client = new SessionClient(server.baseUrl);
 
     const session = await client.exchangeLocalToken(bootstrapToken);
     await client.logoutLocal();
 
     expect(session.user).toBe('local-operator');
-    expect(receivedToken).toBe(bootstrapToken);
-    expect(receivedCsrf).toBe(sessionBody.csrfToken);
+    expect(session).not.toHaveProperty('csrfToken');
+    expect(server.requests[0]!.body).toEqual({ token: bootstrapToken });
+    expect(server.requests[1]!.headers['x-peegeeq-csrf']).toBe(sessionBody.csrfToken);
     expect(JSON.stringify({ localStorage, sessionStorage })).not.toContain(bootstrapToken);
     expect(JSON.stringify({ localStorage, sessionStorage })).not.toContain(sessionBody.csrfToken);
   });
 
   it('rejects malformed success payloads at the protocol boundary', async () => {
-    handler = (_request, response) => {
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ ...sessionBody, unexpected: true }));
-    };
-    const client = new SessionClient(baseUrl);
+    server.use((_request, respond) => respond.json(200, invalidBody({ ...sessionBody, unexpected: true })));
+    const client = new SessionClient(server.baseUrl);
 
     await expect(client.load()).rejects.toMatchObject({
       code: 'RESPONSE_CONTRACT_INVALID',
     } satisfies Partial<ManagementClientError>);
   });
 
+  it('maps an unauthenticated session, an unreadable body, and a non-problem failure to typed errors', async () => {
+    server.use((request, respond) => {
+      if (route('GET', '/api/v1/session', request)) return respond.problem(401, 'SESSION_REQUIRED', 'Authenticate first', { correlationId: 'corr-401' });
+      if (route('GET', '/unreadable', request)) return respond.raw(200, { 'content-type': 'application/json' }, '{not json');
+      if (route('GET', '/plain-failure', request)) return respond.raw(500, { 'content-type': 'text/plain' }, 'upstream exploded');
+      return respond.raw(500, { 'content-type': 'application/json' }, '{"error":"not a problem document"}');
+    });
+    const client = new SessionClient(server.baseUrl);
+
+    await expect(client.load()).rejects.toMatchObject({ status: 401, code: 'SESSION_REQUIRED', message: 'Authenticate first', correlationId: 'corr-401' });
+    await expect(client.requestJson('/unreadable')).rejects.toMatchObject({ status: 200, code: 'RESPONSE_BODY_INVALID' });
+    await expect(client.requestJson('/plain-failure')).rejects.toMatchObject({ status: 500, code: 'RESPONSE_BODY_INVALID' });
+    await expect(client.requestJson('/exploded')).rejects.toMatchObject({ status: 500, code: 'HTTP_REQUEST_FAILED' });
+    await expect(client.logoutLocal()).rejects.toMatchObject({ status: 401, code: 'SESSION_STATE_MISSING' });
+    await expect(client.requestJson('/mutation', { method: 'POST' })).rejects.toMatchObject({ status: 401, code: 'SESSION_STATE_MISSING' });
+  });
+
   it('retains the CSRF proof when logout fails so termination can be retried', async () => {
     let logoutAttempts = 0;
-    const receivedCsrf: string[] = [];
-    handler = (request, response) => {
-      if (request.method === 'GET') {
-        response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify(sessionBody));
-        return;
-      }
+    server.use((request, respond) => {
+      if (route('GET', '/api/v1/session', request)) return respond.json(200, sessionBody);
       logoutAttempts++;
-      receivedCsrf.push(String(request.headers['x-peegeeq-csrf'] ?? ''));
-      if (logoutAttempts === 1) {
-        response.writeHead(503, { 'content-type': 'application/problem+json' });
-        response.end(JSON.stringify({
-          type: 'https://peegeeq.dev/problems/logout-unavailable',
-          title: 'Logout unavailable',
-          status: 503,
-          code: 'LOGOUT_UNAVAILABLE',
-          detail: 'Logout is temporarily unavailable',
-          instance: '/api/v1/session/local',
-          correlationId: 'logout-correlation',
-          fieldErrors: [],
-        }));
-        return;
-      }
-      response.writeHead(204).end();
-    };
-    const client = new SessionClient(baseUrl);
+      if (logoutAttempts === 1) return respond.problem(503, 'LOGOUT_UNAVAILABLE', 'Logout is temporarily unavailable', { correlationId: 'logout-correlation' });
+      return respond.noContent();
+    });
+    const client = new SessionClient(server.baseUrl);
 
     await client.load();
-    await expect(client.logoutLocal()).rejects.toMatchObject({ code: 'LOGOUT_UNAVAILABLE' });
+    await expect(client.logoutLocal()).rejects.toMatchObject({ code: 'LOGOUT_UNAVAILABLE', correlationId: 'logout-correlation' });
     await expect(client.logoutLocal()).resolves.toBeUndefined();
 
-    expect(receivedCsrf).toEqual([sessionBody.csrfToken, sessionBody.csrfToken]);
+    expect(server.requests.slice(1).map((request) => request.headers['x-peegeeq-csrf'])).toEqual([sessionBody.csrfToken, sessionBody.csrfToken]);
+  });
+
+  it('drops the CSRF proof after an unauthorized response so the next mutation cannot reuse it', async () => {
+    server.use((request, respond) => {
+      if (route('GET', '/api/v1/session', request)) return respond.json(200, sessionBody);
+      return respond.problem(401, 'SESSION_EXPIRED', 'The session expired');
+    });
+    const client = new SessionClient(server.baseUrl);
+    await client.load();
+    await expect(client.requestJson('/mutation', { method: 'POST', body: { any: 'thing' } })).rejects.toMatchObject({ status: 401, code: 'SESSION_EXPIRED' });
+    await expect(client.requestJson('/mutation', { method: 'POST' })).rejects.toMatchObject({ code: 'SESSION_STATE_MISSING' });
+    expect(server.requests.filter((request) => request.method === 'POST')).toHaveLength(1);
   });
 
   it('accepts sensitive JSON only when the response is explicitly non-cacheable', async () => {
-    let receivedBody = '';
-    let receivedCsrf = '';
-    handler = (request, response) => {
-      if (request.method === 'GET') {
-        response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify(sessionBody));
-        return;
-      }
-      receivedCsrf = String(request.headers['x-peegeeq-csrf'] ?? '');
-      request.setEncoding('utf8');
-      request.on('data', (chunk: string) => { receivedBody += chunk; });
-      request.on('end', () => {
-        response.writeHead(200, {
-          'cache-control': 'private, no-store, no-cache, must-revalidate',
-          'content-type': 'application/json',
-          pragma: 'no-cache',
-        });
-        response.end(JSON.stringify({ secret: 'transient-value' }));
-      });
-    };
-    const client = new SessionClient(baseUrl);
+    server.use((request, respond) => {
+      if (route('GET', '/api/v1/session', request)) return respond.json(200, sessionBody);
+      return respond.json(200, revealed, NO_STORE);
+    });
+    const client = new SessionClient(server.baseUrl);
 
     await client.load();
     await expect(client.requestSensitiveJson('/reveal', {
       body: { reason: 'incident review' }, method: 'POST',
-    })).resolves.toEqual({ secret: 'transient-value' });
+    })).resolves.toEqual(revealed);
 
-    expect(receivedBody).toBe('{"reason":"incident review"}');
-    expect(receivedCsrf).toBe(sessionBody.csrfToken);
+    const reveal = server.requests.at(-1)!;
+    expect(reveal.rawBody).toBe('{"reason":"incident review"}');
+    expect(reveal.headers['content-type']).toBe('application/json');
+    expect(reveal.headers['x-peegeeq-csrf']).toBe(sessionBody.csrfToken);
     expect(JSON.stringify({ localStorage, sessionStorage })).not.toContain('transient-value');
   });
 
-  it.each([
+  it.each<{ headers: Record<string, string>; description: string }>([
     { headers: { pragma: 'no-cache' }, description: 'missing Cache-Control no-store' },
     { headers: { 'cache-control': 'no-store' }, description: 'missing Pragma no-cache' },
   ])('rejects a sensitive response with $description', async ({ headers }) => {
-    handler = (request, response) => {
-      if (request.method === 'GET') {
-        response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify(sessionBody));
-        return;
-      }
-      response.writeHead(200, { 'content-type': 'application/json', ...headers });
-      response.end(JSON.stringify({ secret: 'must-be-rejected' }));
-    };
-    const client = new SessionClient(baseUrl);
+    server.use((request, respond) => {
+      if (route('GET', '/api/v1/session', request)) return respond.json(200, sessionBody);
+      return respond.json(200, revealed, headers);
+    });
+    const client = new SessionClient(server.baseUrl);
 
     await client.load();
     await expect(client.requestSensitiveJson('/reveal', { method: 'POST' })).rejects.toMatchObject({

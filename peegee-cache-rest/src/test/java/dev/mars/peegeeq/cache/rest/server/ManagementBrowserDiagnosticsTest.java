@@ -36,6 +36,24 @@ class ManagementBrowserDiagnosticsTest {
     }
 
     @Test
+    void allowsADeclaredCancellationDependentRefetchWithoutRequiringIt() {
+        ManagementConsolePostgresFixture.Diagnostics absent =
+                new ManagementConsolePostgresFixture.Diagnostics();
+        absent.allowFailedResponse(404,
+                "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
+
+        ManagementConsolePostgresFixture.Diagnostics present =
+                new ManagementConsolePostgresFixture.Diagnostics();
+        present.allowFailedResponse(404,
+                "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
+        present.recordResponse(404,
+                "/api/v1/setups/browser/namespaces/orders/entries/customer%3A1");
+
+        assertDoesNotThrow(absent::assertNoUnexpectedFailedResponses);
+        assertDoesNotThrow(present::assertNoUnexpectedFailedResponses);
+    }
+
+    @Test
     void rejectsAnExpectedFailureWhenItsStatusOrPathIsWrong() {
         ManagementConsolePostgresFixture.Diagnostics wrongStatus =
                 new ManagementConsolePostgresFixture.Diagnostics();

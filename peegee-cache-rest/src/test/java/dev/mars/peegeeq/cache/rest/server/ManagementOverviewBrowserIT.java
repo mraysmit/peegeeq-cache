@@ -83,7 +83,7 @@ class ManagementOverviewBrowserIT {
         overview(context -> {
             Locator card = metric(context.page(), "Cache schema storage");
             assertThat(card).not().containsText("Unavailable");
-            assertThat(card.locator("strong")).containsText("KiB");
+            assertThat(card.locator(".ant-statistic-content")).containsText("KiB");
         });
     }
 
@@ -217,7 +217,7 @@ class ManagementOverviewBrowserIT {
     }
 
     private static Locator metric(Page page, String label) {
-        return page.locator("article.metric-card").filter(new Locator.FilterOptions().setHasText(label));
+        return page.locator(".metric-card").filter(new Locator.FilterOptions().setHasText(label));
     }
 
     private static Locator section(Page page, String heading) {

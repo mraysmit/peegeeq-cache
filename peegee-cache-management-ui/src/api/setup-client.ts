@@ -20,20 +20,7 @@ import {
 export type SetupConnectionRequest = SetupConnectionRequestContract;
 export type SetupRegistrationRequest = SetupRegistrationRequestContract;
 
-export interface SetupClientPort {
-  list(): Promise<SetupSummary[]>;
-  details(setupId: string): Promise<SetupDetails>;
-  health(setupId: string): Promise<SetupHealth>;
-  capabilities(setupId: string): Promise<SetupCapabilities>;
-  testConnection(request: SetupConnectionRequest): Promise<SetupConnectionTest>;
-  register(request: SetupRegistrationRequest): Promise<SetupSummary>;
-  testRegistered(setupId: string): Promise<SetupConnectionTest>;
-  connect(setupId: string): Promise<SetupSummary>;
-  detach(setupId: string): Promise<void>;
-  forget(setupId: string): Promise<void>;
-}
-
-export class SetupClient implements SetupClientPort {
+export class SetupClient {
   constructor(private readonly sessionClient: SessionClient) {}
 
   async list(): Promise<SetupSummary[]> {

@@ -1,77 +1,116 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Alert, Card, Col, Descriptions, Empty, Row, Tabs, Typography } from 'antd';
+import { useEffect, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
-import type { NamespaceClientPort } from '../../api/inspection-client';
-import type { NamespaceDetails } from '../../api/inspection-schemas';
-import { ManagementClientError } from '../../api/session-client';
+import { StatCard } from '../../components/common/StatCard';
+import { formatDecimal, humanize } from '../../presentation/display-format';
 import { formatDisplayInstant } from '../../presentation/display-time';
+import { isManagementQueryError } from '../../store/api/apiBase';
+import { useGetNamespaceQuery } from '../../store/api/inspectionApi';
+
+const { Title, Text } = Typography;
 
 interface NamespaceDetailsPageProps {
-  readonly client: NamespaceClientPort;
   readonly encodedNamespace: string;
   readonly selectedSetupId?: string;
   readonly onSelectNamespace: (namespace: string) => void;
 }
 
-export function NamespaceDetailsPage({ client, encodedNamespace, selectedSetupId, onSelectNamespace }: NamespaceDetailsPageProps) {
-  const [detailsState, setDetailsState] = useState<{
-    setupId: string;
-    encodedNamespace: string;
-    value: NamespaceDetails;
-  }>();
-  const [problemState, setProblemState] = useState<{
-    setupId: string;
-    encodedNamespace: string;
-    value: ManagementClientError;
-  }>();
-  const details = detailsState !== undefined && detailsState.setupId === selectedSetupId
-      && detailsState.encodedNamespace === encodedNamespace
-    ? detailsState.value
-    : undefined;
-  const problem = problemState !== undefined && problemState.setupId === selectedSetupId
-      && problemState.encodedNamespace === encodedNamespace
-    ? problemState.value
-    : undefined;
-
+/**
+ * Namespace details (reference layout: StatCard row, Tabs to sibling resources, Descriptions
+ * panels). The route carries the server-encoded namespace; the decoded name comes back from
+ * the contract and is what the scope store receives.
+ */
+export function NamespaceDetailsPage({ encodedNamespace, selectedSetupId, onSelectNamespace }: NamespaceDetailsPageProps) {
+  const navigate = useNavigate();
+  const details = useGetNamespaceQuery(
+    { setupId: selectedSetupId ?? '', encodedNamespace },
+    { skip: selectedSetupId === undefined },
+  );
+  const namespace = details.data?.stats.namespace;
   useEffect(() => {
-    if (selectedSetupId === undefined) return undefined;
-    let active = true;
-    const setupId = selectedSetupId;
-    void client.namespace(setupId, encodedNamespace)
-      .then((loaded) => {
-        if (!active) return;
-        setDetailsState({ setupId, encodedNamespace, value: loaded });
-        setProblemState(undefined);
-        onSelectNamespace(loaded.stats.namespace);
-      })
-      .catch((failure: unknown) => {
-        if (active) setProblemState({ setupId, encodedNamespace, value: failure instanceof ManagementClientError ? failure : new ManagementClientError(0, 'CONNECTION_FAILED', 'Namespace details could not be loaded') });
-      });
-    return () => { active = false; };
-  }, [client, encodedNamespace, onSelectNamespace, selectedSetupId]);
+    if (namespace !== undefined) onSelectNamespace(namespace);
+  }, [namespace, onSelectNamespace]);
 
-  if (selectedSetupId === undefined) return <DetailsWorkspace title="Namespace details"><div className="empty-state"><h2>Select a connected setup</h2></div></DetailsWorkspace>;
-  if (problem !== undefined) return <DetailsWorkspace title="Namespace details"><div className="diagnostics" role="alert"><strong>{problem.code}</strong><p>{problem.message}</p></div></DetailsWorkspace>;
-  if (details === undefined) return <DetailsWorkspace title="Namespace details"><p aria-busy="true">Loading namespace details…</p></DetailsWorkspace>;
+  if (selectedSetupId === undefined) {
+    return <DetailsWorkspace title="Namespace details"><Card><Empty description={<Title level={2} style={{ fontSize: 18 }}>Select a connected setup</Title>} /></Card></DetailsWorkspace>;
+  }
+  const problem = isManagementQueryError(details.error) ? details.error : undefined;
+  if (problem !== undefined && details.data === undefined) {
+    return <DetailsWorkspace title="Namespace details"><Alert description={problem.message} message={problem.code} role="alert" showIcon type="error" /></DetailsWorkspace>;
+  }
+  if (details.data === undefined) {
+    return <DetailsWorkspace title="Namespace details"><Text aria-busy="true">Loading namespace details…</Text></DetailsWorkspace>;
+  }
 
-  const stats = details.stats;
+  const { stats, valueTypeCounts, ttlStateCounts, ttlDistribution } = details.data;
   return (
     <DetailsWorkspace title={stats.namespace}>
-      <p className="scope-label">Database-wide · Observed {formatDisplayInstant(stats.observedAt)}</p>
-      <div className="metric-grid" aria-label="Namespace totals">
-        <Metric label="Live entries" value={stats.liveEntryCount} /><Metric label="Live counters" value={stats.liveCounterCount} /><Metric label="Active locks" value={stats.activeLockCount} /><Metric label="Expiring entries" value={stats.expiringEntryCount} /><Metric label="Expired entries" value={stats.expiredEntryCount} /><Metric label="Estimated storage" suffix=" B" value={stats.estimatedStorageBytes} />
-      </div>
-      <div className="tabs" role="tablist" aria-label="Namespace resources">
-        <button aria-selected="true" role="tab" type="button">Overview</button>
-        <Link aria-selected="false" role="tab" to="/keys">Entries</Link>
-        <Link aria-selected="false" role="tab" to={`/counters?namespace=${stats.encodedNamespace}`}>Counters</Link>
-        <Link aria-selected="false" role="tab" to={`/locks?namespace=${stats.encodedNamespace}`}>Locks</Link>
-      </div>
-      <div className="overview-panels"><section className="overview-panel"><h2>Value types</h2><dl className="compact-details">{Object.entries(details.valueTypeCounts).map(([type, count]) => <div key={type}><dt>{type}</dt><dd>{BigInt(count).toLocaleString('en-US')}</dd></div>)}</dl></section><section className="overview-panel"><h2>TTL states</h2><dl className="compact-details">{Object.entries(details.ttlStateCounts).map(([state, count]) => <div key={state}><dt>{humanize(state)}</dt><dd>{BigInt(count).toLocaleString('en-US')}</dd></div>)}</dl></section><section className="overview-panel"><h2>TTL distribution</h2><dl className="compact-details">{details.ttlDistribution.map((bucket) => <div key={bucket.range}><dt>{humanize(bucket.range)}</dt><dd>{BigInt(bucket.count).toLocaleString('en-US')}</dd></div>)}</dl></section></div>
+      <Text className="scope-label" type="secondary">Database-wide · Observed {formatDisplayInstant(stats.observedAt)}</Text>
+      <Row aria-label="Namespace totals" gutter={[16, 16]} role="group" style={{ marginTop: 16 }}>
+        <Col lg={4} sm={8} xs={12}><StatCard title="Live entries" value={formatDecimal(stats.liveEntryCount)} /></Col>
+        <Col lg={4} sm={8} xs={12}><StatCard title="Live counters" value={formatDecimal(stats.liveCounterCount)} /></Col>
+        <Col lg={4} sm={8} xs={12}><StatCard title="Active locks" value={formatDecimal(stats.activeLockCount)} /></Col>
+        <Col lg={4} sm={8} xs={12}><StatCard title="Expiring entries" value={formatDecimal(stats.expiringEntryCount)} /></Col>
+        <Col lg={4} sm={8} xs={12}><StatCard title="Expired entries" value={formatDecimal(stats.expiredEntryCount)} /></Col>
+        <Col lg={4} sm={8} xs={12}><StatCard suffix="B" title="Estimated storage" value={formatDecimal(stats.estimatedStorageBytes)} /></Col>
+      </Row>
+      <Tabs
+        activeKey="overview"
+        aria-label="Namespace resources"
+        items={[
+          { key: 'overview', label: 'Overview' },
+          { key: 'entries', label: 'Entries' },
+          { key: 'counters', label: 'Counters' },
+          { key: 'locks', label: 'Locks' },
+        ]}
+        onChange={(key) => {
+          if (key === 'entries') void navigate('/keys');
+          if (key === 'counters') void navigate(`/counters?namespace=${stats.encodedNamespace}`);
+          if (key === 'locks') void navigate(`/locks?namespace=${stats.encodedNamespace}`);
+        }}
+        style={{ marginTop: 16 }}
+      />
+      <Row gutter={[16, 16]}>
+        <Col lg={8} xs={24}>
+          <DetailPanel heading="Value types">
+            {Object.entries(valueTypeCounts).map(([type, count]) => <Descriptions.Item key={type} label={type}>{formatDecimal(count)}</Descriptions.Item>)}
+          </DetailPanel>
+        </Col>
+        <Col lg={8} xs={24}>
+          <DetailPanel heading="TTL states">
+            {Object.entries(ttlStateCounts).map(([state, count]) => <Descriptions.Item key={state} label={humanize(state)}>{formatDecimal(count)}</Descriptions.Item>)}
+          </DetailPanel>
+        </Col>
+        <Col lg={8} xs={24}>
+          <DetailPanel heading="TTL distribution">
+            {ttlDistribution.map((bucket) => <Descriptions.Item key={bucket.range} label={humanize(bucket.range)}>{formatDecimal(bucket.count)}</Descriptions.Item>)}
+          </DetailPanel>
+        </Col>
+      </Row>
     </DetailsWorkspace>
   );
 }
 
-function DetailsWorkspace({ title, children }: { readonly title: string; readonly children: ReactNode }) { return <section className="workspace" aria-labelledby="namespace-title"><div className="workspace__heading"><div><p className="workspace__context"><Link to="/namespaces">Namespaces</Link></p><h1 id="namespace-title">{title}</h1></div></div>{children}</section>; }
-function Metric({ label, value, suffix = '' }: { readonly label: string; readonly value: string; readonly suffix?: string }) { return <article className="metric-card"><p>{label}</p><strong>{BigInt(value).toLocaleString('en-US')}{suffix}</strong></article>; }
-function humanize(value: string): string { return value.toLowerCase().replaceAll('_', ' ').replace(/^./u, (letter) => letter.toUpperCase()); }
+function DetailPanel({ heading, children }: { readonly heading: string; readonly children: ReactNode }) {
+  const id = `namespace-${heading.toLowerCase().replaceAll(/[^a-z0-9]+/gu, '-')}-heading`;
+  return (
+    <section aria-labelledby={id} className="overview-panel">
+      <Card title={<Title id={id} level={2} style={{ margin: 0, fontSize: 18 }}>{heading}</Title>}>
+        <Descriptions column={1} size="small">{children}</Descriptions>
+      </Card>
+    </section>
+  );
+}
+
+function DetailsWorkspace({ title, children }: { readonly title: string; readonly children: ReactNode }) {
+  return (
+    <section aria-labelledby="namespace-title" className="workspace">
+      <div className="workspace__heading" style={{ marginBottom: 16 }}>
+        <Text className="workspace__context" type="secondary"><Link to="/namespaces">Namespaces</Link></Text>
+        <Title id="namespace-title" level={1} style={{ marginTop: 4 }}>{title}</Title>
+      </div>
+      {children}
+    </section>
+  );
+}

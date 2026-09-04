@@ -125,7 +125,6 @@ export function App({ apiBaseUrl = '' }: AppProps) {
           <ManagementProvider store={store}>
             <ManagementShell
               session={session}
-              sessionClient={client}
               sessionProblem={problem}
               onLogout={logout}
             />

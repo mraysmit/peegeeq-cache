@@ -58,7 +58,9 @@ export const setupsApi = managementApi.injectEndpoints({
 export const {
   useListSetupsQuery,
   useGetSetupDetailsQuery,
+  useLazyGetSetupDetailsQuery,
   useGetSetupHealthQuery,
+  useLazyGetSetupHealthQuery,
   useGetSetupCapabilitiesQuery,
   useLazyGetSetupCapabilitiesQuery,
   useTestSetupConnectionMutation,

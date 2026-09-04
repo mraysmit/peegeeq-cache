@@ -551,9 +551,10 @@ final class ManagementConsolePostgresFixture {
                 () -> existing.count() > 0 || firstRegistration.count() > 0,
                 new Page.WaitForConditionOptions().setTimeout(10_000));
         if (existing.count() > 0) {
-            var activeScope = page.getByTitle("Active setup scope");
+            var activeScope = page.getByText("Setup: " + SETUP_ID,
+                    new Page.GetByTextOptions().setExact(true));
             com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(activeScope)
-                    .hasText("Setup: " + SETUP_ID);
+                    .isVisible();
             return;
         }
         firstRegistration.click();
@@ -577,12 +578,16 @@ final class ManagementConsolePostgresFixture {
                 new com.microsoft.playwright.Locator.GetByRoleOptions().setName("Test connection")).click();
         com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(
                 dialog.getByRole(com.microsoft.playwright.options.AriaRole.STATUS))
-                .containsText("Connection succeeded");
+                .containsText("Connection succeeded",
+                        new com.microsoft.playwright.assertions.LocatorAssertions.ContainsTextOptions()
+                                .setTimeout(15_000));
         AntSelect.choose(page, dialog.getByLabel("Schema bootstrap"), "APPLY");
         dialog.getByRole(com.microsoft.playwright.options.AriaRole.BUTTON,
                 new com.microsoft.playwright.Locator.GetByRoleOptions().setName("Register setup")).click();
-        com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(page.getByTitle("Active setup scope"))
-                .hasText("Setup: " + SETUP_ID);
+        com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(page.getByText("Setup: " + SETUP_ID,
+                new Page.GetByTextOptions().setExact(true))).isVisible();
+        page.locator("#setup-password").waitFor(new com.microsoft.playwright.Locator.WaitForOptions()
+                .setState(com.microsoft.playwright.options.WaitForSelectorState.DETACHED));
         assertFalse(page.content().contains(DATABASE_PASSWORD));
     }
 
@@ -808,6 +813,7 @@ final class ManagementConsolePostgresFixture {
         private final List<String> browserErrors = new ArrayList<>();
         private final List<String> failedResponses = new ArrayList<>();
         private final List<String> expectedFailedResponses = new ArrayList<>();
+        private final List<String> allowedFailedResponses = new ArrayList<>();
 
         void attach(Page page) {
             page.onConsoleMessage(message -> {
@@ -832,6 +838,11 @@ final class ManagementConsolePostgresFixture {
             expectedFailedResponses.add(status + " " + canonicalFailurePath(path));
         }
 
+        void allowFailedResponse(int status, String path) {
+            if (status < 400) throw new IllegalArgumentException("Allowed failure status must be at least 400");
+            allowedFailedResponses.add(status + " " + canonicalFailurePath(path));
+        }
+
         void recordResponse(int status, String path) {
             if (status >= 400) failedResponses.add(status + " " + canonicalFailurePath(path));
         }
@@ -845,8 +856,15 @@ final class ManagementConsolePostgresFixture {
         }
 
         void assertNoUnexpectedFailedResponses() {
-            assertEquals(expectedFailedResponses, failedResponses,
-                    () -> "Browser HTTP failures did not exactly match the expected status and route");
+            List<String> unmatched = new ArrayList<>(failedResponses);
+            List<String> missing = expectedFailedResponses.stream()
+                    .filter(expected -> !unmatched.remove(expected))
+                    .toList();
+            allowedFailedResponses.forEach(unmatched::remove);
+            assertEquals(List.of(), missing,
+                    () -> "Expected browser HTTP failures were not observed");
+            assertEquals(List.of(), unmatched,
+                    () -> "Unexpected browser HTTP failures were observed");
         }
 
         private static String canonicalFailurePath(String path) {

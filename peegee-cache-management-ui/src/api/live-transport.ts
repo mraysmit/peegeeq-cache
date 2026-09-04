@@ -9,10 +9,7 @@ export interface PubSubStreamHandlers {
   readonly onReset?: (reason: string) => void;
   readonly onError?: (message: string) => void;
 }
-export interface PubSubStreamPort { connect(path: string, handlers: PubSubStreamHandlers): LiveStream; }
 export interface MetricsStreamHandlers { readonly onOverview?: (value: Overview) => void; readonly onRuntime?: (value: RuntimeMonitoring) => void; readonly onState?: PubSubStreamHandlers['onState']; readonly onReset?: (reason: string) => void; readonly onError?: (message: string) => void; }
-export interface MetricsStreamPort { connect(path: string, handlers: MetricsStreamHandlers): LiveStream; }
-
 /** Incremental UTF-8-decoded SSE frame parser. Comments and retry fields are ignored. */
 export class SseFrameDecoder {
   private buffer = '';
@@ -34,7 +31,7 @@ export class SseFrameDecoder {
   reset(): void { this.buffer = ''; }
 }
 
-export class FetchSseTransport implements PubSubStreamPort {
+export class FetchSseTransport {
   connect(path: string, handlers: PubSubStreamHandlers): LiveStream {
     let lastEventId: string | undefined;
     let attempts = 0;
@@ -92,7 +89,9 @@ export class FetchSseTransport implements PubSubStreamPort {
       if (stopped) return;
       if (retryTimer !== undefined) { window.clearTimeout(retryTimer); retryTimer = undefined; }
       handlers.onState?.('STALE');
-      activeController?.abort();
+      const controller = activeController;
+      activeController = undefined;
+      controller?.abort();
     };
     const online = () => {
       if (stopped || activeController !== undefined || retryTimer !== undefined) return;
@@ -112,7 +111,7 @@ export class FetchSseTransport implements PubSubStreamPort {
   }
 }
 
-export class MetricsSseTransport implements MetricsStreamPort {
+export class MetricsSseTransport {
   connect(path: string, handlers: MetricsStreamHandlers): LiveStream {
     return connectValidatedSse(path, (frame) => {
       if (frame.event === 'overview.snapshot') {
@@ -135,7 +134,7 @@ function connectValidatedSse(path: string, onFrame: (frame: SseFrame) => void, h
     try { const headers: Record<string, string> = { accept: 'text/event-stream' }; if (lastEventId !== undefined) headers['Last-Event-ID'] = lastEventId; const response = await fetch(path, { credentials: 'include', headers, mode: 'cors', signal: controller.signal }); if (!response.ok || response.body === null) throw new Error('Metrics stream unavailable'); handlers.onState?.('CONNECTED'); attempts = 0; const reader = response.body.getReader(); const textDecoder = new globalThis.TextDecoder(); const decoder = new SseFrameDecoder(); while (!stopped) { const part = await reader.read(); if (part.done) break; for (const frame of decoder.feed(textDecoder.decode(part.value, { stream: true }))) { if (frame.id !== undefined) lastEventId = frame.id; if (frame.id !== undefined && seen.has(frame.id)) continue; if (frame.id !== undefined) { seen.add(frame.id); if (seen.size > 1_000) seen.delete(seen.values().next().value as string); } onFrame(frame); } } if (!stopped) schedule(); } catch (failure) { if (!stopped && !(failure instanceof Error && failure.name === 'AbortError')) { handlers.onError?.('Live metrics connection was interrupted'); schedule(); } } finally { if (activeController === controller) activeController = undefined; }
   };
   const schedule = () => { if (stopped) return; handlers.onState?.('STALE'); if (attempts >= 6 || !globalThis.navigator.onLine) return; const delay = Math.min(30_000, 500 * (2 ** attempts)) + Math.floor(Math.random() * 251); attempts += 1; timer = window.setTimeout(() => void run(), delay); };
-  const offline = () => { if (stopped) return; if (timer !== undefined) { window.clearTimeout(timer); timer = undefined; } handlers.onState?.('STALE'); activeController?.abort(); };
+  const offline = () => { if (stopped) return; if (timer !== undefined) { window.clearTimeout(timer); timer = undefined; } handlers.onState?.('STALE'); const controller = activeController; activeController = undefined; controller?.abort(); };
   const online = () => { if (stopped || activeController !== undefined || timer !== undefined) return; void run(); };
   window.addEventListener('offline', offline); window.addEventListener('online', online);
   void run(); return { stop: () => { stopped = true; activeController?.abort(); if (timer !== undefined) window.clearTimeout(timer); window.removeEventListener('offline', offline); window.removeEventListener('online', online); handlers.onState?.('STOPPED'); } };

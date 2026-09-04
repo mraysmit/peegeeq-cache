@@ -400,10 +400,10 @@ class ManagementShellBrowserIT {
     void timezonePreferencePersistsAcrossReload() throws Exception {
         prepared(context -> {
             Page page = navigate(context, "/ui/settings", "Settings");
-            page.getByLabel("Timezone").selectOption("UTC");
+            AntSelect.choose(page, page.getByLabel("Timezone"), "UTC");
             assertThat(page.getByRole(AriaRole.STATUS)).containsText("Display preferences saved");
             page.reload();
-            assertThat(page.getByLabel("Timezone")).hasValue("UTC");
+            assertThat(AntSelect.selection(page.getByLabel("Timezone"))).hasAttribute("data-value", "UTC");
             assertThat(page.getByTitle("Active setup scope"))
                     .hasText("Setup: " + ManagementConsolePostgresFixture.SETUP_ID);
         });
@@ -420,10 +420,10 @@ class ManagementShellBrowserIT {
     void refreshIntervalPreferencePersistsAcrossReload() throws Exception {
         prepared(context -> {
             Page page = navigate(context, "/ui/settings", "Settings");
-            page.getByLabel("Refresh interval").selectOption("60");
+            AntSelect.choose(page, page.getByLabel("Refresh interval"), "60");
             assertThat(page.getByRole(AriaRole.STATUS)).containsText("Display preferences saved");
             page.reload();
-            assertThat(page.getByLabel("Refresh interval")).hasValue("60");
+            assertThat(AntSelect.selection(page.getByLabel("Refresh interval"))).hasAttribute("data-value", "60");
             assertTrue(String.valueOf(page.evaluate(
                     "localStorage.getItem('peegeeq.management.preferences')")).contains("\"refreshSeconds\":60"));
         });

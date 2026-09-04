@@ -87,19 +87,18 @@ class ManagementNamespaceBrowserIT {
     @ManagementBrowserScenario(id = "PW-NAMESPACE-009", requirement = "UI design: namespace status filters expose only reviewed server values", area = ManagementBrowserArea.NAMESPACE, risk = ManagementBrowserRisk.HIGH, action = "Inspect Namespace status options", expectedResult = "All, Healthy, Expired backlog, and Active locks are available", cleanup = "Close the scoped context and reset PostgreSQL", operations = {"listNamespaces"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void namespaceStatusOffersReviewedValues() throws Exception {
+        // antd Select (U11.4): options are addressed by their reviewed labels, in display order.
         namespaces(context -> assertEquals(
-                java.util.List.of("ALL", "HEALTHY", "EXPIRED_BACKLOG", "ACTIVE_LOCKS"),
-                context.page().locator("#namespace-status").locator("option").all().stream()
-                        .map(option -> option.getAttribute("value")).toList()));
+                java.util.List.of("All", "Healthy", "Expired backlog", "Active locks"),
+                AntSelect.optionLabels(context.page(), context.page().getByLabel("Status"))));
     }
 
     @ManagementBrowserScenario(id = "PW-NAMESPACE-010", requirement = "UI design: namespace sort exposes canonical name and live-entry orderings", area = ManagementBrowserArea.NAMESPACE, risk = ManagementBrowserRisk.MEDIUM, action = "Inspect Namespace sort options", expectedResult = "namespace:asc and entryCount:desc are available", cleanup = "Close the scoped context and reset PostgreSQL", operations = {"listNamespaces"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void namespaceSortOffersReviewedValues() throws Exception {
         namespaces(context -> assertEquals(
-                java.util.List.of("namespace:asc", "entryCount:desc"),
-                context.page().getByLabel("Sort").locator("option").all().stream()
-                        .map(option -> option.getAttribute("value")).toList()));
+                java.util.List.of("Namespace", "Live entries"),
+                AntSelect.optionLabels(context.page(), context.page().getByLabel("Sort"))));
     }
 
     @ManagementBrowserScenario(id = "PW-NAMESPACE-011", requirement = "Management API: namespace prefix is bounded before transport", area = ManagementBrowserArea.NAMESPACE, risk = ManagementBrowserRisk.MEDIUM, action = "Inspect Namespace prefix maximum length", expectedResult = "The browser caps prefix at 128 characters", cleanup = "Close the scoped context and reset PostgreSQL", operations = {"listNamespaces"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
@@ -274,7 +273,7 @@ class ManagementNamespaceBrowserIT {
     }
 
     private static void applyStatus(Page page, String status) {
-        page.locator("#namespace-status").selectOption(status);
+        AntSelect.choose(page, page.getByLabel("Status"), status);
         page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Apply filters")).click();
     }
 

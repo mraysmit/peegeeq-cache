@@ -22,10 +22,6 @@ import {
 } from './inspection-schemas';
 import { ManagementClientError, SessionClient } from './session-client';
 
-export interface OverviewClientPort {
-  overview(setupId: string): Promise<Overview>;
-}
-
 export interface ActivityQuery {
   readonly after?: string;
   readonly limit?: number;
@@ -34,24 +30,12 @@ export interface ActivityQuery {
   readonly outcome?: 'SUCCEEDED' | 'REJECTED' | 'FAILED' | 'UNKNOWN';
 }
 
-export interface MonitoringClientPort {
-  databaseMonitoring(setupId: string): Promise<DatabaseMonitoring>;
-  runtimeMonitoring(setupId: string): Promise<RuntimeMonitoring>;
-  activity(setupId: string, query?: ActivityQuery): Promise<ActivityPage>;
-}
-
 export interface NamespaceQuery {
   readonly prefix?: string;
   readonly status?: 'ALL' | 'HEALTHY' | 'EXPIRED_BACKLOG' | 'ACTIVE_LOCKS';
   readonly sort?: 'namespace:asc' | 'entryCount:desc';
   readonly cursor?: string;
   readonly limit?: number;
-}
-
-export interface NamespaceClientPort {
-  namespaces(setupId: string, query?: NamespaceQuery): Promise<NamespacePage>;
-  namespace(setupId: string, encodedNamespace: string): Promise<NamespaceDetails>;
-  exportNamespaces(setupId: string, query?: NamespaceQuery): Promise<NamespaceExport>;
 }
 
 export interface EntryQuery {
@@ -63,28 +47,7 @@ export interface EntryQuery {
   readonly sort?: 'key:asc';
 }
 
-export interface EntryClientPort {
-  entries(setupId: string, encodedNamespace: string, query?: EntryQuery): Promise<EntryPage>;
-  entry(
-    setupId: string,
-    encodedNamespace: string,
-    encodedKey: string,
-    includeExpired?: boolean,
-  ): Promise<EntryMetadata>;
-}
-
-export interface EntryRevealClientPort {
-  revealEntryValue(
-    setupId: string,
-    encodedNamespace: string,
-    encodedKey: string,
-    reason?: string,
-  ): Promise<RevealedEntryValue>;
-}
-
-export type EntryDetailsClientPort = EntryClientPort & EntryRevealClientPort;
-
-export class InspectionClient implements OverviewClientPort, NamespaceClientPort, MonitoringClientPort, EntryDetailsClientPort {
+export class InspectionClient {
   constructor(private readonly sessionClient: SessionClient) {}
 
   async overview(setupId: string): Promise<Overview> {

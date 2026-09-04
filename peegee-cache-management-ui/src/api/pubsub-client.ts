@@ -4,14 +4,7 @@ import {
 } from './pubsub-schemas';
 import { ManagementClientError, SessionClient } from './session-client';
 
-export interface PubSubClientPort {
-  createSubscription(setupId: string, channel: string, bufferLimit: number): Promise<SubscriptionSummary>;
-  publish(setupId: string, channel: string, payload: string, contentType?: string): Promise<PublishAccepted>;
-  revealPayload(setupId: string, subscriptionId: string, messageId: string, reason?: string): Promise<RevealedPubSubPayload>;
-  deleteSubscription(setupId: string, subscriptionId: string): Promise<void>;
-}
-
-export class PubSubClient implements PubSubClientPort {
+export class PubSubClient {
   constructor(private readonly session: SessionClient) {}
 
   async createSubscription(setupId: string, channel: string, bufferLimit: number): Promise<SubscriptionSummary> {

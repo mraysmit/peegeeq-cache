@@ -183,7 +183,7 @@ class ManagementCapabilityBrowserIT {
             }
             case 10 -> {
                 openEntries(page);
-                assertThat(page.locator("#entry-ttl-state option[value=INCLUDE_EXPIRED]")).hasCount(0);
+                org.junit.jupiter.api.Assertions.assertFalse(AntSelect.values(page, page.locator("#entry-ttl-state")).contains("INCLUDE_EXPIRED"), "INCLUDE_EXPIRED must not be offered without the expired-inspection capability");
             }
             case 11 -> verifyUnavailableRoute(page, origin, "Keys", "/ui/keys");
             case 12 -> {

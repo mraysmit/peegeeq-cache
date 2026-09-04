@@ -67,10 +67,11 @@ class ManagementConsoleTrustedProxyIT {
         TrustedProxyAuthenticator proxyAuthenticator = new TrustedProxyAuthenticator(authentication);
         ManagementRequestAuthenticator requestAuthenticator =
                 new TrustedProxySessionRequestAuthenticator(proxyAuthenticator, sessions);
+        SetupRegistry registry = new SetupRegistry(
+                (definition, secret) -> Future.failedFuture("Setup connection is not expected"),
+                reference -> null);
         SetupMutationRoutes setupMutations = new SetupMutationRoutes(
-                new SetupRegistry(
-                        (definition, secret) -> Future.failedFuture("Setup connection is not expected"),
-                        reference -> null),
+                registry,
                 requestAuthenticator,
                 new BrowserRequestSecurity(origins),
                 new UnusedAuditSink(),
@@ -93,6 +94,7 @@ class ManagementConsoleTrustedProxyIT {
                 ManagementServerResources.noop(),
                 ManagementRequestRouter.firstOf(
                         new TrustedProxySessionRoutes(proxyAuthenticator, sessions, origins),
+                        new SetupReadRoutes(registry, requestAuthenticator),
                         setupMutations));
         server.start()
                 .onSuccess(ignored -> context.completeNow())

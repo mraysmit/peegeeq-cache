@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -111,6 +112,8 @@ class ManagementEntryAdministrationBrowserIT {
                             "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
                     if (index == 43) context.diagnostics().expectFailedResponse(412,
                             "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
+                    if (index == 49) context.diagnostics().allowFailedResponse(404,
+                            "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
                     if (index == 45) {
                         ManagementConsolePostgresFixture.execute(context.postgres(),
                                 "UPDATE peegee_cache.cache_entries SET expires_at=clock_timestamp()+interval '5 minutes' WHERE cache_key='customer:1'");
@@ -149,12 +152,12 @@ class ManagementEntryAdministrationBrowserIT {
             case 1 -> assertThat(create(page).getByText("The key must be absent when PostgreSQL commits this request.")).isVisible();
             case 2 -> assertThat(create(page).getByLabel("Key")).hasAttribute("required", "");
             case 3 -> assertThat(create(page).getByLabel("Key")).hasAttribute("maxlength", "1024");
-            case 4 -> assertEquals(List.of("STRING", "JSON", "LONG", "BYTES"), options(create(page), "#new-entry-type"));
-            case 5 -> assertThat(create(page).locator("#new-entry-type")).hasValue("STRING");
+            case 4 -> assertEquals(List.of("STRING", "JSON", "LONG", "BYTES"), options(page, create(page), "#new-entry-type"));
+            case 5 -> assertThat(AntSelect.selection(create(page).locator("#new-entry-type"))).hasAttribute("data-value", "STRING");
             case 6 -> assertThat(create(page).getByLabel("TTL milliseconds (blank for persistent)")).hasAttribute("min", "1");
             case 7 -> assertThat(create(page).locator("#new-entry-value")).hasAttribute("required", "");
             case 8 -> { Locator dialog = create(page); dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Cancel")).click(); assertThat(dialog).hasCount(0); assertThat(link(page, "customer:1")).isVisible(); }
-            case 9 -> { Locator dialog = create(page); page.keyboard().press("Escape"); assertThat(dialog).hasCount(0); }
+            case 9 -> { Locator dialog = create(page); dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Cancel").setExact(true)).press("Escape"); assertThat(dialog).hasCount(0); }
             case 10 -> assertThat(create(page).getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Create entry").setExact(true))).hasCount(1);
             case 11 -> assertThat(page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Preview selected deletion"))).isDisabled();
             case 12 -> assertThat(page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Preview matching-filter deletion"))).isEnabled();
@@ -177,22 +180,22 @@ class ManagementEntryAdministrationBrowserIT {
             case 29 -> { openEdit(page); assertThat(page.getByLabel("Entry value")).isVisible(); }
             case 30 -> { openEdit(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Cancel edit")).click(); assertThat(page.getByLabel("Entry value")).hasCount(0); }
             case 31 -> { openEdit(page); assertThat(page.locator("#entry-edit-type")).isDisabled(); assertThat(page.locator("#entry-edit-type")).hasValue("STRING"); }
-            case 32 -> { openEdit(page); assertEquals(List.of("ONLY_IF_VERSION_MATCHES", "UPSERT", "ONLY_IF_PRESENT", "ONLY_IF_ABSENT"), options(page.locator("form.form-grid"), "#entry-set-mode")); }
-            case 33 -> { openEdit(page); assertEquals(List.of("PRESERVE_EXISTING", "USE_DEFAULT", "REPLACE", "REMOVE"), options(page.locator("form.form-grid"), "#entry-ttl-mode")); }
+            case 32 -> { openEdit(page); assertEquals(List.of("ONLY_IF_VERSION_MATCHES", "UPSERT", "ONLY_IF_PRESENT", "ONLY_IF_ABSENT"), options(page, page.locator("form.form-grid"), "#entry-set-mode")); }
+            case 33 -> { openEdit(page); assertEquals(List.of("PRESERVE_EXISTING", "USE_DEFAULT", "REPLACE", "REMOVE"), options(page, page.locator("form.form-grid"), "#entry-ttl-mode")); }
             case 34 -> { openEdit(page); assertThat(page.locator("#entry-edit-ttl")).isDisabled(); }
-            case 35 -> { openEdit(page); page.locator("#entry-ttl-mode").selectOption("REPLACE"); assertThat(page.locator("#entry-edit-ttl")).isEnabled(); }
-            case 36 -> { openEdit(page); page.locator("#entry-ttl-mode").selectOption("REPLACE"); assertThat(page.locator("#entry-edit-ttl")).hasAttribute("required", ""); }
+            case 35 -> { openEdit(page); AntSelect.choose(page, page.locator("#entry-ttl-mode"), "REPLACE"); assertThat(page.locator("#entry-edit-ttl")).isEnabled(); }
+            case 36 -> { openEdit(page); AntSelect.choose(page, page.locator("#entry-ttl-mode"), "REPLACE"); assertThat(page.locator("#entry-edit-ttl")).hasAttribute("required", ""); }
             case 37 -> { openEdit(page); assertThat(page.getByLabel("Entry value")).hasAttribute("required", ""); }
-            case 38 -> { openEdit(page); assertThat(page.locator("#entry-set-mode")).hasValue("ONLY_IF_VERSION_MATCHES"); }
+            case 38 -> { openEdit(page); assertThat(AntSelect.selection(page.locator("#entry-set-mode"))).hasAttribute("data-value", "ONLY_IF_VERSION_MATCHES"); }
             case 39 -> { save(page, "updated-exact", null); assertEquals("updated-exact", scalar(context, "SELECT convert_from(value_bytes,'UTF8') FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 40 -> { save(page, "updated-upsert", "UPSERT"); assertEquals("updated-upsert", scalar(context, "SELECT convert_from(value_bytes,'UTF8') FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 41 -> { save(page, "updated-present", "ONLY_IF_PRESENT"); assertEquals("updated-present", scalar(context, "SELECT convert_from(value_bytes,'UTF8') FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
-            case 42 -> { openEdit(page); page.locator("#entry-set-mode").selectOption("ONLY_IF_ABSENT"); page.getByLabel("Entry value").fill("must-not-write"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Save entry")).click(); assertThat(page.getByRole(AriaRole.ALERT)).isVisible(); assertThat(page.getByLabel("Entry value")).hasValue("must-not-write"); }
+            case 42 -> { openEdit(page); AntSelect.choose(page, page.locator("#entry-set-mode"), "ONLY_IF_ABSENT"); page.getByLabel("Entry value").fill("must-not-write"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Save entry")).click(); assertThat(page.getByRole(AriaRole.ALERT)).isVisible(); assertThat(page.getByLabel("Entry value")).hasValue("must-not-write"); }
             case 43 -> { openEdit(page); page.getByLabel("Entry value").fill("conflicting-value"); ManagementConsolePostgresFixture.execute(context.postgres(), "UPDATE peegee_cache.cache_entries SET version=version+1 WHERE namespace='logical-orders' AND cache_key='customer:1'"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Save entry")).click(); assertThat(page.getByRole(AriaRole.ALERT)).containsText("VERSION_MISMATCH"); assertThat(page.getByLabel("Entry value")).hasValue("conflicting-value"); }
             case 44 -> { openDetail(page); page.getByLabel("TTL milliseconds", new Page.GetByLabelOptions().setExact(true)).fill("60000"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Set TTL")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("TTL updated"); assertEquals("true", scalar(context, "SELECT expires_at IS NOT NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 45 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Make persistent")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("persistent"); assertEquals("true", scalar(context, "SELECT expires_at IS NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 46 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Touch entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("authoritative metadata"); assertEquals("true", scalar(context, "SELECT last_accessed_at IS NOT NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
-            case 47 -> { openDetail(page); page.getByLabel("Refresh TTL milliseconds (optional)").fill("45000"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Touch entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("authoritative metadata"); assertThat(details(page)).containsText("45 s"); assertEquals("true", scalar(context, "SELECT expires_at IS NOT NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
+            case 47 -> { openDetail(page); page.getByLabel("Refresh TTL milliseconds (optional)").fill("45000"); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Touch entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("authoritative metadata"); assertThat(details(page)).containsText(Pattern.compile("4[0-5](?:\\.\\d{3})? s")); assertEquals("true", scalar(context, "SELECT expires_at IS NOT NULL FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 48 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Delete entry")).click(); Locator dialog = page.getByRole(AriaRole.DIALOG, new Page.GetByRoleOptions().setName("Delete customer:1?")); assertThat(dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Confirm delete"))).isDisabled(); dialog.getByLabel("Confirm entry key").fill("wrong"); assertThat(dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Confirm delete"))).isDisabled(); }
             case 49 -> { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Delete entry")).click(); Locator dialog = page.getByRole(AriaRole.DIALOG, new Page.GetByRoleOptions().setName("Delete customer:1?")); dialog.getByLabel("Confirm entry key").fill("customer:1"); dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Confirm delete")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("deleted"); assertEquals("0", scalar(context, "SELECT count(*) FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             default -> throw new IllegalArgumentException("Unknown scenario " + index);
@@ -203,14 +206,14 @@ class ManagementEntryAdministrationBrowserIT {
     private static String scalar(ManagementConsolePostgresFixture.Context context, String sql) throws Exception { return ManagementConsolePostgresFixture.queryScalar(context.postgres(), sql); }
     private static void assertEntryExists(ManagementConsolePostgresFixture.Context context, String key, String type) throws Exception { assertEquals(type, scalar(context, "SELECT value_type FROM peegee_cache.cache_entries WHERE cache_key='" + key.replace("'", "''") + "'")); }
     private static Locator createDialog(Page page) { return page.getByRole(AriaRole.DIALOG, new Page.GetByRoleOptions().setName("Create entry")); }
-    private static void fillCreate(Page page, String key, String type, String value, String ttl) { Locator dialog = create(page); dialog.getByLabel("Key").fill(key); dialog.locator("#new-entry-type").selectOption(type); dialog.locator("#new-entry-value").fill(value); if (!ttl.isEmpty()) dialog.getByLabel("TTL milliseconds (blank for persistent)").fill(ttl); }
+    private static void fillCreate(Page page, String key, String type, String value, String ttl) { Locator dialog = create(page); dialog.getByLabel("Key").fill(key); AntSelect.choose(page, dialog.locator("#new-entry-type"), type); dialog.locator("#new-entry-value").fill(value); if (!ttl.isEmpty()) dialog.getByLabel("TTL milliseconds (blank for persistent)").fill(ttl); }
     private static void submitCreate(Page page) { createDialog(page).getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Create entry").setExact(true)).click(); }
     private static void createEntry(Page page, String key, String type, String value, String ttl) { fillCreate(page, key, type, value, ttl); submitCreate(page); assertThat(page.getByRole(AriaRole.STATUS)).containsText("created"); assertThat(link(page, key)).isVisible(); }
     private static void openEntries(Page page) { page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName("Namespaces").setExact(true)).click(); page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName("logical-orders").setExact(true)).click(); page.getByRole(AriaRole.TAB, new Page.GetByRoleOptions().setName("Entries")).click(); assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Key Browser").setExact(true))).isVisible(); }
     private static void openDetail(Page page) { link(page, "customer:1").click(); assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("customer:1").setExact(true))).isVisible(); }
     private static void openEdit(Page page) { openDetail(page); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Edit entry")).click(); }
-    private static void save(Page page, String value, String mode) { openEdit(page); if (mode != null) page.locator("#entry-set-mode").selectOption(mode); page.getByLabel("Entry value").fill(value); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Save entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("updated"); }
+    private static void save(Page page, String value, String mode) { openEdit(page); if (mode != null) AntSelect.choose(page, page.locator("#entry-set-mode"), mode); page.getByLabel("Entry value").fill(value); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Save entry")).click(); assertThat(page.getByRole(AriaRole.STATUS)).containsText("updated"); }
     private static Locator link(Page page, String key) { return page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName(key).setExact(true)); }
-    private static Locator details(Page page) { return page.locator("dl[aria-label='Entry metadata']"); }
-    private static List<String> options(Locator scope, String selector) { return scope.locator(selector + " option").all().stream().map(option -> option.getAttribute("value")).toList(); }
+    private static Locator details(Page page) { return page.locator("[aria-label='Entry metadata']"); }
+    private static List<String> options(Page page, Locator scope, String selector) { return AntSelect.values(page, scope.locator(selector)); }
 }

@@ -31,20 +31,7 @@ import {
 } from './backend-capability-schemas';
 import { ManagementClientError, SessionClient } from './session-client';
 
-export interface BackendCapabilityClientPort {
-  entryExists(setupId: string, encodedNamespace: string, encodedKey: string): Promise<boolean>;
-  batchGetEntries(setupId: string, request: BatchGetRequest): Promise<BatchGetResult>;
-  batchSetEntries(setupId: string, request: BatchSetRequest): Promise<BatchSetResult>;
-  batchDeleteEntries(setupId: string, request: BatchDeleteRequest): Promise<BatchDeleteResult>;
-  scanEntries(setupId: string, request: ScanEntriesRequest): Promise<ScanEntriesResult>;
-  acquireLock(setupId: string, encodedNamespace: string, encodedKey: string, request: AcquireLockRequest): Promise<AcquireLockResult>;
-  renewLock(setupId: string, encodedNamespace: string, encodedKey: string, request: RenewLockRequest): Promise<boolean>;
-  releaseLock(setupId: string, encodedNamespace: string, encodedKey: string, ownerToken: string): Promise<boolean>;
-  isLockHeldBy(setupId: string, encodedNamespace: string, encodedKey: string, ownerToken: string): Promise<boolean>;
-  cacheMetrics(setupId: string): Promise<CacheMetricsSnapshot>;
-}
-
-export class BackendCapabilityClient implements BackendCapabilityClientPort {
+export class BackendCapabilityClient {
   constructor(private readonly session: SessionClient) {}
 
   async entryExists(setupId: string, encodedNamespace: string, encodedKey: string): Promise<boolean> {

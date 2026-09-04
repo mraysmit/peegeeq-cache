@@ -1,31 +1,36 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  Alert, Button, Card, Checkbox, Descriptions, Empty, Form, Input, InputNumber, List, Modal, Space, Table, Tag, Typography, type InputRef,
+} from 'antd';
+import { useRef, useState, type ReactNode } from 'react';
 
 import type { BrowserSession } from '../../api/session-client';
-import { ManagementClientError } from '../../api/session-client';
-import type {
-  SetupClientPort,
-  SetupConnectionRequest,
-  SetupRegistrationRequest,
-} from '../../api/setup-client';
-import type {
-  SetupConnectionTest,
-  SetupCapabilities,
-  SetupDetails,
-  SetupHealth,
-  SetupSummary,
-} from '../../api/setup-schemas';
-import { Modal } from '../../components/Modal';
+import type { SetupConnectionRequest, SetupRegistrationRequest } from '../../api/setup-client';
+import type { SetupCapabilities, SetupConnectionTest, SetupDetails, SetupHealth, SetupSummary } from '../../api/setup-schemas';
+import { ValueSelect } from '../../components/common/ValueSelect';
 import { formatDisplayBytes } from '../../presentation/display-bytes';
+import { humanize } from '../../presentation/display-format';
 import { formatDisplayInstant } from '../../presentation/display-time';
+import { isManagementQueryError, type ManagementQueryError } from '../../store/api/apiBase';
+import {
+  useConnectSetupMutation,
+  useDetachSetupMutation,
+  useForgetSetupMutation,
+  useLazyGetSetupCapabilitiesQuery,
+  useLazyGetSetupDetailsQuery,
+  useLazyGetSetupHealthQuery,
+  useListSetupsQuery,
+  useRegisterSetupMutation,
+  useTestRegisteredSetupMutation,
+  useTestSetupConnectionMutation,
+} from '../../store/api/setupsApi';
+
+const { Title, Text } = Typography;
 
 interface SetupsPageProps {
-  readonly client: SetupClientPort;
   readonly session: BrowserSession;
   readonly selectedSetupId?: string;
-  readonly onSelectSetup: (
-    setupId: string | undefined,
-    capabilities?: SetupCapabilities,
-  ) => void;
+  readonly onSelectSetup: (setupId: string | undefined, capabilities?: SetupCapabilities) => void;
 }
 
 type ConfirmedAction = 'connect' | 'detach' | 'forget';
@@ -66,93 +71,73 @@ const initialRegistration: SetupRegistrationRequest = {
   },
 };
 
-export function SetupsPage({
-  client,
-  session,
-  selectedSetupId,
-  onSelectSetup,
-}: SetupsPageProps) {
-  const [setups, setSetups] = useState<SetupSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [problem, setProblem] = useState<ManagementClientError>();
+/**
+ * Setups (reference: `peegeeq-management-ui/pages/DatabaseSetups.tsx` patterns — Table, Modal
+ * forms, Descriptions details, confirm dialogs). Reads and lifecycle mutations go through RTK
+ * Query; the registration password lives only in this component's form state and is cleared on
+ * failure, never cached (design §8.2).
+ */
+export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPageProps) {
+  const setups = useListSetupsQuery();
+  const [loadCapabilities] = useLazyGetSetupCapabilitiesQuery();
+  const [loadDetails] = useLazyGetSetupDetailsQuery();
+  const [loadHealth] = useLazyGetSetupHealthQuery();
+  const [testConnection] = useTestSetupConnectionMutation();
+  const [registerSetup] = useRegisterSetupMutation();
+  const [testRegistered] = useTestRegisteredSetupMutation();
+  const [connectSetup] = useConnectSetupMutation();
+  const [detachSetup] = useDetachSetupMutation();
+  const [forgetSetup] = useForgetSetupMutation();
+
+  const [problem, setProblem] = useState<ManagementQueryError>();
   const [notice, setNotice] = useState<string>();
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [details, setDetails] = useState<SetupDetails>();
-  const [detailsHealth, setDetailsHealth] = useState<SetupHealth>();
-  const [detailsCapabilities, setDetailsCapabilities] = useState<SetupCapabilities>();
+  const [details, setDetails] = useState<{ details: SetupDetails; health: SetupHealth; capabilities: SetupCapabilities }>();
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [registration, setRegistration] = useState(initialRegistration);
   const [registrationBusy, setRegistrationBusy] = useState(false);
-  const [registrationProblem, setRegistrationProblem] = useState<ManagementClientError>();
+  const [registrationProblem, setRegistrationProblem] = useState<ManagementQueryError>();
   const [connectionTest, setConnectionTest] = useState<SetupConnectionTest>();
   const [pendingAction, setPendingAction] = useState<PendingAction>();
   const [actionBusy, setActionBusy] = useState(false);
   const [selectingSetupId, setSelectingSetupId] = useState<string>();
+  const setupIdInput = useRef<InputRef | null>(null);
+
   const isOperator = session.roles.includes('operator');
   const canRegister = isOperator && session.features.setupRegistration;
-  const updateRuntime = <K extends keyof SetupRuntimeConfiguration>(
-    name: K,
-    value: SetupRuntimeConfiguration[K],
-  ) => setRegistration((current) => ({
-    ...current,
-    runtime: { ...(current.runtime ?? initialRegistration.runtime as SetupRuntimeConfiguration), [name]: value },
-  }));
+  const rows = setups.data ?? [];
+  const listProblem = queryError(setups.error);
+  const loading = setups.isFetching;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setProblem(undefined);
-    try {
-      const loaded = await client.list();
-      setSetups(loaded);
-      if (selectedSetupId !== undefined
-        && !loaded.some((setup) => setup.setupId === selectedSetupId && setup.state === 'CONNECTED')) {
-        onSelectSetup(undefined);
-      }
-    } catch (failure: unknown) {
-      setProblem(asClientError(failure));
-    } finally {
-      setLoading(false);
+  const updateRuntime = <K extends keyof SetupRuntimeConfiguration>(name: K, value: SetupRuntimeConfiguration[K]) =>
+    setRegistration((current) => ({
+      ...current,
+      runtime: { ...(current.runtime ?? initialRegistration.runtime as SetupRuntimeConfiguration), [name]: value },
+    }));
+
+  const refresh = async () => {
+    const result = await setups.refetch();
+    if (result.data !== undefined && selectedSetupId !== undefined
+      && !result.data.some((setup) => setup.setupId === selectedSetupId && setup.state === 'CONNECTED')) {
+      onSelectSetup(undefined);
     }
-  }, [client, onSelectSetup, selectedSetupId]);
-
-  useEffect(() => {
-    let active = true;
-    void client.list()
-      .then((loaded) => {
-        if (!active) return;
-        setSetups(loaded);
-        setProblem(undefined);
-      })
-      .catch((failure: unknown) => {
-        if (active) setProblem(asClientError(failure));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [client]);
+  };
 
   const openDetails = async (setupId: string) => {
     setDetails(undefined);
-    setDetailsHealth(undefined);
-    setDetailsCapabilities(undefined);
     setDetailsOpen(true);
     setDetailsLoading(true);
     setProblem(undefined);
     try {
       const [loadedDetails, health, capabilities] = await Promise.all([
-        client.details(setupId),
-        client.health(setupId),
-        client.capabilities(setupId),
+        loadDetails({ setupId }).unwrap(),
+        loadHealth({ setupId }).unwrap(),
+        loadCapabilities({ setupId }).unwrap(),
       ]);
-      setDetails(loadedDetails);
-      setDetailsHealth(health);
-      setDetailsCapabilities(capabilities);
+      setDetails({ details: loadedDetails, health, capabilities });
     } catch (failure: unknown) {
-      setProblem(asClientError(failure));
+      setProblem(asQueryError(failure));
       setDetailsOpen(false);
     } finally {
       setDetailsLoading(false);
@@ -163,25 +148,22 @@ export function SetupsPage({
     setSelectingSetupId(setupId);
     setProblem(undefined);
     try {
-      onSelectSetup(setupId, await client.capabilities(setupId));
+      onSelectSetup(setupId, await loadCapabilities({ setupId }).unwrap());
     } catch (failure: unknown) {
-      setProblem(asClientError(failure));
+      setProblem(asQueryError(failure));
     } finally {
       setSelectingSetupId(undefined);
     }
   };
 
-  const testRegistered = async (setup: SetupSummary) => {
+  const retest = async (setup: SetupSummary) => {
     setProblem(undefined);
     setNotice(undefined);
     try {
-      const result = await client.testRegistered(setup.setupId);
-      setNotice(
-        `${setup.displayName} responded in ${result.latencyMillis} ms; schema ${result.schemaState.toLowerCase()}.`,
-      );
-      await load();
+      const result = await testRegistered({ setupId: setup.setupId }).unwrap();
+      setNotice(`${setup.displayName} responded in ${result.latencyMillis} ms; schema ${result.schemaState.toLowerCase()}.`);
     } catch (failure: unknown) {
-      setProblem(asClientError(failure));
+      setProblem(asQueryError(failure));
     }
   };
 
@@ -192,15 +174,14 @@ export function SetupsPage({
     setProblem(undefined);
     setNotice(undefined);
     try {
-      if (action === 'connect') await client.connect(setup.setupId);
-      if (action === 'detach') await client.detach(setup.setupId);
-      if (action === 'forget') await client.forget(setup.setupId);
+      if (action === 'connect') await connectSetup({ setupId: setup.setupId }).unwrap();
+      if (action === 'detach') await detachSetup({ setupId: setup.setupId }).unwrap();
+      if (action === 'forget') await forgetSetup({ setupId: setup.setupId }).unwrap();
       if (action !== 'connect' && selectedSetupId === setup.setupId) onSelectSetup(undefined);
       setNotice(`${setup.displayName} was ${pastTense(action)}.`);
       setPendingAction(undefined);
-      await load();
     } catch (failure: unknown) {
-      setProblem(asClientError(failure));
+      setProblem(asQueryError(failure));
     } finally {
       setActionBusy(false);
     }
@@ -231,253 +212,261 @@ export function SetupsPage({
     setRegistrationProblem(undefined);
     setConnectionTest(undefined);
     try {
-      setConnectionTest(await client.testConnection(connectionRequest()));
+      setConnectionTest(await testConnection(connectionRequest()).unwrap());
     } catch (failure: unknown) {
-      setRegistrationProblem(asClientError(failure));
+      setRegistrationProblem(asQueryError(failure));
     } finally {
       setRegistrationBusy(false);
     }
   };
 
-  const register = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const register = async () => {
     setRegistrationBusy(true);
     setRegistrationProblem(undefined);
     try {
-      const created = await client.register(registration);
+      const created = await registerSetup(registration).unwrap();
       closeRegistration();
-      onSelectSetup(created.setupId, await client.capabilities(created.setupId));
+      onSelectSetup(created.setupId, await loadCapabilities({ setupId: created.setupId }).unwrap());
       setNotice(`${created.displayName} was registered and selected.`);
-      await load();
     } catch (failure: unknown) {
-      setRegistrationProblem(asClientError(failure));
+      setRegistrationProblem(asQueryError(failure));
       setRegistration((current) => ({ ...current, password: '' }));
     } finally {
       setRegistrationBusy(false);
     }
   };
 
+  const openRegistration = () => setRegistrationOpen(true);
+  const shownProblem = problem ?? listProblem;
+
   return (
-    <section className="workspace setups-workspace" aria-labelledby="workspace-title">
-      <div className="workspace__heading">
+    <section aria-labelledby="workspace-title" className="workspace setups-workspace">
+      <div className="workspace__heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
         <div>
-          <p className="workspace__context">Database connections and runtime scope</p>
-          <h1 id="workspace-title">Setups</h1>
-          <p>Register, verify, connect, and safely detach PeeGeeQ Cache database setups.</p>
+          <Text className="workspace__context" type="secondary">Database connections and runtime scope</Text>
+          <Title id="workspace-title" level={1} style={{ marginTop: 4 }}>Setups</Title>
+          <Text>Register, verify, connect, and safely detach PeeGeeQ Cache database setups.</Text>
         </div>
-        <div className="workspace__actions">
-          <button className="button button--secondary" disabled={loading} onClick={() => void load()} type="button">
+        <Space className="workspace__actions">
+          <Button disabled={loading} icon={<ReloadOutlined aria-hidden="true" />} onClick={() => void refresh()}>
             {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
+          </Button>
           {canRegister && (
-            <button className="button" onClick={() => setRegistrationOpen(true)} type="button">
-              Register setup
-            </button>
+            <Button icon={<PlusOutlined aria-hidden="true" />} onClick={openRegistration} type="primary">Register setup</Button>
           )}
-        </div>
+        </Space>
       </div>
 
-      {!isOperator && (
-        <p className="callout">Viewer access is read-only. An operator can manage setup lifecycles.</p>
-      )}
-      {isOperator && !session.features.setupRegistration && (
-        <p className="callout">Setup registration is disabled by this management server.</p>
-      )}
-      {notice !== undefined && <p className="notice" role="status">{notice}</p>}
-      {problem !== undefined && <ProblemAlert problem={problem} />}
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        {!isOperator && <Alert message="Viewer access is read-only. An operator can manage setup lifecycles." showIcon type="info" />}
+        {isOperator && !session.features.setupRegistration && <Alert message="Setup registration is disabled by this management server." showIcon type="info" />}
+        {notice !== undefined && <Alert message={notice} role="status" showIcon type="success" />}
+        {shownProblem !== undefined && <ProblemAlert problem={shownProblem} />}
 
-      {loading && setups.length === 0 ? (
-        <div className="empty-state" aria-busy="true">Loading registered setups…</div>
-      ) : setups.length === 0 && problem === undefined ? (
-        <div className="empty-state">
-          <h2>No setups registered</h2>
-          <p>Register a TLS-verified PostgreSQL connection to begin managing cache data.</p>
-          {canRegister && (
-            <button className="button" onClick={() => setRegistrationOpen(true)} type="button">
-              Register the first setup
-            </button>
-          )}
-        </div>
-      ) : setups.length > 0 ? (
-        <div aria-label="Registered setups" className="table-scroll" role="region" tabIndex={0}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">Setup</th>
-                <th scope="col">Database</th>
-                <th scope="col">State</th>
-                <th scope="col">Health</th>
-                <th scope="col">Scope</th>
-                <th scope="col"><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {setups.map((setup) => {
-                const selected = selectedSetupId === setup.setupId;
-                return (
-                  <tr data-selected={selected || undefined} key={setup.setupId}>
-                    <td>
-                      <strong>{setup.displayName}</strong>
-                      <small>{setup.setupId} · {setup.source === 'CONFIGURED' ? 'Configured' : 'Session'}</small>
-                    </td>
-                    <td>
-                      {setup.database}
-                      <small>{setup.host}:{setup.port}/{setup.schema}</small>
-                    </td>
-                    <td><StateBadge value={setup.state} /></td>
-                    <td>
-                      {setup.lastHealth === null
-                        ? <span className="muted">Not checked</span>
-                        : <><StateBadge value={setup.lastHealth.status} /><small>{setup.lastHealth.latencyMillis} ms</small></>}
-                    </td>
-                    <td>
-                      <button
-                        className="button button--quiet"
+        {setups.isLoading ? (
+          <Text aria-busy="true">Loading registered setups…</Text>
+        ) : rows.length === 0 && listProblem === undefined ? (
+          <Card>
+            <Empty description={<Title level={2} style={{ fontSize: 18 }}>No setups registered</Title>}>
+              <Text type="secondary">Register a TLS-verified PostgreSQL connection to begin managing cache data.</Text>
+              {canRegister && (
+                <div style={{ marginTop: 16 }}>
+                  <Button onClick={openRegistration} type="primary">Register the first setup</Button>
+                </div>
+              )}
+            </Empty>
+          </Card>
+        ) : rows.length > 0 ? (
+          <div aria-label="Registered setups" className="table-scroll" role="region" tabIndex={0}>
+            <Table
+              columns={[
+                {
+                  title: 'Setup', key: 'setup',
+                  render: (_value: unknown, setup: SetupSummary) => (
+                    <><strong>{setup.displayName}</strong><br /><Text type="secondary">{setup.setupId} · {setup.source === 'CONFIGURED' ? 'Configured' : 'Session'}</Text></>
+                  ),
+                },
+                {
+                  title: 'Database', key: 'database',
+                  render: (_value: unknown, setup: SetupSummary) => (
+                    <>{setup.database}<br /><Text type="secondary">{setup.host}:{setup.port}/{setup.schema}</Text></>
+                  ),
+                },
+                { title: 'State', key: 'state', render: (_value: unknown, setup: SetupSummary) => <StateTag value={setup.state} /> },
+                {
+                  title: 'Health', key: 'health',
+                  render: (_value: unknown, setup: SetupSummary) => setup.lastHealth === null
+                    ? <Text type="secondary">Not checked</Text>
+                    : <><StateTag value={setup.lastHealth.status} /><Text type="secondary">{setup.lastHealth.latencyMillis} ms</Text></>,
+                },
+                {
+                  title: 'Scope', key: 'scope',
+                  render: (_value: unknown, setup: SetupSummary) => {
+                    const selected = selectedSetupId === setup.setupId;
+                    return (
+                      <Button
                         disabled={setup.state !== 'CONNECTED' || selected || selectingSetupId !== undefined}
                         onClick={() => void selectSetup(setup.setupId)}
-                        type="button"
+                        size="small"
+                        type="link"
                       >
                         {selected ? 'Selected' : selectingSetupId === setup.setupId ? 'Selecting…' : 'Use setup'}
-                      </button>
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <button className="button button--quiet" onClick={() => void openDetails(setup.setupId)} type="button">
-                          Details
-                        </button>
-                        {isOperator && (
-                          <>
-                            <button className="button button--quiet" onClick={() => void testRegistered(setup)} type="button">
-                              Test
-                            </button>
-                            {setup.state === 'DETACHED' ? (
-                              <button className="button button--quiet" onClick={() => setPendingAction({ action: 'connect', setup })} type="button">
-                                Connect
-                              </button>
-                            ) : (
-                              <button className="button button--quiet" onClick={() => setPendingAction({ action: 'detach', setup })} type="button">
-                                Detach
-                              </button>
-                            )}
-                            {setup.source === 'UI_SESSION' && (
-                              <button className="button button--danger" onClick={() => setPendingAction({ action: 'forget', setup })} type="button">
-                                Forget
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </Button>
+                    );
+                  },
+                },
+                {
+                  title: <span className="sr-only">Actions</span>, key: 'actions',
+                  render: (_value: unknown, setup: SetupSummary) => (
+                    <Space className="row-actions" size="small" wrap>
+                      <Button onClick={() => void openDetails(setup.setupId)} size="small" type="link">Details</Button>
+                      {isOperator && (
+                        <>
+                          <Button onClick={() => void retest(setup)} size="small" type="link">Test</Button>
+                          {setup.state === 'DETACHED'
+                            ? <Button onClick={() => setPendingAction({ action: 'connect', setup })} size="small" type="link">Connect</Button>
+                            : <Button onClick={() => setPendingAction({ action: 'detach', setup })} size="small" type="link">Detach</Button>}
+                          {setup.source === 'UI_SESSION' && (
+                            <Button danger onClick={() => setPendingAction({ action: 'forget', setup })} size="small" type="link">Forget</Button>
+                          )}
+                        </>
+                      )}
+                    </Space>
+                  ),
+                },
+              ]}
+              dataSource={rows.map((setup) => ({ ...setup, key: setup.setupId }))}
+              pagination={false}
+              rowClassName={(setup) => (selectedSetupId === setup.setupId ? 'setup-row--selected' : '')}
+              size="middle"
+            />
+          </div>
+        ) : null}
+      </Space>
+
+      <Modal
+        afterOpenChange={(open) => { if (open) setupIdInput.current?.focus(); }}
+        closable={false}
+        destroyOnHidden
+        footer={null}
+        maskClosable={!registrationBusy}
+        onCancel={registrationBusy ? undefined : closeRegistration}
+        open={registrationOpen}
+        title={<Title id="registration-title" level={2} style={{ margin: 0, fontSize: 20 }}>Register setup</Title>}
+        width={880}
+      >
+        <div className="modal__heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <Text className="workspace__context" type="secondary">TLS-verified PostgreSQL</Text>
+          <Button aria-label="Close registration" disabled={registrationBusy} onClick={closeRegistration} size="small">Close</Button>
         </div>
-      ) : null}
-
-      {registrationOpen && (
-        <Modal className="modal" labelId="registration-title" onDismiss={registrationBusy ? undefined : closeRegistration}>
-            <div className="modal__heading">
-              <div>
-                <p className="workspace__context">TLS-verified PostgreSQL</p>
-                <h2 id="registration-title">Register setup</h2>
-              </div>
-              <button aria-label="Close registration" className="icon-button" disabled={registrationBusy} onClick={closeRegistration} type="button">Close</button>
+        <Form layout="vertical" onFinish={() => void register()}>
+          <div className="form-grid">
+            <Form.Item htmlFor="setup-id" label="Setup ID"><Input id="setup-id" maxLength={63} onChange={(event) => setRegistration({ ...registration, setupId: event.target.value })} pattern="[a-z][a-z0-9\-]{0,62}" ref={setupIdInput} required value={registration.setupId} /></Form.Item>
+            <Form.Item htmlFor="setup-display-name" label="Display name"><Input id="setup-display-name" maxLength={128} onChange={(event) => setRegistration({ ...registration, displayName: event.target.value })} required value={registration.displayName} /></Form.Item>
+            <Form.Item htmlFor="setup-host" label="Host"><Input id="setup-host" maxLength={253} onChange={(event) => setRegistration({ ...registration, host: event.target.value })} required value={registration.host} /></Form.Item>
+            <Form.Item htmlFor="setup-port" label="Port"><InputNumber id="setup-port" max={65_535} min={1} onChange={(value) => setRegistration({ ...registration, port: Number(value ?? 0) })} required style={{ width: '100%' }} value={registration.port} /></Form.Item>
+            <Form.Item htmlFor="setup-database" label="Database"><Input id="setup-database" maxLength={63} onChange={(event) => setRegistration({ ...registration, database: event.target.value })} required value={registration.database} /></Form.Item>
+            <Form.Item htmlFor="setup-schema" label="Schema"><Input id="setup-schema" maxLength={63} onChange={(event) => setRegistration({ ...registration, schema: event.target.value })} required value={registration.schema} /></Form.Item>
+            <Form.Item htmlFor="setup-username" label="Username"><Input autoComplete="username" id="setup-username" maxLength={128} onChange={(event) => setRegistration({ ...registration, username: event.target.value })} required value={registration.username} /></Form.Item>
+            <Form.Item htmlFor="setup-password" label="Password"><Input.Password autoComplete="new-password" id="setup-password" maxLength={4_096} onChange={(event) => setRegistration({ ...registration, password: event.target.value })} required value={registration.password} /></Form.Item>
+            <Form.Item htmlFor="setup-trust-profile" label="Trust profile"><Input id="setup-trust-profile" maxLength={128} onChange={(event) => setRegistration({ ...registration, trustProfileId: event.target.value })} required value={registration.trustProfileId} /></Form.Item>
+            <Form.Item htmlFor="setup-pool-size" label="Pool size"><InputNumber id="setup-pool-size" max={100} min={1} onChange={(value) => setRegistration({ ...registration, poolMaxSize: Number(value ?? 0) })} required style={{ width: '100%' }} value={registration.poolMaxSize} /></Form.Item>
+            <Form.Item htmlFor="setup-tls-mode" label="TLS mode"><Input disabled id="setup-tls-mode" value="VERIFY_FULL" /></Form.Item>
+          </div>
+          <Card className="details-section" size="small" title="Runtime behavior">
+            <Text type="secondary">These settings are applied when this setup connects.</Text>
+            <div className="form-grid" style={{ marginTop: 12 }}>
+              <Form.Item htmlFor="runtime-default-ttl" label="Default TTL milliseconds"><InputNumber id="runtime-default-ttl" min={1} onChange={(value) => updateRuntime('defaultTtlMillis', value === null || value === undefined ? null : Number(value))} placeholder="Persistent by default" style={{ width: '100%' }} value={registration.runtime?.defaultTtlMillis ?? null} /></Form.Item>
+              <Form.Item htmlFor="runtime-sweep-interval" label="Expiry sweep interval milliseconds"><InputNumber id="runtime-sweep-interval" min={1} onChange={(value) => updateRuntime('expirySweepIntervalMillis', Number(value ?? 0))} required style={{ width: '100%' }} value={registration.runtime?.expirySweepIntervalMillis} /></Form.Item>
+              <Form.Item htmlFor="runtime-sweep-batch" label="Expiry sweep batch size"><InputNumber id="runtime-sweep-batch" min={1} onChange={(value) => updateRuntime('expirySweepBatchSize', Number(value ?? 0))} required style={{ width: '100%' }} value={registration.runtime?.expirySweepBatchSize} /></Form.Item>
+              <Form.Item htmlFor="runtime-wb-interval" label="Write-behind flush interval milliseconds"><InputNumber id="runtime-wb-interval" min={1} onChange={(value) => updateRuntime('writeBehindFlushIntervalMillis', Number(value ?? 0))} required style={{ width: '100%' }} value={registration.runtime?.writeBehindFlushIntervalMillis} /></Form.Item>
+              <Form.Item htmlFor="runtime-wb-buffer" label="Write-behind maximum buffer"><InputNumber id="runtime-wb-buffer" min={100} onChange={(value) => updateRuntime('writeBehindMaxBufferSize', Number(value ?? 0))} required style={{ width: '100%' }} value={registration.runtime?.writeBehindMaxBufferSize} /></Form.Item>
+              <Form.Item htmlFor="runtime-wb-batch" label="Write-behind flush batch size"><InputNumber id="runtime-wb-batch" min={1} onChange={(value) => updateRuntime('writeBehindFlushBatchSize', Number(value ?? 0))} required style={{ width: '100%' }} value={registration.runtime?.writeBehindFlushBatchSize} /></Form.Item>
+              <Form.Item htmlFor="runtime-wb-retries" label="Write-behind maximum retries"><InputNumber id="runtime-wb-retries" min={0} onChange={(value) => updateRuntime('writeBehindMaxRetries', Number(value ?? 0))} required style={{ width: '100%' }} value={registration.runtime?.writeBehindMaxRetries} /></Form.Item>
+              <Form.Item htmlFor="runtime-drain-timeout" label="Shutdown drain timeout milliseconds"><InputNumber id="runtime-drain-timeout" min={1} onChange={(value) => updateRuntime('writeBehindShutdownDrainTimeoutMillis', Number(value ?? 0))} required style={{ width: '100%' }} value={registration.runtime?.writeBehindShutdownDrainTimeoutMillis} /></Form.Item>
+              <Form.Item htmlFor="runtime-pubsub-prefix" label="Pub/Sub channel prefix"><Input id="runtime-pubsub-prefix" maxLength={48} onChange={(event) => updateRuntime('pubSubChannelPrefix', event.target.value)} required value={registration.runtime?.pubSubChannelPrefix} /></Form.Item>
+              <Form.Item htmlFor="schema-bootstrap-mode" label="Schema bootstrap">
+                <ValueSelect<'EXTERNAL' | 'APPLY'>
+                  id="schema-bootstrap-mode"
+                  onChange={(value) => updateRuntime('schemaBootstrapMode', value)}
+                  options={[{ value: 'EXTERNAL', label: 'Provisioned externally' }, { value: 'APPLY', label: 'Apply bundled schema at startup' }]}
+                  value={registration.runtime?.schemaBootstrapMode}
+                />
+              </Form.Item>
+              <Form.Item htmlFor="runtime-telemetry" label="Telemetry adapter"><Input disabled id="runtime-telemetry" value="Built-in metrics (vendor-neutral exporter disabled)" /></Form.Item>
             </div>
-            <form onSubmit={(event) => void register(event)}>
-              <div className="form-grid">
-                <Field label="Setup ID"><input maxLength={63} pattern="[a-z][a-z0-9\-]{0,62}" required value={registration.setupId} onChange={(event) => setRegistration({ ...registration, setupId: event.target.value })} /></Field>
-                <Field label="Display name"><input maxLength={128} required value={registration.displayName} onChange={(event) => setRegistration({ ...registration, displayName: event.target.value })} /></Field>
-                <Field label="Host"><input maxLength={253} required value={registration.host} onChange={(event) => setRegistration({ ...registration, host: event.target.value })} /></Field>
-                <Field label="Port"><input max={65_535} min={1} required type="number" value={registration.port} onChange={(event) => setRegistration({ ...registration, port: Number(event.target.value) })} /></Field>
-                <Field label="Database"><input maxLength={63} required value={registration.database} onChange={(event) => setRegistration({ ...registration, database: event.target.value })} /></Field>
-                <Field label="Schema"><input maxLength={63} required value={registration.schema} onChange={(event) => setRegistration({ ...registration, schema: event.target.value })} /></Field>
-                <Field label="Username"><input autoComplete="username" maxLength={128} required value={registration.username} onChange={(event) => setRegistration({ ...registration, username: event.target.value })} /></Field>
-                <Field label="Password"><input autoComplete="new-password" maxLength={4_096} required type="password" value={registration.password} onChange={(event) => setRegistration({ ...registration, password: event.target.value })} /></Field>
-                <Field label="Trust profile"><input maxLength={128} required value={registration.trustProfileId} onChange={(event) => setRegistration({ ...registration, trustProfileId: event.target.value })} /></Field>
-                <Field label="Pool size"><input max={100} min={1} required type="number" value={registration.poolMaxSize} onChange={(event) => setRegistration({ ...registration, poolMaxSize: Number(event.target.value) })} /></Field>
-                <Field label="TLS mode"><input disabled value="VERIFY_FULL" /></Field>
-              </div>
-              <fieldset className="details-section">
-                <legend>Runtime behavior</legend>
-                <p>These settings are applied when this setup connects.</p>
-                <div className="form-grid">
-                  <Field label="Default TTL milliseconds"><input min={1} placeholder="Persistent by default" type="number" value={registration.runtime?.defaultTtlMillis ?? ''} onChange={(event) => updateRuntime('defaultTtlMillis', event.target.value === '' ? null : Number(event.target.value))} /></Field>
-                  <Field label="Expiry sweep interval milliseconds"><input min={1} required type="number" value={registration.runtime?.expirySweepIntervalMillis} onChange={(event) => updateRuntime('expirySweepIntervalMillis', Number(event.target.value))} /></Field>
-                  <Field label="Expiry sweep batch size"><input min={1} required type="number" value={registration.runtime?.expirySweepBatchSize} onChange={(event) => updateRuntime('expirySweepBatchSize', Number(event.target.value))} /></Field>
-                  <Field label="Write-behind flush interval milliseconds"><input min={1} required type="number" value={registration.runtime?.writeBehindFlushIntervalMillis} onChange={(event) => updateRuntime('writeBehindFlushIntervalMillis', Number(event.target.value))} /></Field>
-                  <Field label="Write-behind maximum buffer"><input min={100} required type="number" value={registration.runtime?.writeBehindMaxBufferSize} onChange={(event) => updateRuntime('writeBehindMaxBufferSize', Number(event.target.value))} /></Field>
-                  <Field label="Write-behind flush batch size"><input min={1} required type="number" value={registration.runtime?.writeBehindFlushBatchSize} onChange={(event) => updateRuntime('writeBehindFlushBatchSize', Number(event.target.value))} /></Field>
-                  <Field label="Write-behind maximum retries"><input min={0} required type="number" value={registration.runtime?.writeBehindMaxRetries} onChange={(event) => updateRuntime('writeBehindMaxRetries', Number(event.target.value))} /></Field>
-                  <Field label="Shutdown drain timeout milliseconds"><input min={1} required type="number" value={registration.runtime?.writeBehindShutdownDrainTimeoutMillis} onChange={(event) => updateRuntime('writeBehindShutdownDrainTimeoutMillis', Number(event.target.value))} /></Field>
-                  <Field label="Pub/Sub channel prefix"><input maxLength={48} required value={registration.runtime?.pubSubChannelPrefix} onChange={(event) => updateRuntime('pubSubChannelPrefix', event.target.value)} /></Field>
-                  <label className="field" htmlFor="schema-bootstrap-mode">Schema bootstrap<select id="schema-bootstrap-mode" value={registration.runtime?.schemaBootstrapMode} onChange={(event) => updateRuntime('schemaBootstrapMode', event.target.value as 'EXTERNAL' | 'APPLY')}><option value="EXTERNAL">Provisioned externally</option><option value="APPLY">Apply bundled schema at startup</option></select></label>
-                  <Field label="Telemetry adapter"><input disabled value="Built-in metrics (vendor-neutral exporter disabled)" /></Field>
-                </div>
-                <label><input checked={registration.runtime?.expirySweeperEnabled ?? false} onChange={(event) => updateRuntime('expirySweeperEnabled', event.target.checked)} type="checkbox" /> Run the expiry sweeper</label>{' '}
-                <label><input checked={registration.runtime?.writeBehindEnabled ?? false} onChange={(event) => updateRuntime('writeBehindEnabled', event.target.checked)} type="checkbox" /> Enable write-behind buffering</label>{' '}
-                <label><input checked={registration.runtime?.pubSubEnabled ?? false} onChange={(event) => updateRuntime('pubSubEnabled', event.target.checked)} type="checkbox" /> Enable Pub/Sub</label>
-              </fieldset>
-              {connectionTest !== undefined && (
-                <p className="notice" role="status">
-                  Connection succeeded in {connectionTest.latencyMillis} ms; schema {connectionTest.schemaState.toLowerCase()}.
-                </p>
-              )}
-              {registrationProblem !== undefined && <ProblemAlert problem={registrationProblem} />}
-              <div className="modal__actions">
-                <button className="button button--secondary" disabled={registrationBusy} onClick={() => void testRegistration()} type="button">Test connection</button>
-                <button className="button" disabled={registrationBusy} type="submit">{registrationBusy ? 'Working…' : 'Register setup'}</button>
-              </div>
-            </form>
-        </Modal>
-      )}
+            <Space wrap>
+              <Checkbox checked={registration.runtime?.expirySweeperEnabled ?? false} onChange={(event) => updateRuntime('expirySweeperEnabled', event.target.checked)}>Run the expiry sweeper</Checkbox>
+              <Checkbox checked={registration.runtime?.writeBehindEnabled ?? false} onChange={(event) => updateRuntime('writeBehindEnabled', event.target.checked)}>Enable write-behind buffering</Checkbox>
+              <Checkbox checked={registration.runtime?.pubSubEnabled ?? false} onChange={(event) => updateRuntime('pubSubEnabled', event.target.checked)}>Enable Pub/Sub</Checkbox>
+            </Space>
+          </Card>
+          {connectionTest !== undefined && (
+            <Alert
+              message={`Connection succeeded in ${connectionTest.latencyMillis} ms; schema ${connectionTest.schemaState.toLowerCase()}.`}
+              role="status"
+              showIcon
+              style={{ marginTop: 16 }}
+              type="success"
+            />
+          )}
+          {registrationProblem !== undefined && <div style={{ marginTop: 16 }}><ProblemAlert problem={registrationProblem} /></div>}
+          <Space className="modal__actions" style={{ marginTop: 16, justifyContent: 'flex-end', width: '100%' }}>
+            <Button disabled={registrationBusy} onClick={() => void testRegistration()}>Test connection</Button>
+            <Button disabled={registrationBusy} htmlType="submit" type="primary">{registrationBusy ? 'Working…' : 'Register setup'}</Button>
+          </Space>
+        </Form>
+      </Modal>
 
-      {detailsOpen && (
-        <Modal labelId="details-title" onDismiss={() => setDetailsOpen(false)}>
-            <div className="modal__heading">
-              <h2 id="details-title">Setup details</h2>
-              <button aria-label="Close details" className="icon-button" onClick={() => setDetailsOpen(false)} type="button">Close</button>
-            </div>
-            {detailsLoading && <p aria-busy="true">Loading details…</p>}
-            {details !== undefined && detailsHealth !== undefined && detailsCapabilities !== undefined && (
-              <SetupDetailsView
-                capabilities={detailsCapabilities}
-                details={details}
-                health={detailsHealth}
-              />
-            )}
-        </Modal>
-      )}
+      <Modal
+        closable={false}
+        destroyOnHidden
+        footer={null}
+        onCancel={() => setDetailsOpen(false)}
+        open={detailsOpen}
+        title={<Title id="details-title" level={2} style={{ margin: 0, fontSize: 20 }}>Setup details</Title>}
+        width={760}
+      >
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <Button aria-label="Close details" onClick={() => setDetailsOpen(false)} size="small">Close</Button>
+        </div>
+        {detailsLoading && <Text aria-busy="true">Loading details…</Text>}
+        {details !== undefined && <SetupDetailsView capabilities={details.capabilities} details={details.details} health={details.health} />}
+      </Modal>
 
-      {pendingAction !== undefined && (
-        <Modal labelId="action-title" onDismiss={actionBusy ? undefined : () => setPendingAction(undefined)}>
-            <h2 id="action-title">{actionTitle(pendingAction.action)} {pendingAction.setup.displayName}?</h2>
-            <p>{actionDescription(pendingAction.action)}</p>
-            <div className="modal__actions">
-              <button className="button button--secondary" disabled={actionBusy} onClick={() => setPendingAction(undefined)} type="button">Cancel</button>
-              <button className={pendingAction.action === 'forget' ? 'button button--danger' : 'button'} disabled={actionBusy} onClick={() => void executeAction()} type="button">
+      <Modal
+        closable={false}
+        destroyOnHidden
+        footer={null}
+        maskClosable={!actionBusy}
+        onCancel={actionBusy ? undefined : () => setPendingAction(undefined)}
+        open={pendingAction !== undefined}
+        title={pendingAction === undefined ? '' : <Title id="action-title" level={2} style={{ margin: 0, fontSize: 20 }}>{actionTitle(pendingAction.action)} {pendingAction.setup.displayName}?</Title>}
+      >
+        {pendingAction !== undefined && (
+          <>
+            <Text>{actionDescription(pendingAction.action)}</Text>
+            <Space className="modal__actions" style={{ marginTop: 16, justifyContent: 'flex-end', width: '100%' }}>
+              <Button disabled={actionBusy} onClick={() => setPendingAction(undefined)}>Cancel</Button>
+              <Button danger={pendingAction.action === 'forget'} disabled={actionBusy} onClick={() => void executeAction()} type="primary">
                 {actionBusy ? 'Working…' : actionTitle(pendingAction.action)}
-              </button>
-            </div>
-        </Modal>
-      )}
+              </Button>
+            </Space>
+          </>
+        )}
+      </Modal>
     </section>
   );
 }
 
-function Field({ label, children }: { readonly label: string; readonly children: ReactNode }) {
-  return <label className="field"><span>{label}</span>{children}</label>;
-}
-
-function StateBadge({ value }: { readonly value: string }) {
+function StateTag({ value }: { readonly value: string }) {
   const normalized = value.toLowerCase();
-  const tone = normalized === 'connected' || normalized === 'up' || normalized === 'ready' || normalized === 'available'
-    ? 'positive'
+  const color = normalized === 'connected' || normalized === 'up' || normalized === 'ready' || normalized === 'available'
+    ? 'green'
     : normalized === 'detached' || normalized === 'down' || normalized === 'unhealthy' || normalized === 'unavailable'
-      ? 'negative'
-      : 'warning';
-  return <span className={`badge badge--${tone}`}>{humanize(value)}</span>;
+      ? 'red'
+      : 'gold';
+  return <Tag className={`badge badge--${color}`} color={color}>{humanize(value)}</Tag>;
 }
 
 function SetupDetailsView({ details, health, capabilities }: {
@@ -485,7 +474,7 @@ function SetupDetailsView({ details, health, capabilities }: {
   readonly health: SetupHealth;
   readonly capabilities: SetupCapabilities;
 }) {
-  const rows = [
+  const rows: Array<[string, ReactNode]> = [
     ['Setup ID', details.setup.setupId],
     ['Host', `${details.setup.host}:${details.setup.port}`],
     ['Database', details.setup.database],
@@ -503,62 +492,71 @@ function SetupDetailsView({ details, health, capabilities }: {
   ];
   return (
     <div className="setup-details">
-      <dl className="details-list">
-        {rows.map(([label, value]) => (
-          <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
-        ))}
-      </dl>
-      <section className="details-section" aria-labelledby="health-title">
-        <h3 id="health-title">Database health</h3>
-        <p><StateBadge value={health.status} /> {health.latencyMillis} ms · {health.schemaReady ? 'Schema ready' : 'Schema unavailable'}</p>
-        <p>{health.detail}</p>
-        <small>Checked {formatDisplayInstant(health.checkedAt)}</small>
+      <Descriptions column={2} size="small">
+        {rows.map(([label, value]) => <Descriptions.Item key={label} label={label}>{value}</Descriptions.Item>)}
+      </Descriptions>
+      <section aria-labelledby="health-title" className="details-section">
+        <Title id="health-title" level={3} style={{ fontSize: 16 }}>Database health</Title>
+        <Space>
+          <StateTag value={health.status} />
+          <Text>{health.latencyMillis} ms · {health.schemaReady ? 'Schema ready' : 'Schema unavailable'}</Text>
+        </Space>
+        <p><Text>{health.detail}</Text></p>
+        <Text type="secondary">Checked {formatDisplayInstant(health.checkedAt)}</Text>
       </section>
-      <section className="details-section" aria-labelledby="capabilities-title">
-        <h3 id="capabilities-title">Capabilities</h3>
-        <ul className="capability-list">
-          {Object.entries(capabilities.capabilities).map(([name, available]) => (
-            <li key={name}>
+      <section aria-labelledby="capabilities-title" className="details-section">
+        <Title id="capabilities-title" level={3} style={{ fontSize: 16 }}>Capabilities</Title>
+        <List
+          className="capability-list"
+          dataSource={Object.entries(capabilities.capabilities)}
+          grid={{ gutter: 8, column: 2 }}
+          renderItem={([name, available]) => (
+            <List.Item key={name} style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>{humanizeCapability(name)}</span>
-              <StateBadge value={available ? 'AVAILABLE' : 'UNAVAILABLE'} />
-            </li>
-          ))}
-        </ul>
-        <dl className="details-list details-list--limits">
-          <div><dt>Maximum value</dt><dd>{formatDisplayBytes(capabilities.limits.maximumValueBytes)}</dd></div>
-          <div><dt>Pub/Sub payload</dt><dd>{formatDisplayBytes(capabilities.limits.pubSubPayloadMaxBytes)}</dd></div>
-          <div><dt>Pub/Sub channel</dt><dd>{formatDisplayBytes(capabilities.limits.pubSubChannelMaxBytes)}</dd></div>
-        </dl>
+              <StateTag value={available ? 'AVAILABLE' : 'UNAVAILABLE'} />
+            </List.Item>
+          )}
+          size="small"
+        />
+        <Descriptions column={3} size="small">
+          <Descriptions.Item label="Maximum value">{formatDisplayBytes(capabilities.limits.maximumValueBytes)}</Descriptions.Item>
+          <Descriptions.Item label="Pub/Sub payload">{formatDisplayBytes(capabilities.limits.pubSubPayloadMaxBytes)}</Descriptions.Item>
+          <Descriptions.Item label="Pub/Sub channel">{formatDisplayBytes(capabilities.limits.pubSubChannelMaxBytes)}</Descriptions.Item>
+        </Descriptions>
       </section>
     </div>
   );
 }
 
-function ProblemAlert({ problem }: { readonly problem: ManagementClientError }) {
+function ProblemAlert({ problem }: { readonly problem: ManagementQueryError }) {
   return (
-    <div className="diagnostics" role="alert">
-      <strong>{problem.code}</strong>
-      <p>{problem.message}</p>
-      {problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}
-    </div>
+    <Alert
+      description={(
+        <>
+          <p>{problem.message}</p>
+          {problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}
+        </>
+      )}
+      message={problem.code}
+      role="alert"
+      showIcon
+      type="error"
+    />
   );
 }
 
-function asClientError(failure: unknown): ManagementClientError {
-  return failure instanceof ManagementClientError
-    ? failure
-    : new ManagementClientError(0, 'CONNECTION_FAILED', 'The setup request could not be completed');
+function queryError(error: unknown): ManagementQueryError | undefined {
+  return isManagementQueryError(error) ? error : undefined;
 }
 
-function humanize(value: string): string {
-  return value.toLowerCase().replaceAll('_', ' ').replace(/^./u, (letter) => letter.toUpperCase());
+function asQueryError(failure: unknown): ManagementQueryError {
+  return isManagementQueryError(failure)
+    ? failure
+    : { status: 0, code: 'CONNECTION_FAILED', message: 'The setup request could not be completed' };
 }
 
 function humanizeCapability(value: string): string {
-  return value
-    .replace(/([a-z])([A-Z])/gu, '$1 $2')
-    .toLowerCase()
-    .replace(/^./u, (letter) => letter.toUpperCase());
+  return value.replace(/([a-z])([A-Z])/gu, '$1 $2').toLowerCase().replace(/^./u, (letter) => letter.toUpperCase());
 }
 
 function actionTitle(action: ConfirmedAction): string {

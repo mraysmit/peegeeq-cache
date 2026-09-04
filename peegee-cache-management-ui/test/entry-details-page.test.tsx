@@ -1,82 +1,63 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { EntryDetailsClientPort } from '@src/api/inspection-client';
-import type { EntryMetadata, RevealedEntryValue } from '@src/api/inspection-schemas';
 import { EntryDetailsPage } from '@src/features/entries/EntryDetailsPage';
+import { renderWithProviders } from './support/render';
+import { entryMetadata, startEntryFixture, type EntryFixture } from './support/entry-fixture';
 
-const metadata: EntryMetadata = {
-  namespace: '客户/订单', encodedNamespace: '5a6i5oi3L-iureWNlQ',
-  key: 'café/東京/🔒?x=1', encodedKey: 'Y2Fmw6kv5p2x5LqsL_CflJI_eD0x',
-  valueType: 'STRING', sizeBytes: '17', version: '9007199254740993',
-  createdAt: '2026-08-26T10:00:00Z', updatedAt: '2026-08-26T10:15:00Z',
-  lastAccessedAt: null,
-  ttl: { state: 'EXPIRING', ttlMillis: 45_000, expiresAt: '2026-08-26T10:15:45Z' },
-};
-const revealed: RevealedEntryValue = {
-  key: metadata.key, version: metadata.version,
-  value: { type: 'STRING', text: 'sensitive <value>' },
-  revealedAt: '2026-08-26T10:15:30Z', autoHideAfterMillis: 1_000,
-};
-
-class FakeEntryDetailsClient implements EntryDetailsClientPort {
-  readonly reveals: Array<{ setupId: string; namespace: string; key: string; reason?: string }> = [];
-
-  constructor(private readonly autoHideAfterMillis = revealed.autoHideAfterMillis) {}
-
-  async entries(): Promise<never> { throw new Error('not used'); }
-  async entry(): Promise<EntryMetadata> { return metadata; }
-  async revealEntryValue(setupId: string, namespace: string, key: string, reason?: string): Promise<RevealedEntryValue> {
-    this.reveals.push({ setupId, namespace, key, reason });
-    return { ...revealed, autoHideAfterMillis: this.autoHideAfterMillis };
-  }
-}
-
-function renderDetails(client: EntryDetailsClientPort, canReveal = true) {
-  return render(<MemoryRouter><EntryDetailsPage
-    canReveal={canReveal} client={client} encodedKey={metadata.encodedKey}
-    encodedNamespace={metadata.encodedNamespace} selectedSetupId="primary-cache"
-  /></MemoryRouter>);
-}
+const metadata = entryMetadata;
 
 describe('U4 entry details sensitive reveal lifecycle', () => {
-  beforeEach(() => {
+  let fixture: EntryFixture;
+
+  beforeEach(async () => {
     localStorage.clear();
     sessionStorage.clear();
+    fixture = await startEntryFixture();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(async () => { await fixture.close(); });
+
+  const renderDetails = (canReveal = true) => renderWithProviders(
+    <EntryDetailsPage canReveal={canReveal} encodedKey={metadata.encodedKey} encodedNamespace={metadata.encodedNamespace} selectedSetupId="primary-cache" />,
+    { store: fixture.store },
+  );
+  const reveals = () => fixture.requests((request) => request.method === 'POST' && request.path.endsWith('/value/reveal'));
 
   it('loads metadata only and does not offer reveal to viewers', async () => {
-    renderDetails(new FakeEntryDetailsClient(), false);
+    renderDetails(false);
     expect(await screen.findByRole('heading', { name: metadata.key })).toBeVisible();
     expect(screen.getByText('Value hidden')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Reveal value' })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('sensitive <value>');
+    const metadataRequests = fixture.requests((request) => request.path.endsWith(`/entries/${metadata.encodedKey}`));
+    expect(metadataRequests).toHaveLength(1);
+    expect(metadataRequests[0]!.query.get('includeExpired')).toBe('true');
+    expect(reveals()).toHaveLength(0);
   });
 
   it('reveals only after an explicit operator action, copies explicitly, and hides explicitly', async () => {
-    const client = new FakeEntryDetailsClient();
     const copied: string[] = [];
     const user = userEvent.setup();
     Object.defineProperty(globalThis.navigator, 'clipboard', {
       configurable: true,
       value: { writeText: async (value: string) => { copied.push(value); } },
     });
-    renderDetails(client);
+    renderDetails();
 
     await screen.findByRole('heading', { name: metadata.key });
     expect(copied).toEqual([]);
+    expect(reveals()).toHaveLength(0);
     await user.type(screen.getByLabelText(/Reveal reason/u), 'incident review');
     await user.click(screen.getByRole('button', { name: 'Reveal value' }));
     expect(await screen.findByText('sensitive <value>')).toBeVisible();
-    expect(client.reveals).toEqual([{
-      setupId: 'primary-cache', namespace: metadata.encodedNamespace,
-      key: metadata.encodedKey, reason: 'incident review',
-    }]);
+    expect(reveals()).toHaveLength(1);
+    expect(reveals()[0]!.path).toBe(`/api/v1/setups/primary-cache/namespaces/${metadata.encodedNamespace}/entries/${metadata.encodedKey}/value/reveal`);
+    expect(reveals()[0]!.body).toEqual({ reason: 'incident review' });
+    expect(reveals()[0]!.headers['x-peegeeq-csrf']).toBe('entry-pages-csrf-token-with-forty-three-characters');
     expect(window.location.href).not.toContain('sensitive');
     expect(JSON.stringify({ localStorage, sessionStorage })).not.toContain('sensitive');
+    expect(JSON.stringify(fixture.store.getState())).not.toContain('sensitive <value>');
     expect(copied).toEqual([]);
     await user.click(screen.getByRole('button', { name: 'Copy revealed value' }));
     expect(copied).toEqual(['sensitive <value>']);
@@ -85,27 +66,27 @@ describe('U4 entry details sensitive reveal lifecycle', () => {
   });
 
   it('clears a revealed value on timeout, visibility loss, and route or setup changes', async () => {
-    const client = new FakeEntryDetailsClient(25);
-    const { rerender } = renderDetails(client);
+    const user = userEvent.setup();
+    fixture.state.autoHideAfterMillis = 25;
+    const { rerender } = renderDetails();
     await screen.findByRole('heading', { name: metadata.key });
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal value' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal value' }));
     expect(await screen.findByText('sensitive <value>')).toBeVisible();
     await waitFor(() => expect(screen.queryByText('sensitive <value>')).not.toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal value' }));
+    fixture.state.autoHideAfterMillis = 60_000;
+    await user.click(screen.getByRole('button', { name: 'Reveal value' }));
     expect(await screen.findByText('sensitive <value>')).toBeVisible();
     let hidden = true;
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
-    act(() => document.dispatchEvent(new globalThis.Event('visibilitychange')));
+    act(() => { document.dispatchEvent(new globalThis.Event('visibilitychange')); });
     expect(screen.queryByText('sensitive <value>')).not.toBeInTheDocument();
     hidden = false;
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal value' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal value' }));
     expect(await screen.findByText('sensitive <value>')).toBeVisible();
-    rerender(<MemoryRouter><EntryDetailsPage
-      canReveal client={client} encodedKey="differentEncodedKey"
-      encodedNamespace={metadata.encodedNamespace} selectedSetupId="secondary-cache"
-    /></MemoryRouter>);
+    rerender(<EntryDetailsPage canReveal encodedKey="differentEncodedKey" encodedNamespace={metadata.encodedNamespace} selectedSetupId="secondary-cache" />);
     expect(screen.queryByText('sensitive <value>')).not.toBeInTheDocument();
+    expect(reveals()).toHaveLength(3);
   });
 });

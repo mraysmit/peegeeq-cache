@@ -11,26 +11,7 @@ import { ManagementClientError, SessionClient } from './session-client';
 export interface CounterQuery { readonly namespace?: string; readonly prefix?: string; readonly ttlState?: 'ALL_LIVE' | 'PERSISTENT' | 'EXPIRING' | 'INCLUDE_EXPIRED'; readonly cursor?: string; readonly limit?: number; readonly sort?: 'key:asc'; }
 export interface LockQuery { readonly namespace?: string; readonly prefix?: string; readonly leaseState?: 'ACTIVE' | 'EXPIRING_SOON'; readonly cursor?: string; readonly limit?: number; }
 
-export interface CounterClientPort {
-  counters(setupId: string, query?: CounterQuery): Promise<CounterPage>;
-  counter(setupId: string, encodedNamespace: string, encodedKey: string): Promise<Counter>;
-  setCounter(setupId: string, encodedNamespace: string, encodedKey: string, version: string | undefined, body: CounterSetBody): Promise<Counter>;
-  adjustCounter(setupId: string, encodedNamespace: string, encodedKey: string, version: string | undefined, body: CounterAdjustBody): Promise<Counter>;
-  expireCounter(setupId: string, encodedNamespace: string, encodedKey: string, version: string, ttlMillis: number): Promise<Counter>;
-  persistCounter(setupId: string, encodedNamespace: string, encodedKey: string, version: string): Promise<Counter>;
-  deleteCounter(setupId: string, encodedNamespace: string, encodedKey: string, version: string): Promise<void>;
-  previewCounterBulkDelete(setupId: string, selection: CounterSelection): Promise<BulkDeletePreview>;
-  executeCounterBulkDelete(setupId: string, confirmation: ConfirmedCounterDelete): Promise<BulkDeleteResult>;
-}
-
-export interface LockClientPort {
-  locks(setupId: string, query?: LockQuery): Promise<LockPage>;
-  lock(setupId: string, encodedNamespace: string, encodedKey: string): Promise<LockState>;
-  revealLockOwner(setupId: string, encodedNamespace: string, encodedKey: string, reason?: string): Promise<RevealedLockOwner>;
-  forceReleaseLock(setupId: string, encodedNamespace: string, encodedKey: string, version: string, confirmationKey: string, reason?: string): Promise<void>;
-}
-
-export class ResourceClient implements CounterClientPort, LockClientPort {
+export class ResourceClient {
   constructor(private readonly session: SessionClient) {}
 
   async counters(setupId: string, query: CounterQuery = {}): Promise<CounterPage> { return parse(counterPageSchema, await this.session.requestJson(`${this.setup(setupId)}/counters${queryString(query)}`)); }

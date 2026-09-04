@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -107,7 +108,7 @@ class ManagementEntryBulkBrowserIT {
         switch (index) {
             case 0 -> { select(page, "customer:1"); assertThat(selectedPreviewButton(page)).isEnabled(); }
             case 1 -> { select(page, "customer:1"); page.getByLabel("Select customer:1").uncheck(); assertThat(selectedPreviewButton(page)).isDisabled(); }
-            case 2 -> { select(page, "customer:1"); assertThat(row(page, "customer:1")).hasAttribute("data-selected", "true"); }
+            case 2 -> { select(page, "customer:1"); assertThat(row(page, "customer:1")).hasClass(Pattern.compile(".*entry-row--selected.*")); }
             case 3 -> assertThat(selectedPreview(page, "customer:1")).isVisible();
             case 4 -> assertThat(selectedPreview(page, "customer:1")).containsText("Setup browser-postgres");
             case 5 -> assertThat(selectedPreview(page, "customer:1")).containsText("namespace logical-orders");
@@ -120,7 +121,7 @@ class ManagementEntryBulkBrowserIT {
             case 12 -> { Locator dialog = selectedPreview(page, "customer:1"); dialog.getByLabel("Type confirmation phrase").fill("wrong"); assertThat(deleteButton(dialog)).isDisabled(); }
             case 13 -> { Locator dialog = selectedPreview(page, "customer:1"); dialog.getByLabel("Type confirmation phrase").fill(phrase(dialog)); assertThat(deleteButton(dialog)).isEnabled(); }
             case 14 -> { Locator dialog = selectedPreview(page, "customer:1"); dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Cancel")).click(); assertThat(dialog).hasCount(0); assertThat(link(page, "customer:1")).isVisible(); }
-            case 15 -> { Locator dialog = selectedPreview(page, "customer:1"); page.keyboard().press("Escape"); assertThat(dialog).hasCount(0); assertThat(link(page, "customer:1")).isVisible(); }
+            case 15 -> { Locator dialog = selectedPreview(page, "customer:1"); dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Cancel")).focus(); page.keyboard().press("Escape"); assertThat(dialog).hasCount(0); assertThat(link(page, "customer:1")).isVisible(); }
             case 16 -> { Locator dialog = selectedPreview(page, "customer:1"); execute(dialog); assertThat(page.getByRole(AriaRole.STATUS)).containsText("Deleted 1 of 1"); assertThat(link(page, "customer:1")).hasCount(0); assertEquals("0", scalar(context, "SELECT count(*) FROM peegee_cache.cache_entries WHERE cache_key='customer:1'")); }
             case 17 -> { select(page, "customer:1"); select(page, "json-record"); selectedPreviewButton(page).click(); assertThat(bulkDialog(page)).containsText("Resolved 2 entries"); assertThat(bulkDialog(page)).containsText("customer:1"); assertThat(bulkDialog(page)).containsText("json-record"); }
             case 18 -> { matchingPreview(page); assertThat(bulkDialog(page)).containsText("Resolved 4 entries"); }
@@ -179,6 +180,6 @@ class ManagementEntryBulkBrowserIT {
     private static void execute(Locator dialog) { dialog.getByLabel("Type confirmation phrase").fill(phrase(dialog)); deleteButton(dialog).click(); }
     private static Locator link(Page page, String key) { return page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName(key).setExact(true)); }
     private static Locator row(Page page, String key) { return page.getByRole(AriaRole.ROW).filter(new Locator.FilterOptions().setHasText(key)); }
-    private static void filter(Page page, String prefix, String type, String ttl) { page.getByLabel("Key prefix").fill(prefix); page.locator("#entry-value-type").selectOption(type); page.locator("#entry-ttl-state").selectOption(ttl); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Apply filters")).click(); }
+    private static void filter(Page page, String prefix, String type, String ttl) { page.getByLabel("Key prefix").fill(prefix); AntSelect.choose(page, page.locator("#entry-value-type"), type); AntSelect.choose(page, page.locator("#entry-ttl-state"), ttl); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Apply filters")).click(); }
     private static String scalar(ManagementConsolePostgresFixture.Context context, String sql) throws Exception { return ManagementConsolePostgresFixture.queryScalar(context.postgres(), sql); }
 }

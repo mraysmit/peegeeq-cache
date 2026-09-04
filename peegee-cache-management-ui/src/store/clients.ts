@@ -1,6 +1,7 @@
 import { BackendCapabilityClient } from '../api/backend-capability-client';
 import { EntryAdministrationClient } from '../api/entry-administration-client';
 import { InspectionClient } from '../api/inspection-client';
+import { FetchSseTransport, MetricsSseTransport } from '../api/live-transport';
 import { PubSubClient } from '../api/pubsub-client';
 import { ResourceClient } from '../api/resource-client';
 import { SessionClient } from '../api/session-client';
@@ -22,6 +23,12 @@ export interface ManagementClients {
   readonly resource: ResourceClient;
   readonly pubSub: PubSubClient;
   readonly backendCapability: BackendCapabilityClient;
+  /** Setup-scoped metrics SSE (Overview/Monitoring live values). */
+  readonly metricsStream: MetricsSseTransport;
+  /** Pub/Sub message SSE. */
+  readonly pubSubStream: FetchSseTransport;
+  /** Origin prefix for transport paths ('' in production, the loopback origin in tests). */
+  readonly origin: string;
 }
 
 export function createManagementClients(session: SessionClient): ManagementClients {
@@ -33,5 +40,8 @@ export function createManagementClients(session: SessionClient): ManagementClien
     resource: new ResourceClient(session),
     pubSub: new PubSubClient(session),
     backendCapability: new BackendCapabilityClient(session),
+    metricsStream: new MetricsSseTransport(),
+    pubSubStream: new FetchSseTransport(),
+    origin: session.origin,
   };
 }

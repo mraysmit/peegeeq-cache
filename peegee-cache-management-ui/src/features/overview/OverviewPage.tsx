@@ -1,132 +1,92 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from 'react';
+import { ReloadOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Col, Descriptions, Empty, Row, Space, Table, Typography } from 'antd';
+import { useEffect, type ReactNode } from 'react';
 
-import type { MonitoringClientPort, OverviewClientPort } from '../../api/inspection-client';
-import type {
-  ActivityPage,
-  DatabaseMonitoring,
-  Overview,
-  RuntimeMonitoring,
-} from '../../api/inspection-schemas';
-import { ManagementClientError } from '../../api/session-client';
+import type { Overview } from '../../api/inspection-schemas';
 import { formatDisplayBytes } from '../../presentation/display-bytes';
 import { formatDisplayInstant } from '../../presentation/display-time';
+import { useLiveStore } from '../../state/live-store';
 import { loadPreferences } from '../../state/preferences';
+import { SetupScopeBar } from '../../components/common/SetupScopeBar';
+import { StatCard } from '../../components/common/StatCard';
+import { isManagementQueryError, type ManagementQueryError } from '../../store/api/apiBase';
+import {
+  useGetActivityQuery,
+  useGetDatabaseMonitoringQuery,
+  useGetOverviewQuery,
+  useGetRuntimeMonitoringQuery,
+} from '../../store/api/inspectionApi';
+import { formatDecimal, formatDuration, titleCase } from '../../presentation/display-format';
 import { OverviewMonitoring } from './OverviewMonitoring';
-import { SessionTrendChart, type SessionTrendPoint } from './SessionTrendChart';
+import { SessionTrendChart } from './SessionTrendChart';
+
+const { Title, Text } = Typography;
 
 interface OverviewPageProps {
-  readonly client: OverviewClientPort & MonitoringClientPort;
   readonly selectedSetupId?: string;
 }
 
 const valueTypes = ['STRING', 'JSON', 'LONG', 'BYTES'] as const;
+const EMPTY_TREND: readonly never[] = [];
 
-type KeyedValue<T> = { setupId: string; value: T };
-type MonitoringProblems = Partial<Record<'activity' | 'database' | 'runtime', ManagementClientError>>;
-
-export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
-  const [snapshotState, setSnapshotState] = useState<KeyedValue<Overview>>();
-  const [databaseState, setDatabaseState] = useState<KeyedValue<DatabaseMonitoring>>();
-  const [runtimeState, setRuntimeState] = useState<KeyedValue<RuntimeMonitoring>>();
-  const [activityState, setActivityState] = useState<KeyedValue<ActivityPage>>();
-  const [trendState, setTrendState] = useState<{ setupId: string; points: SessionTrendPoint[] }>();
-  const [loading, setLoading] = useState(selectedSetupId !== undefined);
-  const [problemState, setProblemState] = useState<{ setupId: string; value: ManagementClientError }>();
-  const [monitoringProblems, setMonitoringProblems] = useState<MonitoringProblems>({});
-  const snapshot = snapshotState !== undefined && snapshotState.setupId === selectedSetupId
-    ? snapshotState.value
-    : undefined;
-  const database = databaseState !== undefined && databaseState.setupId === selectedSetupId
-    ? databaseState.value
-    : undefined;
-  const runtime = runtimeState !== undefined && runtimeState.setupId === selectedSetupId
-    ? runtimeState.value
-    : undefined;
-  const activity = activityState !== undefined && activityState.setupId === selectedSetupId
-    ? activityState.value
-    : undefined;
-  const trend = trendState !== undefined && trendState.setupId === selectedSetupId
-    ? trendState.points
-    : [];
-  const problem = problemState !== undefined && problemState.setupId === selectedSetupId
-    ? problemState.value
-    : undefined;
-
-  const loadSnapshot = useCallback(async (
-    setupId: string,
-    isActive: () => boolean,
-  ) => {
-    const [overviewResult, databaseResult, runtimeResult, activityResult] = await Promise.allSettled([
-      client.overview(setupId),
-      client.databaseMonitoring(setupId),
-      client.runtimeMonitoring(setupId),
-      client.activity(setupId, { limit: 20 }),
-    ]);
-    if (!isActive()) return;
-
-    if (overviewResult.status === 'fulfilled') {
-      const loaded = overviewResult.value;
-      setSnapshotState({ setupId, value: loaded });
-      setProblemState(undefined);
-      setTrendState((current) => appendTrend(current, setupId, loaded));
-    } else {
-      setProblemState({ setupId, value: asClientError(overviewResult.reason) });
-    }
-    applyMonitoringResult('database', databaseResult, setupId, setDatabaseState, setMonitoringProblems);
-    applyMonitoringResult('runtime', runtimeResult, setupId, setRuntimeState, setMonitoringProblems);
-    applyMonitoringResult('activity', activityResult, setupId, setActivityState, setMonitoringProblems);
-    setLoading(false);
-  }, [client]);
-
+/**
+ * Overview (reference: `peegeeq-management-ui/pages/Overview.tsx`): scope bar, refresh, a row of
+ * StatCards, detail cards, a Recharts trend, monitoring panels, and the top-namespace table.
+ * All reads are RTK Query hooks polling at the operator's refresh preference; the trend is the
+ * only local state and is scoped to the console session (design §3.1/§8.2).
+ */
+export function OverviewPage({ selectedSetupId }: OverviewPageProps) {
+  const setupId = selectedSetupId ?? '';
+  const skip = selectedSetupId === undefined;
+  const pollingInterval = loadPreferences().refreshSeconds * 1_000;
+  const overview = useGetOverviewQuery({ setupId }, { skip, pollingInterval });
+  const database = useGetDatabaseMonitoringQuery({ setupId }, { skip, pollingInterval });
+  const runtime = useGetRuntimeMonitoringQuery({ setupId }, { skip, pollingInterval });
+  const activity = useGetActivityQuery({ setupId, query: { limit: 20 } }, { skip, pollingInterval });
+  // Session-scoped trend lives in the Zustand live store (reference: chart data in the
+  // management store), fed from each new snapshot and never persisted (design §8.2).
+  const recordSnapshot = useLiveStore((state) => state.recordSnapshot);
+  const points = useLiveStore((state) => (selectedSetupId === undefined ? undefined : state.trend[selectedSetupId])) ?? EMPTY_TREND;
   useEffect(() => {
-    if (selectedSetupId === undefined) return undefined;
-    let active = true;
-    const isActive = () => active;
-    const initialTimer = window.setTimeout(() => {
-      void loadSnapshot(selectedSetupId, isActive);
-    }, 0);
-    const timer = window.setInterval(() => {
-      void loadSnapshot(selectedSetupId, isActive);
-    }, loadPreferences().refreshSeconds * 1_000);
-    return () => {
-      active = false;
-      window.clearTimeout(initialTimer);
-      window.clearInterval(timer);
-    };
-  }, [loadSnapshot, selectedSetupId]);
+    if (selectedSetupId !== undefined && overview.data !== undefined) recordSnapshot(selectedSetupId, overview.data);
+  }, [overview.data, recordSnapshot, selectedSetupId]);
 
-  const refresh = async () => {
-    if (selectedSetupId !== undefined) {
-      setLoading(true);
-      await loadSnapshot(selectedSetupId, () => true);
-    }
+  const refresh = () => {
+    void overview.refetch();
+    void database.refetch();
+    void runtime.refetch();
+    void activity.refetch();
   };
+  const refreshing = overview.isFetching || database.isFetching || runtime.isFetching || activity.isFetching;
+  const snapshot = overview.data;
+  const problem = queryError(overview.error);
 
   if (selectedSetupId === undefined) {
     return (
       <Workspace title="Overview">
-        <div className="empty-state">
-          <h2>Select a connected setup</h2>
-          <p>Database-wide cache information is available after a setup is selected.</p>
-        </div>
+        <SetupScopeBar />
+        <Card>
+          <Empty description={<Title level={2} style={{ fontSize: 18 }}>Select a connected setup</Title>}>
+            <Text type="secondary">Database-wide cache information is available after a setup is selected.</Text>
+          </Empty>
+        </Card>
       </Workspace>
     );
   }
 
-  if (snapshot === undefined && loading) {
-    return <Workspace title="Overview"><p aria-busy="true">Loading database overview…</p></Workspace>;
+  if (snapshot === undefined && overview.isLoading) {
+    return (
+      <Workspace title="Overview">
+        <SetupScopeBar />
+        <Text aria-busy="true">Loading database overview…</Text>
+      </Workspace>
+    );
   }
 
   if (snapshot === undefined) {
     return (
-      <Workspace title="Overview" actions={<RefreshButton loading={loading} onRefresh={refresh} />}>
+      <Workspace actions={<RefreshButton loading={refreshing} onRefresh={refresh} />} title="Overview">
+        <SetupScopeBar />
         {problem !== undefined && <ProblemNotice problem={problem} stale={false} />}
       </Workspace>
     );
@@ -134,8 +94,7 @@ export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
 
   return (
     <Workspace
-      title="Overview"
-      actions={<RefreshButton loading={loading} onRefresh={refresh} />}
+      actions={<RefreshButton loading={refreshing} onRefresh={refresh} />}
       description={(
         <>
           <strong>Database-wide snapshot</strong>
@@ -145,83 +104,98 @@ export function OverviewPage({ client, selectedSetupId }: OverviewPageProps) {
           </time>
         </>
       )}
+      title="Overview"
     >
-      {problem !== undefined && <ProblemNotice problem={problem} stale />}
-      <p className="scope-label">
-        Values are database-wide unless a panel is explicitly labelled management-server-local.
-      </p>
-      <div className="metric-grid" aria-label="Database overview totals">
-        <Metric label="Setup status" value={titleCase(snapshot.health.status)} detail={`${snapshot.health.latencyMillis} ms round trip`} />
-        <Metric label="Live cache entries" value={formatDecimal(snapshot.totals.liveEntryCount)} />
-        <Metric label="Live counters" value={formatDecimal(snapshot.totals.liveCounterCount)} />
-        <Metric label="Active locks" value={formatDecimal(snapshot.totals.activeLockCount)} />
-        <Metric label="Expired entries awaiting cleanup" value={formatDecimal(snapshot.totals.expiredEntryCount)} />
-        <Metric label="Expired counters awaiting cleanup" value={formatDecimal(snapshot.totals.expiredCounterCount)} />
-        {snapshot.databaseStats.databaseBytes.availability === 'AVAILABLE'
-          ? <Metric label="Database storage" value={formatDisplayBytes(snapshot.databaseStats.databaseBytes.value)} />
-          : <Metric label="Database storage" value="Unavailable" detail={snapshot.databaseStats.databaseBytes.reason} />}
-        {snapshot.totals.schemaBytes.availability === 'AVAILABLE'
-          ? <Metric label="Cache schema storage" value={formatDisplayBytes(snapshot.totals.schemaBytes.value)} />
-          : <Metric label="Cache schema storage" value="Unavailable" detail={snapshot.totals.schemaBytes.reason} />}
-      </div>
+      <SetupScopeBar />
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        {problem !== undefined && <ProblemNotice problem={problem} stale />}
+        <Text className="scope-label" type="secondary">
+          Values are database-wide unless a panel is explicitly labelled management-server-local.
+        </Text>
 
-      <div className="overview-panels">
-        <section className="overview-panel" aria-labelledby="expiry-heading">
-          <h2 id="expiry-heading">Expiry and cleanup</h2>
-          <dl className="compact-details">
-            <Detail label="Sweeper" value={snapshot.expiry.sweeperEnabled ? 'Enabled' : 'Disabled'} />
-            <Detail label="Oldest backlog lag" value={snapshot.expiry.oldestExpiredRowLagMillis === null ? 'None' : formatDuration(snapshot.expiry.oldestExpiredRowLagMillis)} />
-            <Detail label="Exact expired entries" value={formatDecimal(snapshot.expiryStats.expiredEntryCount)} />
-            <Detail label="Exact expired counters" value={formatDecimal(snapshot.expiryStats.expiredCounterCount)} />
-            <Detail label="Last sweep deleted" value={formatDecimal(snapshot.expiry.lastSweepDeletedRows)} />
-            <Detail label="Last sweep" value={snapshot.expiry.lastSweepAt === null ? 'Not observed' : formatDisplayInstant(snapshot.expiry.lastSweepAt)} />
-          </dl>
+        <Row aria-label="Database overview totals" gutter={[16, 16]} role="group">
+          <Col lg={6} sm={12} xs={24}><StatCard detail={`${snapshot.health.latencyMillis} ms round trip`} title="Setup status" value={titleCase(snapshot.health.status)} /></Col>
+          <Col lg={6} sm={12} xs={24}><StatCard title="Live cache entries" value={formatDecimal(snapshot.totals.liveEntryCount)} /></Col>
+          <Col lg={6} sm={12} xs={24}><StatCard title="Live counters" value={formatDecimal(snapshot.totals.liveCounterCount)} /></Col>
+          <Col lg={6} sm={12} xs={24}><StatCard title="Active locks" value={formatDecimal(snapshot.totals.activeLockCount)} /></Col>
+          <Col lg={6} sm={12} xs={24}><StatCard title="Expired entries awaiting cleanup" value={formatDecimal(snapshot.totals.expiredEntryCount)} /></Col>
+          <Col lg={6} sm={12} xs={24}><StatCard title="Expired counters awaiting cleanup" value={formatDecimal(snapshot.totals.expiredCounterCount)} /></Col>
+          <Col lg={6} sm={12} xs={24}>
+            {snapshot.databaseStats.databaseBytes.availability === 'AVAILABLE'
+              ? <StatCard title="Database storage" value={formatDisplayBytes(snapshot.databaseStats.databaseBytes.value)} />
+              : <StatCard detail={snapshot.databaseStats.databaseBytes.reason} title="Database storage" value="Unavailable" />}
+          </Col>
+          <Col lg={6} sm={12} xs={24}>
+            {snapshot.totals.schemaBytes.availability === 'AVAILABLE'
+              ? <StatCard title="Cache schema storage" value={formatDisplayBytes(snapshot.totals.schemaBytes.value)} />
+              : <StatCard detail={snapshot.totals.schemaBytes.reason} title="Cache schema storage" value="Unavailable" />}
+          </Col>
+        </Row>
+
+        <Row gutter={[16, 16]}>
+          <Col lg={12} xs={24}>
+            <DetailSection heading="Expiry and cleanup" id="expiry">
+              <Descriptions.Item key="sweeper" label="Sweeper">{snapshot.expiry.sweeperEnabled ? 'Enabled' : 'Disabled'}</Descriptions.Item>
+              <Descriptions.Item key="lag" label="Oldest backlog lag">{snapshot.expiry.oldestExpiredRowLagMillis === null ? 'None' : formatDuration(snapshot.expiry.oldestExpiredRowLagMillis)}</Descriptions.Item>
+              <Descriptions.Item key="expired-entries" label="Exact expired entries">{formatDecimal(snapshot.expiryStats.expiredEntryCount)}</Descriptions.Item>
+              <Descriptions.Item key="expired-counters" label="Exact expired counters">{formatDecimal(snapshot.expiryStats.expiredCounterCount)}</Descriptions.Item>
+              <Descriptions.Item key="deleted" label="Last sweep deleted">{formatDecimal(snapshot.expiry.lastSweepDeletedRows)}</Descriptions.Item>
+              <Descriptions.Item key="last-sweep" label="Last sweep">{snapshot.expiry.lastSweepAt === null ? 'Not observed' : formatDisplayInstant(snapshot.expiry.lastSweepAt)}</Descriptions.Item>
+            </DetailSection>
+          </Col>
+          <Col lg={12} xs={24}>
+            <DetailSection heading="Entry value types" id="types">
+              {valueTypes.map((type) => (
+                <Descriptions.Item key={type} label={titleCase(type)}>
+                  {snapshot.valueTypeCounts[type] === undefined ? 'Not reported' : formatDecimal(snapshot.valueTypeCounts[type])}
+                </Descriptions.Item>
+              ))}
+            </DetailSection>
+          </Col>
+        </Row>
+
+        <SessionTrendChart points={points} />
+
+        <OverviewMonitoring
+          activity={activity.data}
+          activityProblem={queryError(activity.error)}
+          database={database.data}
+          databaseProblem={queryError(database.error)}
+          runtime={runtime.data}
+          runtimeProblem={queryError(runtime.error)}
+        />
+
+        <section aria-labelledby="namespace-overview-heading" className="overview-section">
+          <Card title={<Title id="namespace-overview-heading" level={2} style={{ margin: 0, fontSize: 18 }}>Namespace overview</Title>}>
+            {snapshot.topNamespaces.length === 0 ? (
+              <Text>No namespaces were observed in this database snapshot.</Text>
+            ) : (
+              <div aria-label="Namespace overview results" className="table-scroll" role="region" tabIndex={0}>
+                <Table
+                  columns={[
+                    {
+                      title: 'Namespace',
+                      dataIndex: 'namespace',
+                      key: 'namespace',
+                      render: (value: string, row: Overview['topNamespaces'][number]) => (
+                        <><strong>{value}</strong><br /><Text type="secondary">Observed {formatDisplayInstant(row.observedAt)}</Text></>
+                      ),
+                    },
+                    { title: 'Live entries', dataIndex: 'liveEntryCount', key: 'liveEntryCount', render: (value: string) => formatDecimal(value) },
+                    { title: 'Counters', dataIndex: 'liveCounterCount', key: 'liveCounterCount', render: (value: string) => formatDecimal(value) },
+                    { title: 'Locks', dataIndex: 'activeLockCount', key: 'activeLockCount', render: (value: string) => formatDecimal(value) },
+                    { title: 'Expired', dataIndex: 'expiredEntryCount', key: 'expiredEntryCount', render: (value: string) => formatDecimal(value) },
+                    { title: 'Storage', dataIndex: 'estimatedStorageBytes', key: 'estimatedStorageBytes', render: (value: string) => formatDisplayBytes(value) },
+                  ]}
+                  dataSource={snapshot.topNamespaces.map((namespace) => ({ ...namespace, key: namespace.encodedNamespace }))}
+                  pagination={false}
+                  size="small"
+                />
+              </div>
+            )}
+          </Card>
         </section>
-        <section className="overview-panel" aria-labelledby="types-heading">
-          <h2 id="types-heading">Entry value types</h2>
-          <dl className="compact-details">
-            {valueTypes.map((type) => (
-              <Detail key={type} label={titleCase(type)} value={snapshot.valueTypeCounts[type] === undefined ? 'Not reported' : formatDecimal(snapshot.valueTypeCounts[type])} />
-            ))}
-          </dl>
-        </section>
-      </div>
-
-      <SessionTrendChart points={trend} />
-
-      <OverviewMonitoring
-        activity={activity}
-        activityProblem={monitoringProblems.activity}
-        database={database}
-        databaseProblem={monitoringProblems.database}
-        runtime={runtime}
-        runtimeProblem={monitoringProblems.runtime}
-      />
-
-      <section className="overview-section" aria-labelledby="namespace-overview-heading">
-        <h2 id="namespace-overview-heading">Namespace overview</h2>
-        {snapshot.topNamespaces.length === 0 ? (
-          <p>No namespaces were observed in this database snapshot.</p>
-        ) : (
-          <div aria-label="Namespace overview results" className="table-scroll" role="region" tabIndex={0}>
-            <table className="data-table">
-              <thead><tr><th>Namespace</th><th>Live entries</th><th>Counters</th><th>Locks</th><th>Expired</th><th>Storage</th></tr></thead>
-              <tbody>
-                {snapshot.topNamespaces.map((namespace) => (
-                  <tr key={namespace.encodedNamespace}>
-                    <td><strong>{namespace.namespace}</strong><small>Observed {formatDisplayInstant(namespace.observedAt)}</small></td>
-                    <td>{formatDecimal(namespace.liveEntryCount)}</td>
-                    <td>{formatDecimal(namespace.liveCounterCount)}</td>
-                    <td>{formatDecimal(namespace.activeLockCount)}</td>
-                    <td>{formatDecimal(namespace.expiredEntryCount)}</td>
-                    <td>{formatDisplayBytes(namespace.estimatedStorageBytes)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      </Space>
     </Workspace>
   );
 }
@@ -233,9 +207,13 @@ function Workspace({ title, description, actions, children }: {
   readonly children: ReactNode;
 }) {
   return (
-    <section className="workspace" aria-labelledby="overview-title">
-      <div className="workspace__heading">
-        <div><p className="workspace__context">Selected setup inspection</p><h1 id="overview-title">{title}</h1>{description !== undefined && <p>{description}</p>}</div>
+    <section aria-labelledby="overview-title" className="workspace">
+      <div className="workspace__heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
+        <div>
+          <Text className="workspace__context" type="secondary">Selected setup inspection</Text>
+          <Title id="overview-title" level={1} style={{ marginTop: 4 }}>{title}</Title>
+          {description !== undefined && <Text>{description}</Text>}
+        </div>
         {actions}
       </div>
       {children}
@@ -243,67 +221,41 @@ function Workspace({ title, description, actions, children }: {
   );
 }
 
-function RefreshButton({ loading, onRefresh }: { readonly loading: boolean; readonly onRefresh: () => Promise<void> }) {
-  return <button className="button button--secondary" disabled={loading} onClick={() => void onRefresh()} type="button">{loading ? 'Refreshing…' : 'Refresh overview'}</button>;
+function DetailSection({ children, heading, id }: { readonly children: ReactNode; readonly heading: string; readonly id: string }) {
+  return (
+    <section aria-labelledby={`${id}-heading`} className="overview-panel">
+      <Card title={<Title id={`${id}-heading`} level={2} style={{ margin: 0, fontSize: 18 }}>{heading}</Title>}>
+        <Descriptions column={1} size="small">{children}</Descriptions>
+      </Card>
+    </section>
+  );
 }
 
-function Metric({ label, value, detail }: { readonly label: string; readonly value: string; readonly detail?: string }) {
-  return <article className="metric-card"><p>{label}</p><strong>{value}</strong>{detail !== undefined && <small>{detail}</small>}</article>;
+function RefreshButton({ loading, onRefresh }: { readonly loading: boolean; readonly onRefresh: () => void }) {
+  return (
+    <Button disabled={loading} icon={<ReloadOutlined aria-hidden="true" />} onClick={onRefresh}>
+      {loading ? 'Refreshing…' : 'Refresh overview'}
+    </Button>
+  );
 }
 
-function Detail({ label, value }: { readonly label: string; readonly value: string }) {
-  return <div><dt>{label}</dt><dd>{value}</dd></div>;
+function ProblemNotice({ problem, stale }: { readonly problem: ManagementQueryError; readonly stale: boolean }) {
+  return (
+    <Alert
+      description={(
+        <>
+          <p>{problem.message}</p>
+          {problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}
+        </>
+      )}
+      message={stale ? `Stale data · ${problem.code}` : problem.code}
+      role="alert"
+      showIcon
+      type={stale ? 'warning' : 'error'}
+    />
+  );
 }
 
-function ProblemNotice({ problem, stale }: { readonly problem: ManagementClientError; readonly stale: boolean }) {
-  return <div className="diagnostics" role="alert"><strong>{stale ? `Stale data · ${problem.code}` : problem.code}</strong><p>{problem.message}</p>{problem.correlationId !== undefined && <p>Correlation: {problem.correlationId}</p>}</div>;
-}
-
-function asClientError(failure: unknown): ManagementClientError {
-  return failure instanceof ManagementClientError
-    ? failure
-    : new ManagementClientError(0, 'CONNECTION_FAILED', 'The database overview could not be loaded');
-}
-
-function formatDecimal(value: string): string {
-  return BigInt(value).toLocaleString('en-US');
-}
-
-function formatDuration(milliseconds: number): string {
-  if (milliseconds < 1_000) return `${milliseconds} ms`;
-  return `${(milliseconds / 1_000).toFixed(milliseconds % 1_000 === 0 ? 0 : 1)} s`;
-}
-
-function titleCase(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ');
-}
-
-function appendTrend(
-  current: { setupId: string; points: SessionTrendPoint[] } | undefined,
-  setupId: string,
-  snapshot: Overview,
-): { setupId: string; points: SessionTrendPoint[] } {
-  const point: SessionTrendPoint = {
-    observedAt: snapshot.observedAt,
-    liveEntries: snapshot.totals.liveEntryCount,
-    expiredEntries: snapshot.totals.expiredEntryCount,
-  };
-  const points = current?.setupId === setupId ? current.points : [];
-  const withoutSameInstant = points.filter((existing) => existing.observedAt !== point.observedAt);
-  return { setupId, points: [...withoutSameInstant, point].slice(-30) };
-}
-
-function applyMonitoringResult<T>(
-  slot: keyof MonitoringProblems,
-  result: PromiseSettledResult<T>,
-  setupId: string,
-  setValue: (value: KeyedValue<T>) => void,
-  setProblems: Dispatch<SetStateAction<MonitoringProblems>>,
-): void {
-  if (result.status === 'fulfilled') {
-    setValue({ setupId, value: result.value });
-    setProblems((current) => ({ ...current, [slot]: undefined }));
-  } else {
-    setProblems((current) => ({ ...current, [slot]: asClientError(result.reason) }));
-  }
+function queryError(error: unknown): ManagementQueryError | undefined {
+  return isManagementQueryError(error) ? error : undefined;
 }

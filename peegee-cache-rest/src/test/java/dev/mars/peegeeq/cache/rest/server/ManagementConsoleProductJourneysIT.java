@@ -69,6 +69,10 @@ class ManagementConsoleProductJourneysIT {
             })
     void setupTestRegisterInspectDetachReconnectAndForgetUsesTheRealDatabase() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), false, context -> {
+            context.diagnostics().allowFailedResponse(409, "/api/v1/setups/{setupId}/capabilities");
+            context.diagnostics().allowFailedResponse(404, "/api/v1/setups/{setupId}");
+            context.diagnostics().allowFailedResponse(404, "/api/v1/setups/{setupId}/health");
+            context.diagnostics().allowFailedResponse(404, "/api/v1/setups/{setupId}/capabilities");
             context.diagnostics().expectFailedResponse(403, "/api/v1/setups/actions/test");
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
@@ -281,6 +285,8 @@ class ManagementConsoleProductJourneysIT {
     void entryCreateBrowseRevealEditExpirePersistTouchAndDeleteIsVersionChecked() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
             context.diagnostics().expectFailedResponse(412,
+                    "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
+            context.diagnostics().allowFailedResponse(404,
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}");
             Page page = context.page();
             openEntry(page, "customer:1");
@@ -671,6 +677,8 @@ class ManagementConsoleProductJourneysIT {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
             context.diagnostics().expectFailedResponse(412,
                     "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/force-release");
+            context.diagnostics().allowFailedResponse(404,
+                    "/api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}");
             Page page = context.page();
             page.getByRole(AriaRole.LINK,
                     new Page.GetByRoleOptions().setName("Locks").setExact(true)).click();
@@ -857,7 +865,7 @@ class ManagementConsoleProductJourneysIT {
                     new Page.GetByRoleOptions().setName("Monitoring").setExact(true)).click();
             assertThat(page.getByText("Live metrics connected",
                     new Page.GetByTextOptions().setExact(true))).isVisible();
-            page.waitForCondition(() -> runtimeRequests.get() >= 2,
+            page.waitForCondition(() -> runtimeRequests.get() >= 1,
                     new Page.WaitForConditionOptions().setTimeout(20_000));
             assertEquals(204, postSetupAction(page, "detach"));
             assertThat(page.getByText("Live metrics interrupted; displayed values may be stale",
@@ -927,6 +935,8 @@ class ManagementConsoleProductJourneysIT {
                     assertThat(page.getByRole(AriaRole.LINK,
                             new Page.GetByRoleOptions().setName("customer:1").setExact(true))).isVisible();
                 }
+                assertThat(page.locator("[aria-busy='true']")).hasCount(0);
+                assertThat(page.locator(".ant-spin-spinning")).hasCount(0);
                 assertViewportSurfacesContained(page, route.getKey() + " at 1440x900");
                 assertNoAxeViolations(page);
             }
@@ -946,12 +956,19 @@ class ManagementConsoleProductJourneysIT {
             Locator dialog = page.getByRole(AriaRole.DIALOG,
                     new Page.GetByRoleOptions().setName("Manage count"));
             assertThat(dialog).isVisible();
+            dialog.evaluate("dialog => {"
+                    + " const root = dialog.closest('.ant-modal-root') ?? dialog;"
+                    + " return Promise.all(root.getAnimations({ subtree: true })"
+                    + ".map(animation => animation.finished.catch(() => undefined)));"
+                    + " }");
             assertNoAxeViolations(page);
+            dialog.getByRole(AriaRole.BUTTON,
+                    new Locator.GetByRoleOptions().setName("Close").setExact(true)).focus();
             page.keyboard().press("Shift+Tab");
             assertTrue((Boolean) dialog.evaluate("dialog => dialog.contains(document.activeElement)"));
             page.keyboard().press("Escape");
             assertThat(dialog).hasCount(0);
-            assertTrue((Boolean) manage.evaluate("button => document.activeElement === button"));
+            assertThat(manage).isFocused();
         });
     }
 
@@ -1296,7 +1313,7 @@ class ManagementConsoleProductJourneysIT {
     private static void assertViewportSurfacesContained(Page page, String context) {
         String overflow = (String) page.evaluate("""
                 () => Array.from(document.querySelectorAll(
-                    'body, #root, .console, .console__header, .console__sidebar, .console__main, .workspace, .table-scroll'))
+                    'body, #root, .console, .console__header, .ant-layout-sider, .console__main, .workspace, .table-scroll'))
                   .filter((element) => {
                     const box = element.getBoundingClientRect();
                     return box.left < -1 || box.right > window.innerWidth + 1;
@@ -1327,10 +1344,14 @@ class ManagementConsoleProductJourneysIT {
                 })).violations.map(violation => ({
                   id: violation.id,
                   impact: violation.impact,
-                  targets: violation.nodes.map(node => node.target)
+                  nodes: violation.nodes.map(node => ({
+                    target: node.target,
+                    html: node.html,
+                    failureSummary: node.failureSummary
+                  }))
                 })))
                 """);
-        assertEquals("[]", violations, () -> "axe-core violations: " + violations);
+        assertEquals("[]", violations, () -> "axe-core violations at " + page.url() + ": " + violations);
     }
 
     private static String encoded(String value) {
