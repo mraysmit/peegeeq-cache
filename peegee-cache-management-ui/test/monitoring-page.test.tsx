@@ -37,10 +37,12 @@ describe('U8 live monitoring page', () => {
   let sessionClient: SessionClient;
   let streamOpened: number;
   let streamClosed: number;
+  let streamFailuresRemaining: number;
 
   beforeEach(async () => {
     streamOpened = 0;
     streamClosed = 0;
+    streamFailuresRemaining = 1;
     server = await startLoopbackServer((request, respond) => {
       if (route('GET', '/api/v1/session', request)) return respond.json(200, session);
       if (route('GET', '/api/v1/setups', request)) return respond.json(200, setupSummaryListSchema.parse({ items: [] }));
@@ -48,6 +50,10 @@ describe('U8 live monitoring page', () => {
       if (route('GET', '/api/v1/setups/primary/monitoring/runtime', request)) return respond.json(200, runtime);
       if (route('GET', '/api/v1/setups/primary/activity', request)) return respond.json(200, activity);
       if (route('GET', '/api/v1/setups/primary/sse/metrics', request)) {
+        if (streamFailuresRemaining > 0) {
+          streamFailuresRemaining -= 1;
+          return respond.problem(503, 'STREAM_UNAVAILABLE', 'the first metrics handshake is unavailable');
+        }
         streamOpened += 1;
         request.onClose(() => { streamClosed += 1; });
         return respond.sse([
@@ -75,7 +81,8 @@ describe('U8 live monitoring page', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Live metrics connected')).toBeVisible();
+    expect(await screen.findByText('Live metrics connected', undefined, { timeout: 5_000 })).toBeVisible();
+    expect(screen.queryByText('Live metrics connection was interrupted')).not.toBeInTheDocument();
     expect(streamOpened).toBe(1);
     // The SSE runtime frame replaced the cached runtime snapshot without a second REST request.
     expect(await screen.findByText('7')).toBeVisible();

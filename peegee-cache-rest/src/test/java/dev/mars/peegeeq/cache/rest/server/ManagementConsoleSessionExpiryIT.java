@@ -87,7 +87,8 @@ class ManagementConsoleSessionExpiryIT {
         String token = bootstrap.token();
         ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
         List<String> browserErrors = new ArrayList<>();
-        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext()) {
+        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext();
+             var screenshots = ManagementBrowserScreenshots.beforeClose(context)) {
             Page page = context.newPage();
             page.onPageError(browserErrors::add);
             assertEquals(200, page.navigate(origin() + "/ui/").status());

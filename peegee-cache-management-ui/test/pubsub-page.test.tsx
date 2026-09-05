@@ -31,6 +31,7 @@ describe('U7 Pub/Sub page', () => {
   let store: ManagementStore;
   let sessionClient: SessionClient;
   let stream: { opened: number; closed: number };
+  let streamFailuresRemaining: number;
   let contentType: string | null = 'application/json';
 
   beforeEach(async () => {
@@ -39,6 +40,7 @@ describe('U7 Pub/Sub page', () => {
     // emits its 'close' event asynchronously and must not be counted against this test.
     const counters = { opened: 0, closed: 0 };
     stream = counters;
+    streamFailuresRemaining = 0;
     contentType = 'application/json';
     useLiveStore.getState().stopPubSub();
     server = await startLoopbackServer((request, respond) => {
@@ -49,6 +51,10 @@ describe('U7 Pub/Sub page', () => {
         return respond.json(201, subscriptionSummarySchema.parse({ ...subscription, channel, bufferLimit }));
       }
       if (route('GET', STREAM_PATH, request)) {
+        if (streamFailuresRemaining > 0) {
+          streamFailuresRemaining -= 1;
+          return respond.problem(503, 'STREAM_UNAVAILABLE', 'the first Pub/Sub handshake is unavailable');
+        }
         counters.opened += 1;
         request.onClose(() => { counters.closed += 1; });
         return respond.sse([frame(pubSubMessageMetadataSchema.parse({ ...message, contentType }), '1')], { keepOpen: true });
@@ -81,6 +87,7 @@ describe('U7 Pub/Sub page', () => {
 
   it('allows viewer subscription metadata while withholding publish and reveal operations', async () => {
     const user = userEvent.setup();
+    streamFailuresRemaining = 1;
     render({ canOperate: false, canReveal: false });
     expect(screen.queryByRole('heading', { name: 'Publish' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Buffer entries')).toHaveValue(20);
@@ -88,8 +95,9 @@ describe('U7 Pub/Sub page', () => {
     await user.click(screen.getByRole('button', { name: 'Start subscription' }));
 
     const region = await screen.findByRole('region', { name: 'Subscription: orders' });
-    await waitFor(() => expect(region).toHaveTextContent('CONNECTED'));
-    expect(await screen.findByText('Masked')).toBeVisible();
+    await waitFor(() => expect(region).toHaveTextContent('CONNECTED'), { timeout: 5_000 });
+    expect(screen.queryByText('Live Pub/Sub connection was interrupted')).not.toBeInTheDocument();
+    expect(await screen.findByText('Masked', undefined, { timeout: 5_000 })).toBeVisible();
     expect(screen.getByText('application/json')).toBeVisible();
     expect(screen.getByRole('region', { name: 'Retained Pub/Sub messages' })).toHaveAttribute('tabindex', '0');
     expect(screen.queryByRole('button', { name: /Reveal payload/u })).not.toBeInTheDocument();
@@ -108,7 +116,7 @@ describe('U7 Pub/Sub page', () => {
     expect(region).toHaveTextContent('Non-durable');
     expect(region).toHaveTextContent('bounded to 20 messages');
     expect(await screen.findByRole('status')).toHaveTextContent(/non-durable/iu);
-    expect(await screen.findByText('Masked')).toBeVisible();
+    expect(await screen.findByText('Masked', undefined, { timeout: 5_000 })).toBeVisible();
     expect(screen.getByText('Not supplied')).toBeVisible();
     expect(document.body).not.toHaveTextContent('<secret>&value');
 

@@ -137,7 +137,8 @@ class ManagementConsoleTrustedProxyIT {
                 new Browser.NewContextOptions()
                      .setExtraHTTPHeaders(Map.of(
                              "X-PeeGeeQ-User", "alex",
-                             "X-PeeGeeQ-Roles", "viewer,operator")))) {
+                             "X-PeeGeeQ-Roles", "viewer,operator")));
+             var screenshots = ManagementBrowserScreenshots.beforeClose(context)) {
             Page page = context.newPage();
             page.onConsoleMessage(message -> {
                 if (message.type().equals("error")
@@ -223,13 +224,14 @@ class ManagementConsoleTrustedProxyIT {
                 new Browser.NewContextOptions()
                      .setExtraHTTPHeaders(Map.of(
                              "X-PeeGeeQ-User", "viewer-only",
-                             "X-PeeGeeQ-Roles", "viewer")))) {
+                             "X-PeeGeeQ-Roles", "viewer")));
+             var screenshots = ManagementBrowserScreenshots.beforeClose(context)) {
             Page page = context.newPage();
             page.onPageError(browserErrors::add);
             assertEquals(200, page.navigate(origin() + "/ui/setups").status());
             assertThat(page.getByRole(
                     AriaRole.HEADING,
-                    new Page.GetByRoleOptions().setName("Setups"))).isVisible();
+                    new Page.GetByRoleOptions().setName("Setups").setExact(true))).isVisible();
             assertThat(page.getByRole(
                     AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName("Register setup"))).hasCount(0);

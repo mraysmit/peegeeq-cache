@@ -213,7 +213,13 @@ class ManagementEntryInspectionBrowserIT {
         assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName(key).setExact(true))).isVisible();
     }
 
-    private static void reveal(Page page, String key) { openDetail(page, key); page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Reveal value").setExact(true)).click(); }
+    private static void reveal(Page page, String key) {
+        openDetail(page, key);
+        page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Reveal value").setExact(true)).click();
+        assertThat(page.getByRole(
+                AriaRole.BUTTON,
+                new Page.GetByRoleOptions().setName("Hide value").setExact(true))).isVisible();
+    }
     private static void hide(Page page) { page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Hide value").setExact(true)).click(); assertThat(page.getByText("Value hidden", exact())).isVisible(); }
     private static Locator link(Page page, String key) { return page.getByRole(AriaRole.LINK, new Page.GetByRoleOptions().setName(key).setExact(true)); }
     private static Locator row(Page page, String key) { return page.getByRole(AriaRole.ROW).filter(new Locator.FilterOptions().setHasText(key)); }

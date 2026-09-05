@@ -709,6 +709,7 @@ class ManagementConsoleProductJourneysIT {
             assertThat(page.getByRole(AriaRole.ALERT)).containsText("VERSION_MISMATCH");
             release.getByRole(AriaRole.BUTTON,
                     new Locator.GetByRoleOptions().setName("Cancel")).click();
+            assertThat(release).hasCount(0);
             page.getByRole(AriaRole.DIALOG,
                             new Page.GetByRoleOptions().setName("Manage lease"))
                     .getByRole(AriaRole.BUTTON,

@@ -13,6 +13,7 @@
     "dev": "vite --host 127.0.0.1 --port 3001",
     "generate:openapi": "openapi-typescript ../peegee-cache-rest/src/main/openapi/peegeeq-cache-management-v1.yaml -o target/generated-sources/openapi/management.ts",
     "lint": "eslint . --max-warnings 0",
+    "preverify": "node scripts/verify-runtime.mjs",
     "quality": "npm run type-check && npm run lint",
     "test:coverage": "vitest run --coverage",
     "test:run": "vitest run",

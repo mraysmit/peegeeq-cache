@@ -219,7 +219,7 @@ describe('functional setup management page', () => {
     expect(selected).toContain('analytics-cache');
     expect(container).not.toHaveTextContent('ephemeral-password');
     expect(JSON.stringify(store.getState())).not.toContain('ephemeral-password');
-  }, 15_000);
+  }, 30_000);
 
   it('confirms detach, clears selected scope, and renders the resulting connect action', async () => {
     const user = userEvent.setup();

@@ -15,6 +15,7 @@ record ManagementBrowserRunConfig(
         int expectedScenarios,
         Path reportPath,
         Path artifactDirectory,
+        Path documentationScreenshotsDirectory,
         Path runnableArtifact,
         String postgresImage) {
 
@@ -23,6 +24,7 @@ record ManagementBrowserRunConfig(
         requestedScenarioIds = Set.copyOf(requestedScenarioIds);
         Objects.requireNonNull(reportPath, "reportPath");
         Objects.requireNonNull(artifactDirectory, "artifactDirectory");
+        Objects.requireNonNull(documentationScreenshotsDirectory, "documentationScreenshotsDirectory");
         Objects.requireNonNull(runnableArtifact, "runnableArtifact");
         Objects.requireNonNull(postgresImage, "postgresImage");
         if (expectedScenarios < 0) {
@@ -52,6 +54,8 @@ record ManagementBrowserRunConfig(
                         "peegeeq.playwright.report", "target/playwright-evidence.html")),
                 Path.of(snapshot.getProperty(
                         "peegeeq.playwright.artifacts", "target/playwright-artifacts")),
+                Path.of(snapshot.getProperty(
+                        "peegeeq.playwright.screenshots", "../peegee-cache-management-ui/docs/screenshots")),
                 Path.of(snapshot.getProperty(
                         "peegeeq.runnable.artifact", "target/peegee-cache-rest-runnable.jar")),
                 PostgreSQLTestConstants.postgresImage(snapshot));

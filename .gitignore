@@ -69,6 +69,9 @@ yarn-debug.log*
 yarn-error.log*
 
 ### Test Results and Reports ###
+# Regenerated documentation screenshots follow the sibling UI layout.
+/peegee-cache-management-ui/docs/screenshots/*.png
+/peegee-cache-management-ui/docs/screenshots/index.html
 test-results/
 */test-results/
 playwright-report/

@@ -109,7 +109,8 @@ class ManagementBrowserHarnessIT {
 
     private static void verifyBrowserContract(int port, String origin, String token) {
         var browser = ManagementBrowserPlaywrightSuite.browser();
-        try (BrowserContext context = browser.newContext()) {
+        try (BrowserContext context = browser.newContext();
+             var screenshots = ManagementBrowserScreenshots.beforeClose(context)) {
             Page page = context.newPage();
             ManagementBrowserOperationTrace operationTrace = new ManagementBrowserOperationTrace();
             operationTrace.attach(page);
@@ -158,7 +159,8 @@ class ManagementBrowserHarnessIT {
             assertEquals(SameSiteAttribute.STRICT, cookie.sameSite);
             assertFalse(cookie.secure);
 
-            try (BrowserContext wrongOriginContext = browser.newContext()) {
+            try (BrowserContext wrongOriginContext = browser.newContext();
+                 var screenshotsForWrongOrigin = ManagementBrowserScreenshots.beforeClose(wrongOriginContext)) {
                 Page wrongOrigin = wrongOriginContext.newPage();
                 assertEquals(200, wrongOrigin.navigate("http://localhost:" + port + "/ui/").status());
                 @SuppressWarnings("unchecked")

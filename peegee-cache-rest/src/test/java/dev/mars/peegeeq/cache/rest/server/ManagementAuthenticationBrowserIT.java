@@ -350,7 +350,8 @@ class ManagementAuthenticationBrowserIT {
     void authenticatedSessionIsIsolatedFromASecondBrowserContext() {
         scenario(test -> {
             heading(test.authenticate("/ui/"), "Overview");
-            try (BrowserContext second = browser.newContext()) {
+            try (BrowserContext second = browser.newContext();
+                 var screenshots = ManagementBrowserScreenshots.beforeClose(second)) {
                 Page page = test.attach(second.newPage());
                 assertEquals(200, page.navigate(origin() + "/ui/").status());
                 heading(page, "Connect to management console");
@@ -365,7 +366,8 @@ class ManagementAuthenticationBrowserIT {
         scenario(test -> {
             String consumed = bootstrapToken;
             Page original = test.authenticate("/ui/");
-            try (BrowserContext second = browser.newContext()) {
+            try (BrowserContext second = browser.newContext();
+                 var screenshots = ManagementBrowserScreenshots.beforeClose(second)) {
                 Page replay = test.attach(second.newPage());
                 assertEquals(200, replay.navigate(origin() + "/ui/").status());
                 heading(replay, "Connect to management console");
@@ -509,7 +511,8 @@ class ManagementAuthenticationBrowserIT {
     private void scenario(BrowserAction action) {
         List<String> pageErrors = new ArrayList<>();
         ManagementBrowserOperationTrace trace = new ManagementBrowserOperationTrace();
-        try (BrowserContext context = browser.newContext()) {
+        try (BrowserContext context = browser.newContext();
+             var screenshots = ManagementBrowserScreenshots.beforeClose(context)) {
             Page page = context.newPage();
             page.onPageError(pageErrors::add);
             trace.attach(page);

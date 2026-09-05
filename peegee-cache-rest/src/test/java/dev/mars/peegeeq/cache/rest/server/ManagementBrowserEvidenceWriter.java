@@ -12,6 +12,9 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.Locale;
+import java.util.Base64;
+import javax.imageio.ImageIO;
+import java.io.UncheckedIOException;
 
 /** Writes one portable, self-contained HTML file for a complete Playwright run. */
 final class ManagementBrowserEvidenceWriter {
@@ -24,6 +27,32 @@ final class ManagementBrowserEvidenceWriter {
     }
 
     static void write(Path reportFile, ManagementBrowserEvidenceReport report) throws IOException {
+        write(reportFile, report, null);
+    }
+
+    static void write(Path reportFile, ManagementBrowserEvidenceReport report, Path gallery) throws IOException {
+        for (var scenario : report.scenarios()) {
+            if (scenario.status().equals("PASSED")
+                    && (!scenario.screenshots().stream().anyMatch(image -> image.kind().equals("viewport"))
+                    || !scenario.screenshots().stream().anyMatch(image -> image.kind().equals("element")))) {
+                throw new IllegalStateException("Missing screenshot evidence for " + scenario.id());
+            }
+            for (var screenshot : scenario.screenshots()) {
+                if (!java.util.Set.of("viewport", "element").contains(screenshot.kind())
+                        || !screenshot.path().getFileName().toString().matches(
+                        java.util.regex.Pattern.quote(scenario.id()) + "-[0-9]+-" + screenshot.kind() + "\\.png")) {
+                    throw new IllegalStateException("Screenshot does not belong to scenario " + scenario.id());
+                }
+                var image = ImageIO.read(screenshot.path().toFile());
+                if (image == null || image.getWidth() < 1 || image.getHeight() < 1) {
+                    throw new IllegalStateException("Invalid screenshot evidence for " + scenario.id());
+                }
+                if (screenshot.kind().equals("viewport")
+                        && (image.getWidth() != 1440 || image.getHeight() != 900)) {
+                    throw new IllegalStateException("Screenshot viewport must be 1440x900 for " + scenario.id());
+                }
+            }
+        }
         String html = html(report);
         for (String canary : report.sensitiveCanaries()) {
             if (!canary.isEmpty() && html.contains(canary)) {
@@ -32,6 +61,7 @@ final class ManagementBrowserEvidenceWriter {
             }
         }
 
+        if (gallery != null) ManagementBrowserScreenshotGallery.publish(html, gallery);
         Path target = reportFile.toAbsolutePath().normalize();
         Files.createDirectories(target.getParent());
         Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
@@ -65,6 +95,7 @@ final class ManagementBrowserEvidenceWriter {
                 @media(prefers-color-scheme:dark){:root{--bg:#0b1220;--panel:#111827;--text:#e5e7eb;--muted:#94a3b8;--line:#334155}.passed{background:#14532d;color:#bbf7d0}.failed{background:#7f1d1d;color:#fecaca}}
                 @media(max-width:640px){main{padding:16px}header{padding:22px 20px}section{padding:18px}.header-grid{grid-template-columns:1fr}}
                 @media print{body{background:#fff}main{max-width:none;padding:0}section,header{box-shadow:none}}
+                details{min-width:180px}summary{cursor:pointer;color:#2563eb}figure{margin:12px 0}figure img{display:block;max-width:100%;height:auto;border:1px solid var(--line)}figcaption{font-size:12px;color:var(--muted)}details[open]{min-width:600px}
                 </style></head><body><main>
                 """);
         out.append("<header><p class=\"eyebrow\">Real packaged-product browser assurance</p>")
@@ -80,6 +111,8 @@ final class ManagementBrowserEvidenceWriter {
         card(out, "Scenarios", report.scenarios().size());
         card(out, "Passed", passed);
         card(out, "Failed", failed);
+        card(out, "Scenarios with screenshots", report.scenarios().stream()
+                .filter(result -> !result.screenshots().isEmpty()).count());
         card(out, "Elapsed", duration(Duration.between(report.startedAtUtc(), report.completedAtUtc())));
         out.append("</div></section>");
 
@@ -106,7 +139,7 @@ final class ManagementBrowserEvidenceWriter {
         out.append("<section><h2>Scenario evidence</h2><div class=\"table-wrap\"><table>")
                 .append("<thead><tr><th>ID and behavior</th><th>Area / risk</th><th>Status</th>")
                 .append("<th>Duration</th><th>Requirement</th><th>Scenario operations</th>")
-                .append("<th>Evidence</th><th>Failure</th></tr></thead><tbody>");
+                .append("<th>Evidence</th><th>Screenshots</th><th>Failure</th></tr></thead><tbody>");
         report.scenarios().stream()
                 .sorted(Comparator.comparing(ManagementBrowserEvidenceReport.ScenarioResult::id))
                 .forEach(result -> {
@@ -119,10 +152,33 @@ final class ManagementBrowserEvidenceWriter {
                             .append(escape(result.requirement())).append("</td><td>")
                             .append(escape(String.join(", ", result.observedOperations()))).append("</td><td>")
                             .append(escape(result.evidence().stream().map(Enum::name).sorted().toList()))
-                            .append("</td><td class=\"failure\">").append(escape(result.failure()))
+                            .append("</td><td>");
+                    screenshots(out, result);
+                    out.append("</td><td class=\"failure\">").append(escape(result.failure()))
                             .append("</td></tr>");
                 });
         out.append("</tbody></table></div></section>");
+    }
+
+    private static void screenshots(StringBuilder out, ManagementBrowserEvidenceReport.ScenarioResult result) {
+        if (result.screenshots().isEmpty()) {
+            out.append("No screenshot captured");
+            return;
+        }
+        out.append("<details><summary>View screenshots (").append(result.screenshots().size())
+                .append(")</summary>");
+        for (var screenshot : result.screenshots()) {
+            try {
+                String label = result.id() + " — " + screenshot.path().getFileName();
+                out.append("<figure><img loading=\"lazy\" alt=\"").append(escape(label))
+                        .append("\" src=\"data:image/png;base64,")
+                        .append(Base64.getEncoder().encodeToString(Files.readAllBytes(screenshot.path())))
+                        .append("\"><figcaption>").append(escape(label)).append("</figcaption></figure>");
+            } catch (IOException failure) {
+                throw new UncheckedIOException("Could not embed screenshot for " + result.id(), failure);
+            }
+        }
+        out.append("</details>");
     }
 
     private static void headerItem(StringBuilder out, String label, String htmlValue) {

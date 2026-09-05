@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Playwright Implementation Plan
 
-Status: **557-SCENARIO DESKTOP-ONLY IMPLEMENTATION — POSTGRESQL 18.3 CUMULATIVE GATE VERIFIED**
+Status: **P0-P7 COMPLETE — 557-SCENARIO DESKTOP-ONLY IMPLEMENTATION, POSTGRESQL 15-18 BASELINE, AND PER-SCENARIO SCREENSHOT ACCEPTANCE VERIFIED**
 
 Required minimum: **540 distinct Playwright browser scenarios**
 
@@ -36,17 +36,17 @@ Implementation evidence as of 3 September 2026:
 - the correctness-remediation extension adds 26 non-inflated scenarios: 18 independently advertised capability-degradation cases, five real trusted-proxy viewer workflows, counter cursor pagination, and exact/over-limit Pub/Sub payload boundaries;
 - setup capability responses now derive management, Pub/Sub, payload-reveal, batch, scan, core-metrics, and owner-lock availability from the connected runtime instead of advertising universal support; entry and counter bulk-delete capabilities are independently represented, and unavailable inspection or mutation features remove only their corresponding destinations and controls;
 - PostgreSQL-backed scenarios now reject both missing and undeclared feature operations, while failed HTTP responses must match the exact expected status and canonical route rather than only an expected count; and
-- actual JUnit browser outcomes now produce one atomic self-contained `playwright-evidence.html` report with environment details and scenario metadata; PostgreSQL-backed failures additionally capture a DOM-sanitized full-page screenshot; and
+- actual JUnit browser outcomes produce one atomic self-contained `playwright-evidence.html` report with environment details, scenario metadata, and direct browser screenshots; and
 - the historical post-canary PostgreSQL 18.3 cumulative gate on 31 August 2026 passed **559/559** scenarios before the unsupported mobile coverage was removed. The capability-remediation parent declares 557 desktop-only scenarios, including `PW-BACKEND-001` for complete facade parity and seven additional independent capability-degradation cases; its clean 2 September 2026 reactor passed **557/557** scenarios plus all three runnable-artifact/evidence checks, with 22 minutes of browser execution and 25 minutes 52 seconds total reactor time; and
-- the fixture-lifecycle parent subsequently removed authentication and setup-registration calls from ordinary test bodies, moved preparation into the shared fixture, added an audit-backed exactly-once registration guard, and centralized every scenario on one suite-owned Playwright/Chromium process. A source-policy gate rejects any additional Playwright or Chromium launch site. That parent passed its then-current 550-scenario catalogue on 3 September; the merged 557-scenario fixture and U11 locator changes require a fresh cumulative gate; and
+- the fixture-lifecycle parent subsequently removed authentication and setup-registration calls from ordinary test bodies, moved preparation into the shared fixture, added an audit-backed exactly-once registration guard, and centralized every scenario on one suite-owned Playwright/Chromium process. A source-policy gate rejects any additional Playwright or Chromium launch site. That parent passed its then-current 550-scenario catalogue on 3 September; the merged 557-scenario fixture and U11 locator changes passed the fresh cumulative gate and PostgreSQL 15-18 matrix on 5 September; and
 - focused packaged PostgreSQL gates pass `PW-BACKEND-001` for existence, batch get/set, value scan, exact metrics, and owner-lock acquire/renew/ownership/release, and `PW-COUNTER-001` for create-if-missing signed adjustment with TTL and committed-state verification; and
 - report generation registers runtime bootstrap tokens, the fixture database password, and seeded revealed values as sensitive canaries, removes stale evidence before every browser test plan, and fails Maven verification unless a fresh canary-clean report is produced.
 
 Post-implementation release-validation work remains:
 
-- add a reviewed trace-sanitization format before enabling Playwright trace archives; sanitized screenshots and real JUnit-to-HTML reporting are implemented;
+- add a reviewed trace-sanitization format before enabling Playwright trace archives; direct screenshots and real JUnit-to-HTML reporting are implemented;
 - complete failure-path canaries for database, durable-audit, sensitive-surface, and resource-cleanup oracles;
-- execute the verified desktop-only 557-scenario suite on PostgreSQL 15.17, 16.13, and 17.11; PostgreSQL 18.3 is green.
+- the verified desktop-only 557-scenario suite and all three infrastructure checks passed on PostgreSQL 15.17, 16.13, 17.11, and 18.3 on 5 September 2026.
 
 ## 1. Purpose
 
@@ -197,7 +197,7 @@ The fixture must provide purpose-built helpers for:
 - real network offline/online control through the browser context;
 - setup detach/reconnect and server stop/start fault actions;
 - console, page-error, failed-response, and resource-gauge capture;
-- per-scenario screenshot and trace capture on failure;
+- per-scenario viewport and focused screenshot capture on success and failure; trace archives remain deferred pending sanitization;
 - sensitive-value canary registration and cross-surface scanning; and
 - cleanup verification after both success and failure.
 
@@ -401,7 +401,7 @@ Coverage includes:
 
 Cumulative and final target: **540 scenarios**.
 
-Status: **PARENT GATES VERIFIED; MERGED CUMULATIVE GATE PENDING** — seven independent capability-degradation cases bring the merged catalogue to 557. The capability-remediation parent passed all 557 scenarios and all three runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026. The merged shared-fixture and U11 locator changes have not yet completed that gate.
+Status: **COMPLETE; MERGED CUMULATIVE AND POSTGRESQL 15-18 GATES VERIFIED** — seven independent capability-degradation cases bring the merged catalogue to 557. The capability-remediation parent passed all 557 scenarios and all three runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026; the merged shared-fixture/U11 working tree repeated that complete gate and passed the four-version matrix on 5 September 2026.
 
 Coverage includes:
 
@@ -538,9 +538,17 @@ Each complete run produces one human-readable HTML report containing:
 - failure diagnostics; and
 - one overall total with passed and failed counts.
 
-JUnit XML remains the machine-readable Maven/CI source. The HTML report aggregates those results and scenario metadata without exposing credentials, bootstrap tokens, CSRF proofs, revealed values, lock owners, or Pub/Sub payloads.
+JUnit XML remains the machine-readable Maven/CI source. Report text and diagnostics retain their
+existing leakage checks. Embedded screenshots reproduce the development UI directly, including
+whatever values are visibly displayed; screenshot pixels are not redacted or sanitized.
 
-DOM-sanitized failure screenshots are written under `target/playwright-artifacts`. Trace archives remain disabled until their request/response and DOM data can be sanitized without weakening diagnostic value. Generated artifacts are never committed.
+Paired, unmodified browser screenshots are written under `target/playwright-artifacts/screenshots/<run-id>/<scenario-id>/`,
+with sequence-numbered `viewport.png` and `element.png` filenames. The self-contained HTML report embeds
+the images under their scenario rows and reports the number of scenarios with screenshots. Capture
+runs before fixture cleanup, including the separate authentication contexts. Passing report rows must
+have both image kinds, valid PNG files, matching scenario filenames, and a 1440x900 viewport. Failure
+to capture or validate evidence fails acceptance. Trace archives remain disabled until their
+request/response and DOM data can be sanitized. Generated artifacts are never committed.
 
 ## 15. Per-wave verification ladder
 
@@ -570,7 +578,8 @@ This plan is complete only when:
 - all scenarios pass against PostgreSQL 15.17, 16.13, 17.11, and 18.3;
 - the complete reactor has zero failures, errors, unexpected skips, retries, browser errors, dump files, secret leaks, or leaked resources;
 - no Mockito or substitute mocking framework is introduced;
-- the consolidated HTML evidence is complete and sanitized; and
+- the consolidated HTML evidence is complete, its text diagnostics pass leakage checks, and its screenshots reproduce the visible UI without capture-time masking; and
+- every passing scenario has a viewport screenshot and a focused screenshot embedded in that report; and
 - the management UI design and implementation records contain the final exact totals and verification evidence.
 
 ## 17. Remaining external actions
@@ -581,3 +590,148 @@ This Playwright expansion does not change the previously recorded external relea
 - credentialed Maven Central publication.
 
 Those actions remain separate from browser-test implementation and require the appropriate infrastructure or owner-supplied credentials.
+
+## 18. P7 — Screenshot evidence for every scenario (5 September 2026)
+
+**Historical P7 baseline: COMPLETE — all 557 scenarios had paired screenshots in the passing
+full-reactor report. The original screenshot masking described below is superseded by the
+no-masking correction at the end of this section.**
+
+Reference conventions inspected directly in the sibling `peegeeq` repository:
+
+- `peegeeq-management-ui/playwright.config.ts`: `screenshot: 'on'` for every ordinary test;
+- `peegeeq-utilities-ui/src/tests/e2e/specs/functionality-screenshots.spec.ts` and
+  `functional-state-screenshots.spec.ts`: visible-target assertion, scrolling, disabled animations,
+  named `element.png` / `viewport.png` attachments, and a declared-case-count guard;
+- `peegeeq-utilities-ui/playwright.screenshots.config.ts`: one fixed 1440x900 desktop viewport.
+  Its ordinary E2E configuration remains failure-only; the paired captures belong to dedicated
+  screenshot suites.
+
+The original P7 implementation adopted these conventions in its Java Playwright catalogue. The scenario listener
+owns run/scenario identity and attachment collection. The PostgreSQL fixture captures immediately
+after the journey, before subscription cleanup. Separate authentication contexts use a capture scope
+that closes before the real browser context. The report embeds PNG bytes, so it stays portable without
+external image paths. That original implementation also masked passwords, textareas, revealed values,
+and canary-bearing elements. This masking was subsequently removed at the user's direction; it is
+not a current requirement. Scenario-specific focused checkpoints remain supported.
+
+RED evidence: `target/screenshot-red.log` records a passing row incorrectly accepted without images;
+`target/screenshot-capture-red.log` records the missing capture implementation;
+`target/screenshot-report-red.log` records acceptance of an image belonging to another scenario.
+`target/screenshot-json-red.log` and `target/screenshot-pixel-diagnostic.log` record the JSON-tree
+and scalar-text masking regression in the superseded masking implementation. Its former correction
+masked value-renderer paths and suppressed sensitive text painting during capture. Those pixel-masking
+assertions have now been replaced with native-pixel equality assertions. PNG dimensions, unchanged
+field values, invalid files, and write failures remain covered. `target/screenshot-reactor-dialog-red.log` exposed capture
+of dialogs during their closing animation; `target/screenshot-dialog-red.log` reproduces it with a
+real HTTP fixture. Automatic target selection now waits for finite UI animations to finish, without
+fixed sleeps or blocking on continuous spinners. The three new infrastructure browser checks do not
+inflate the 557-scenario catalogue; a complete Failsafe run now contains 563 tests (557 + six infrastructure).
+
+Focused GREEN evidence: `target/screenshot-focused.log` (8 unit/policy tests and 6 browser tests),
+`target/screenshot-product-focused.log` (12 unit/policy/catalogue tests and 98 browser tests; 96
+product scenarios with 196 embedded PNGs), and `target/screenshot-infrastructure-final.log` (10
+unit/policy tests and 2 real-browser infrastructure tests after the JSON/pixel masking correction).
+No failures, errors, or skips in those completed GREEN runs.
+
+The animation correction passes `target/screenshot-dialog-green.log`: 12 unit/policy/catalogue
+tests and 110 browser tests (107 product scenarios plus three screenshot infrastructure checks),
+zero failures/errors/skips, in 6:09. This includes all 13 full-console journeys, 44 counter scenarios,
+and 50 entry-administration scenarios. The two interrupted full attempts are retained as diagnostic
+logs, not passing acceptance evidence.
+
+Final acceptance on 5 September 2026, base `3305c30` plus the uncommitted remediation/P7 working tree:
+
+- Command: `mvn --batch-mode --no-transfer-progress verify -Dpeegeeq.test.postgres.image=postgres:18.3-alpine`.
+- All 11 reactor modules passed in **32:27**, finishing at **16:01:23 +08:00**.
+- Java unit evidence: 103 Surefire XML reports, **568 tests**, zero failures/errors/skips.
+- UI evidence: **36 files / 170 tests**, with type checking, lint, coverage thresholds, and build passing.
+- Browser evidence: 28 Failsafe XML reports, **563 tests**, zero failures/errors/skips.
+- `peegee-cache-rest/target/playwright-evidence.html`: **557 distinct scenario rows, all passed**, and
+  **1,122 embedded PNGs**. Every scenario has at least one viewport/focused pair; extra browser
+  contexts account for the eight images above the 1,114-image minimum. No external image sources.
+- PNGs are retained in `peegee-cache-rest/target/playwright-artifacts/screenshots/eebdb6c0-40ea-434c-a187-433e9a68f55e/`:
+  exactly 557 scenario directories, no missing pairs. The report writer validated every PNG,
+  its scenario filename, and every viewport's 1440x900 dimensions.
+- Final log: `target/screenshot-reactor-postgresql-18.3.log`. The current 132 log/XML files have no
+  sensitive-canary or crash/failure-signature matches; no Surefire/Failsafe dump files exist.
+- Changed-source banned-pattern review is clean, including mocking frameworks, fixed sleeps,
+  disabled tests, and browser route/content replacement. Documentation links and whitespace checks pass.
+- Representative lock-release and revealed JSON-tree images were visually inspected. The JSON
+  content is masked while the controls and metadata remain readable; the closing-dialog race is absent.
+
+The earlier 560-test PostgreSQL 15–18 matrix remains the pre-P7 baseline. The new screenshot layer
+was verified by this fresh complete PostgreSQL 18.3 reactor; PostgreSQL 15–17 were not rerun for P7.
+Generated reports, screenshots, and RED/diagnostic logs remain ignored build output, not source files.
+
+### P7 documentation-layout correction
+
+The first implementation incorrectly exposed scenario-ID diagnostic directories as the screenshot
+organization. The actual sibling documentation conventions are flat, descriptive PNGs:
+`peegeeq-management-ui/src/tests/e2e/specs/take-screenshots.spec.ts` publishes names such as
+`01-overview.png` to `docs-design/peegeeq-management-ui/screenshots/`, and Utilities
+`src/tests/e2e/specs/screenshots.spec.ts` publishes names such as `09-detach-setup-confirm.png` to
+`docs/screenshots/`. Paired attachments alone did not satisfy that convention.
+
+The corrected user-facing output is [the UI screenshot gallery](../../peegee-cache-management-ui/docs/screenshots/index.html)
+and its flat `peegee-cache-management-ui/docs/screenshots/` directory. It contains all **1,122 PNGs**
+from the verified **557-scenario** run, with descriptive feature/behavior names, visible previews,
+feature navigation, and search. Raw scenario-ID files remain internal traceability only. PNG bytes and
+the source-run timestamp are preserved; this is republication, not a claimed fresh browser execution.
+
+Full passing catalogue runs publish the documentation gallery before accepting their evidence report;
+focused or failed runs leave the complete gallery unchanged. The configured output path is injected
+through `peegeeq.playwright.screenshots`. Gallery publication failure fails report generation.
+
+TDD evidence: `target/screenshot-gallery-red.log` and `target/screenshot-gallery-wiring-red.log`;
+GREEN: `target/screenshot-gallery-wiring-green.log`, **19 tests**, zero failures/errors/skips. Coverage
+includes flat names, visible previews, duplicate names, safe paths/escaped labels, byte preservation,
+missing/corrupt images, isolated configuration, automatic publication, and write-failure propagation.
+The earlier 32:27 full-reactor acceptance remains the capture baseline, not a rerun of this layout change.
+
+### P7 screenshot appearance correction — no masking
+
+The user explicitly requires screenshots of the actual development UI with nothing masked by the
+capture pipeline. The earlier blanket masks were not requested and made the user guide's value
+editors and JSON viewers unreadable. Remove every capture mask, injected text-suppression style,
+canary-based pixel filter, and capture-only DOM attribute. Do not substitute values or introduce
+a separate redacted documentation mode. Preserve native application rendering and reveal/hide behavior.
+
+The screenshot regression must compare both viewport and focused PNG pixels with native Chromium
+captures, verify unchanged DOM/form state, and confirm that visible value changes affect the image.
+Regenerate all catalogue images from the real browser, then publish the complete passing report and
+flat documentation gallery. Old masked images cannot be corrected by copying or relabelling them.
+Update the user guide's captions to describe the regenerated visible content.
+
+TDD verification:
+
+- `target/screenshot-unmasked-red.log`: three screenshot tests executed, with the native-pixel
+  equality test failing because the old capture produced black where Chromium rendered white.
+- `target/screenshot-unmasked-unit-green.log`: 17 report, gallery, configuration, and catalogue
+  tests passed with zero failures/errors/skips.
+- `target/screenshot-unmasked-green.log`: all three real-Chromium screenshot infrastructure tests
+  passed, including viewport/focused native-pixel equality and visible-value pixel changes.
+- The read-only publication checker detected 289 large solid-black rectangles in the old 1,122-image
+  gallery (`target/screenshot-old-mask-detection.log`), establishing that it detects the original defect.
+
+Complete regeneration passed on 5 September 2026:
+
+- Command: `mvn --batch-mode --no-transfer-progress verify -Dpeegeeq.test.postgres.image=postgres:18.3-alpine`.
+- All 11 modules passed in **32:34**, finishing at **19:30:28 +08:00**.
+- **574 Java tests** in 104 fresh Surefire reports; **170 UI tests** in 36 files;
+  **563 browser/infrastructure tests** in 28 fresh Failsafe reports. Zero failures, errors, or skips.
+- Fresh capture run: `a2c15136-760c-4abd-9517-072bab28c951`, containing all **557 scenario directories**.
+- The complete passing run regenerated `peegee-cache-rest/target/playwright-evidence.html` and the
+  flat UI documentation screenshot gallery. The guide's 28 figures remain grouped into 16 journeys.
+- Log: `target/screenshot-unmasked-reactor-postgresql-18.3.log`. No Maven error/failure signatures,
+  dump files, or remaining Docker containers were found after completion.
+- Visually inspected the actual regenerated entry editor, retained conflict value, JSON tree,
+  message payload, setup form, and Advanced owner-lock controls. Values render directly and empty
+  fields are ordinary controls rather than black rectangles. No fixture values were substituted.
+- `target/screenshot-unmasked-publication-verification.log`: **557 passing scenarios, 1,122 PNGs**,
+  all published PNG bytes identical to the fresh report, **28 valid guide image references**, and
+  **zero solid-black rectangles of at least 80 × 12 pixels** across the entire gallery. All gallery
+  PNGs have fresh publication timestamps, and no scenario IDs appear in its user-facing organization.
+
+The PostgreSQL 15–17 results remain the earlier compatibility baseline; this correction was verified
+with the complete PostgreSQL 18.3 reactor. Historical masked reports are not the current publication.

@@ -1,6 +1,7 @@
 package dev.mars.peegeeq.cache.rest.server;
 
 import java.time.Instant;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
@@ -38,11 +39,22 @@ record ManagementBrowserEvidenceReport(
             String requirement,
             List<String> observedOperations,
             Set<ManagementBrowserEvidence> evidence,
-            String failure) {
+            String failure,
+            List<Screenshot> screenshots) {
 
         ScenarioResult {
             observedOperations = List.copyOf(observedOperations);
             evidence = Set.copyOf(evidence);
+            screenshots = List.copyOf(screenshots);
+        }
+
+        ScenarioResult(String id, String name, ManagementBrowserArea area, ManagementBrowserRisk risk,
+                String status, long durationMilliseconds, String requirement, List<String> observedOperations,
+                Set<ManagementBrowserEvidence> evidence, String failure) {
+            this(id, name, area, risk, status, durationMilliseconds, requirement, observedOperations,
+                    evidence, failure, List.of());
         }
     }
+
+    record Screenshot(String kind, Path path) { }
 }

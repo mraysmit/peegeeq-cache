@@ -51,7 +51,10 @@ export function MonitoringPage({ selectedSetupId }: { readonly selectedSetupId?:
       onRuntime: (snapshot) => {
         dispatch(inspectionApi.util.upsertQueryData('getRuntimeMonitoring', { setupId: selectedSetupId }, snapshot));
       },
-      onState: setLiveState,
+      onState: (state) => {
+        setLiveState(state);
+        if (state === 'CONNECTED') setLiveMessage('');
+      },
       onReset: (reason) => { setLiveMessage(reason); void refetchDatabase(); void refetchRuntime(); void refetchActivity(); },
       onError: setLiveMessage,
     });

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -211,7 +211,7 @@ describe('U3 database overview page', () => {
 
     overviewStatus = 'updated';
     await user.click(await screen.findByRole('button', { name: 'Refresh overview' }));
-    expect(await screen.findByRole('time', { name: 'Snapshot observed at' })).toHaveAttribute('datetime', '2026-08-26T10:16:30Z');
+    await waitFor(() => expect(screen.getByRole('time', { name: 'Snapshot observed at' })).toHaveAttribute('datetime', '2026-08-26T10:16:30Z'));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Current-session cache row trend')).toHaveTextContent('2 snapshots');
   });

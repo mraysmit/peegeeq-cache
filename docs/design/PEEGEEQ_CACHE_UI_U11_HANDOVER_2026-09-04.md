@@ -1,34 +1,63 @@
 # PeeGeeQ Cache Management UI — U11 Reference-Parity Migration Handover (4 September 2026)
 
-**Author:** Claude (Cowork session), on behalf of Mark A Ray-Smith; updated by Codex after the Windows verification pass
+**Author:** Claude (Cowork session), on behalf of Mark A Ray-Smith; updated by Codex after the Windows verification and evidence review
+**Evidence review:** 5 September 2026
 **Repository:** `peegeeq-cache` — module `peegee-cache-management-ui`, plus the Java Playwright suite in `peegee-cache-rest/src/test/java/dev/mars/peegeeq/cache/rest/server`
-**Checkout:** `C:\Users\markr\dev\java\corejava\peegeeq-cache` (branch `master`, HEAD `78fdabf` "UI U11.5-U11.9: complete reference-parity migration in the UI module")
-**Reference implementation:** `C:\Users\markr\dev\java\corejava\peegeeq\peegeeq-management-ui`
+**Checkout:** `C:\Users\mraysmit\dev\idea-projects\peegeeq-cache` (branch `master`, base HEAD `3305c30` "feat(management-ui): complete U11 parity and harden browser verification", plus the uncommitted 5 September remediation and evidence-documentation working tree described here)
+**Reference implementation:** `C:\Users\mraysmit\dev\idea-projects\peegeeq\peegeeq-management-ui`
 **Governing documents:** `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md` (phase U11, §4.1 pinning rule, evidence blocks U11.0-U11.9, §9 status table, §10 completion definition); `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md` §3.1 (antd/Recharts mandate) and §8.1/§8.2 (state ownership, sensitive data); `docs/guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md` §5 (management UI component and client tests)
 
 ---
 
 ## 0. Executive summary
 
+**Screenshot appearance correction (5 September):** the user explicitly requires no capture-time
+masking anywhere. The blanket masks, text-suppression style, and canary-based pixel filtering have
+been removed; captures now reproduce the actual development UI. No replacement values or separate
+redacted mode is introduced. Native password inputs and application reveal/hide behavior are unchanged.
+The regression compares viewport/focused images with native Chromium pixels. Focused verification
+passes 17 supporting tests and three screenshot infrastructure tests. Complete regeneration passed
+all 11 modules in 32:34 at 19:30:28 +08:00: 574 Java tests, 170 UI tests, and 563 browser/infrastructure
+tests, with zero failures/errors/skips. All 557 scenarios were recaptured without screenshot masks;
+the current report, flat gallery, and guide use this fresh run. See the no-masking correction in §18
+of the Playwright plan and `target/screenshot-unmasked-reactor-postgresql-18.3.log`. The earlier P7
+results below describe the historical masked run, not the corrected images.
+
+**Subsequent screenshot work (P7, 5 September):** the user requested screenshots for every scenario
+following the sibling management and Utilities UI conventions. Paired viewport/focused captures,
+scenario attachments in the self-contained HTML report, and missing/invalid-image acceptance gates
+are implemented and verified. The full PostgreSQL 18.3 reactor passed in 32:27 at 16:01:23 +08:00:
+568 Java unit tests, 170 UI tests, and 563 browser/infrastructure tests, all green. The portable report
+contains all 557 scenarios and 1,122 embedded PNGs, with no missing pairs. See §18 of
+[the Playwright implementation plan](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md).
+The 560-test matrix below is the completed pre-P7 baseline. The three new screenshot infrastructure
+checks bring a full run to 563 tests while keeping exactly 557 product scenarios.
+
+**Screenshot location correction:** use [the documentation screenshot gallery](../../peegee-cache-management-ui/docs/screenshots/index.html),
+not the internal scenario-ID diagnostic directories. All 1,122 verified PNGs are published flat under
+`peegee-cache-management-ui/docs/screenshots/` with descriptive feature/behavior filenames, matching
+the sibling UI documentation convention. The 19-test publication gate passes; the captures retain
+their original full-run provenance. See the P7 documentation-layout correction in the linked plan.
+
 Every slice of the U11 migration (U11.0 through U11.9) is implemented. The console now follows the reference project's patterns and dependency versions end to end: antd 5 and Recharts for every control and chart, RTK Query for every read and committed mutation, Zustand for live/session state, Zod at every contract boundary, and a test layer that renders real pages against a real loopback HTTP server with schema-produced fixtures and no page/client test doubles.
 
-Final UI-module numbers (cloud sandbox, `npm run quality && npm run test:coverage && npm run build`):
+Current-working-tree UI-module evidence (Windows, exact managed Node 22.22.2 `npm run verify`, 5 September 2026):
 
 | Gate | Result |
 |---|---|
-| Vitest | 36 files / 169 tests, all passing at the U11.9 gate; one reconnect regression test added during Windows verification |
+| Vitest | 36 files / 170 tests, all passing; includes real-loopback first-handshake failure and reconnect coverage for Pub/Sub and Monitoring |
 | `test/quality` guards | 5 files / 17 assertions, all GREEN |
-| Branch coverage thresholds | `src/api/**` 83.58% (≥ 80), `src/state/**` 92.31% (≥ 80) |
-| Branch coverage, other folders | `src/store` 95.30%, `src/app` 89.76%, `src/features` 82.85%, `src/presentation` 90.32%, `src/components` 77.27%; module total 85.16% |
+| Coverage | statements/lines 94.18% (5559/5902), branches 86.11% (1569/1822), functions 84.77% (590/696) |
+| Threshold folders | `src/api/**`: 97.08% lines/statements, 94.04% functions, 87.01% branches; `src/state/**`: 98.60% lines/statements, 84.62% functions, 92.31% branches |
 | `tsc --noEmit` | clean |
 | `eslint . --max-warnings 0` | clean |
 | focused reconnect regression | `test/monitoring-live.test.ts`: 4/4 passing |
-| `vite build` | green on Windows after the reconnect correction (one chunk-size advisory from antd) |
+| `vite build` | green on Windows after the reconnect correction (one non-blocking chunk-size advisory) |
 | jsdom axe (temporary probes, every page state touched in U11.5-U11.7) | 0 violations |
 
-The browser coverage contract contains 557 evidence scenarios. A complete Maven Failsafe execution reports 560 tests because `ManagementPlaywrightObservationIT` (1) and `ManagementRunnableArtifactIT` (2) are infrastructure verification tests outside that catalogue. The Windows verification work and exact commands are recorded in §7 and §9. The full reactor and PostgreSQL 15-18 matrix still remain after the browser gate.
+The browser coverage contract contains 557 evidence scenarios. The pre-P7 Maven Failsafe execution reported 560 tests because `ManagementPlaywrightObservationIT` (1) and `ManagementRunnableArtifactIT` (2) are infrastructure verification tests outside that catalogue. The 5 September U11 baseline passed all 560 with zero failures, errors, or skips, generated a fresh canary-clean 557/557 evidence report, and passed complete 11-module reactors on PostgreSQL 15.17, 16.13, 17.11, and 18.3. Exact commands, timings, logs, and warning classifications are recorded in §7 and §9. U11 is complete; P7 adds three screenshot infrastructure tests, as recorded above.
 
-Everything described here is already in the checkout, verified by md5 after each transfer; the transfer bundles have been deleted.
+The reference-parity implementation source is committed at `3305c30`. The 5 September test/readiness corrections and documentation updates are uncommitted working-tree changes layered on that base; generated verification artifacts remain ignored and are not part of the source change set. Transfer bundles are not retained. Acceptance evidence is identified by its 5 September timestamp and final-log name, not by older generated reports.
 
 ---
 
@@ -66,7 +95,7 @@ Dev: `vitest 3.2.7`, `@vitest/coverage-v8 3.2.7`, `@testing-library/react 16.3.0
 
 - `src/app/App.tsx` — session gate (antd `Card`/`Form`/`Input.Password`/`Spin`/`Alert`), store per session client, `resetApiState` on teardown; `ManagementShell` no longer receives a `sessionClient` prop (deleted in U11.7).
 - `src/app/ManagementShell.tsx` — antd `ConfigProvider` (theme algorithm + **`virtual={false}`**, see §6.1), `Layout`/`Sider` (`aria-label="Primary navigation"`), `Menu` of router `Link`s inside `<nav aria-label="Management sections">`, header status group, notifications `Drawer` with the inner `<aside aria-label="Notifications">`, capability-gated routes; pages receive only capability flags and scope, never clients.
-- `src/components/common/` — `ConnectionStatus`, `StatCard` (`.metric-card`, antd `Statistic`), `SetupScopeBar` (`useListSetupsQuery` + lazy capabilities → Zustand scope), `ValueSelect` (§6.1). `ConfirmDialog.tsx` and `FilterBar.tsx` were unused and are deleted (§4.9).
+- `src/components/common/` — `ConnectionStatus`, `StatCard` (`.metric-card`, antd `Statistic`), `SetupScopeBar` (`useListSetupsQuery` + lazy capabilities → Zustand scope), `ValueSelect` (§6.1). `ConfirmDialog.tsx` and `FilterBar.tsx` were unused and are deleted (§4.5).
 
 ### 2.5 Pages (`src/features`)
 
@@ -95,7 +124,7 @@ Dev: `vitest 3.2.7`, `@vitest/coverage-v8 3.2.7`, `@testing-library/react 16.3.0
 - `entry-fixture.ts` — `startEntryFixture(initial = entryMetadata)` → `{ server, store, sessionClient, state, requests(predicate), close }`. Serves session, empty setup list, the entry list (cursor `entry-cursor-2` → key `next-page`), entry GET, reveal POST (no-store headers), PUT set entry (version+1, or `state.setEntryProblem`), POST ttl/persist/touch, DELETE, bulk-delete preview/execute. Fixtures: `entryMetadata` (namespace `客户/订单`, key `café/東京/🔒?x=1`, version `9007199254740993` — encodings derived from the production codec) and `ordersMetadata` (`orders`/`order:1`, version 3).
 - `resource-fixture.ts` — `startResourceFixture()` with mutable `state.counters`/`state.locks`, so committed mutations are visible to the next read exactly like PostgreSQL truth: counters list with namespace/prefix filters, counter GET/PUT/increment/ttl/persist/DELETE with `If-Match`/`If-None-Match` checks and signed 64-bit overflow → `COUNTER_OVERFLOW`, bulk preview/execute, locks list/GET, owner reveal (no-store), force-release with version check, and every backend-capability route (exists, batch-get/set/delete, scan, cache-metrics, acquire/renew/release/ownership) with no-store headers.
 
-### 3.2 Inventory (36 files / 169 tests)
+### 3.2 Current source inventory (36 files / 170 tests)
 
 Page and shell tests (all through `renderWithProviders` over a loopback server):
 
@@ -109,7 +138,7 @@ Page and shell tests (all through `renderWithProviders` over a loopback server):
 - `pubsub-page.test.tsx` (4): viewer subscription with the message arriving through the real SSE stream into the live store (no publish/reveal); non-durable labelling, masked metadata, reveal held only in component memory, hide on explicit hide/`visibilitychange`/stop, stop deleting the subscription and closing the stream (`closed === opened === 1`); publish with CSRF header, described as acceptance not delivery, payload cleared; UTF-8 byte limits for channel, buffer entries, and publish channel enforced before transport.
 - `settings-page.test.tsx` (2): every preference driven through antd Selects, the exact allowlisted record in `localStorage`, five change events, no request; rendering without a setup/capabilities.
 
-Client and contract tests (loopback, schema-produced bodies, `server.use` per case): `session-client` (8, incl. 401 → CSRF dropped, unreadable body, non-problem failure, cacheable sensitive response), `setup-client` (4), `inspection-client` (15), `entry-administration-client` (9, incl. precondition validation and `VERSION_MISMATCH`), `resource-client` (4), `backend-capability-client` (4), `pubsub-live` (4, incl. SSE lifecycle and `Accept` header), `pubsub-live-http` (1, resume with `Last-Event-ID`), `monitoring-live` (3), `store` (6), `protocol-schemas` (8), `operation-manifest` (3), `identifier-codec` (12), `preferences` (3), `scope-store` (4), `scope-storage` (4), `display-bytes` (2), `display-time` (2), `entry-formatters` (3).
+Client and contract tests (loopback, schema-produced bodies, `server.use` per case): `session-client` (8, incl. 401 → CSRF dropped, unreadable body, non-problem failure, cacheable sensitive response), `setup-client` (4), `inspection-client` (15), `entry-administration-client` (9, incl. precondition validation and `VERSION_MISMATCH`), `resource-client` (4), `backend-capability-client` (4), `pubsub-live` (4, incl. SSE lifecycle and `Accept` header), `pubsub-live-http` (1, resume with `Last-Event-ID`), `monitoring-live` (4, including immediate offline/online reconnect), `store` (6), `protocol-schemas` (8), `operation-manifest` (3), `identifier-codec` (12), `preferences` (3), `scope-store` (4), `scope-storage` (4), `display-bytes` (2), `display-time` (2), `entry-formatters` (3).
 
 Guards: `component-library.guard` (5), `no-test-fakes.guard` (3), `no-direct-transport.guard` (3), `sensitive-dto.guard` (4), `zod-fixture.guard` (2) — §5.
 
@@ -121,6 +150,7 @@ Guards: `component-library.guard` (5), `no-test-fakes.guard` (3), `no-direct-tra
 - Real `App` tests must `window.history.pushState({}, '', '/ui/')` first (`BrowserRouter basename="/ui"`).
 - SSE fixtures: keep per-fixture counter objects (a response destroyed by the previous `close()` emits its `close` event asynchronously and would otherwise be counted against the next test).
 - Bodies for the zod guard: `let body: unknown = xSchema.parse(...)` reassigned only with `*Schema.parse(...)` or `invalidBody(...)`, or `server.use((request, respond) => respond.json(200, xSchema.parse({...}), HEADERS))` per case.
+- The global component-test ceiling remains 15 seconds. Only the two complete multi-operation workflows (`advanced-operations-page` backend workflow and `setups-page` TLS registration workflow) use a bounded 30-second ceiling because focused execution normally takes 7–9 seconds and full four-worker coverage adds measurable instrumentation contention; no assertion, real-loopback request, or cleanup check was removed.
 
 ---
 
@@ -213,7 +243,7 @@ Several product-journey assertions match text exactly; the antd rewrite keeps th
 
 ### 7.1 Catalogue accounting
 
-`ManagementBrowserCoverageTest` and the REST POM define 557 reportable evidence scenarios. The complete Failsafe run contains 560 JUnit tests: the 557 scenarios plus one Playwright observation test and two runnable-artifact tests. Keep both numbers when recording evidence; they describe different layers and are not contradictory.
+`ManagementBrowserCoverageTest` and the REST POM define 557 reportable evidence scenarios. With P7, a complete Failsafe run is expected to contain 563 JUnit tests: the 557 scenarios plus one Playwright observation test, two runnable-artifact tests, and three screenshot infrastructure tests. The pre-P7 U11 matrix below contains 560 tests. Keep catalogue and execution totals separate; they describe different layers and are not contradictory. Record those numbers as current evidence only when report timestamps and the Maven summary correspond to the handed-over source state.
 
 ### 7.2 Browser-contract adaptations
 
@@ -226,10 +256,12 @@ Several product-journey assertions match text exactly; the antd rewrite keeps th
 
 - `FetchSseTransport` detaches the active `AbortController` before aborting it on `offline`. This prevents the aborted stream's `finally` block from suppressing an `online` reconnect that starts synchronously. The same ordering is applied to validated SSE streams.
 - `test/monitoring-live.test.ts` reproduces the immediate offline/online ordering against a real loopback SSE endpoint; no transport stub or fake timer is used.
-- Setup connection assertions allow 15 seconds because the production connection attempt has an explicit 10-second backend timeout. Live reconnect assertions use the same bounded browser window.
-- `ManagementConsolePostgresFixture` waits for the password modal to detach before checking the secret canary, uses exact visible setup-scope text rather than substring title matches, and lets each scenario declare expected or explicitly allowed failed responses for diagnostics.
+- Setup connection and post-registration scope assertions allow 15 seconds because the production connection attempt has an explicit 10-second backend timeout. Live reconnect assertions use the same bounded browser window.
+- `ManagementConsolePostgresFixture` waits for the password modal to detach before checking the secret canary, uses exact visible setup-scope text rather than substring title matches, and lets each scenario declare expected or explicitly allowed failed responses for diagnostics. `ManagementConsoleTrustedProxyIT` also uses the exact `Setups` heading so the empty-state heading cannot satisfy navigation readiness.
 - Monitoring refresh verification is cache-aware: it requires the scheduled overview request without assuming a cached initial read must issue another HTTP request.
-- Lock header verification waits for exactly eight rendered header cells before comparing their text sequence. This closes the observed empty-list race without delaying successful renders.
+- Counter and lock header verification waits for exactly eight rendered header cells before comparing their text sequence. This closes the observed empty-list race without delaying successful renders.
+- Entry reveal cleanup waits for the observable `Hide value` state before dispatching `visibilitychange`; entry TTL browser text accepts one to three fractional digits because the live countdown may render immediately after a whole-second boundary.
+- The two complete multi-operation component workflows use a 30-second per-test ceiling while all other component tests retain the global 15-second ceiling (§3.3).
 
 ### 7.4 Verification evidence
 
@@ -238,8 +270,13 @@ Several product-journey assertions match text exactly; the antd rewrite keeps th
 | UI `npm run quality` | PASS (`tsc --noEmit`; ESLint with zero warnings) |
 | focused monitoring transport test | PASS, 4/4 against the loopback server |
 | production UI build | PASS; rebuilt UI JAR installed and REST runnable artifact repackaged |
-| affected Playwright set | live transport 20/20, setup 56/56, shutdown 8/8; repaired product-journey and lock boundaries pass focused reruns |
-| complete Playwright/Failsafe run | In progress at the time of this edit; replace this row with the terminal Maven summary before commit |
+| affected Playwright set | trusted-proxy + entry inspection 56/56, entry administration 50/50, counters 44/44, setup focused regression 1/1; all repeated inside the complete gates |
+| complete Playwright/Failsafe run | PASS: 27 XML reports, 560 tests, zero failures/errors/skips; fresh HTML evidence 557/557 passed and canary-clean |
+| PostgreSQL 15.17 complete reactor | PASS, all 11 modules, 22:23; UI 170/170 and Failsafe 560/560 |
+| PostgreSQL 16.13 complete reactor | PASS, all 11 modules, 20:21; UI 170/170 and Failsafe 560/560 |
+| PostgreSQL 17.11 complete reactor | PASS, all 11 modules, 20:38; UI 170/170 and Failsafe 560/560 |
+| PostgreSQL 18.3 complete reactor | PASS, all 11 modules, 21:21; UI 170/170 and Failsafe 560/560 |
+| final log/leakage/banned-pattern review | PASS: no error/failure signatures, dumps, crash artifacts, sensitive canaries, Mockito/substitute framework, UI test doubles, port seams, or prohibited direct transports |
 
 ---
 
@@ -262,81 +299,42 @@ The resolution uses the executable sources as authority: the OpenAPI document co
 
 ---
 
-## 9. Verification commands and remaining gates
+## 9. Verification commands and completed gates
 
-Executed on Windows with `JAVA_HOME=C:\Users\markr\.jdks\openjdk-25`:
+Executed on Windows with the module-managed Node 22.22.2 runtime:
 
-1. UI quality: `peegee-cache-management-ui\node\node.exe peegee-cache-management-ui\node\node_modules\npm\bin\npm-cli.js run quality`.
-2. Focused transport regression: the same managed Node/npm entry point with `exec vitest -- run test/monitoring-live.test.ts`.
-3. UI production bundle: the same managed Node/npm entry point with `run build`.
-4. Install and package: `mvn -pl :peegee-cache-management-ui -DskipTests org.apache.maven.plugins:maven-jar-plugin:3.5.0:jar org.apache.maven.plugins:maven-install-plugin:3.1.4:install`, then `mvn -pl :peegee-cache-rest -DskipTests package`.
-5. Complete browser gate: `mvn -pl :peegee-cache-rest failsafe:integration-test failsafe:verify`. Reports land in `peegee-cache-rest/target/failsafe-reports`; screenshots/traces and the HTML evidence report land under `peegee-cache-rest/target`.
-
-After the browser gate, run `npm run test:coverage`, the complete Maven reactor, and the PostgreSQL 15-18 matrix. Move the U11 row in the implementation plan to `COMPLETE` only when those owning gates are recorded.
+1. From `peegee-cache-management-ui`, prepend the pinned executable directory before invoking npm: `$uiNodeDir = (Resolve-Path '.\node').Path; $env:Path = "$uiNodeDir;$env:Path"`.
+2. Complete UI gate: `& '.\node\node.exe' '.\node\node_modules\npm\bin\npm-cli.js' run verify` — GREEN, 36 files / 170 tests with the coverage and build evidence above.
+3. Standalone UI Maven gate: `mvn --batch-mode --no-transfer-progress -pl :peegee-cache-management-ui verify` — GREEN, 36/36 files and 170/170 tests with exact managed Node/npm, thresholds, production artifact, and zero dependency vulnerabilities.
+4. Complete browser gate: `mvn -pl :peegee-cache-rest failsafe:integration-test failsafe:verify` — GREEN, 560/560; reports under `peegee-cache-rest/target/failsafe-reports`, fresh HTML evidence under `peegee-cache-rest/target/playwright-evidence.html`.
+5. Complete matrix command for each version: `mvn --batch-mode --no-transfer-progress verify -Dpeegeeq.test.postgres.image=postgres:<version>-alpine` — GREEN for `15.17`, `16.13`, `17.11`, and `18.3` with timings in §7.4.
+6. Final evidence review scans the four acceptance logs, all 27 current Failsafe XML reports, generated HTML evidence, dump/crash artifacts, and prohibited Java/TypeScript patterns. All checks are GREEN; the implementation plan's U11 row is `COMPLETE`.
 
 ---
 
 ## 10. Workflow notes for the next session
 
-- Use the UI module's managed `node\node.exe` and npm CLI. The workstation also has Node 24 on `PATH`; mixing it with the Maven-managed Node 22 installation obscures dependency diagnostics.
+- Use the UI module's managed `node\node.exe` and npm CLI, and prepend the module's `node` directory to `PATH` before launching npm. The npm CLI sets `NODE`, but Windows command shims invoke bare `node`; without the `PATH` correction they resolved workstation Node 24.11.1 instead of the pinned Node 22.22.2. The `preverify` script now fails fast on that mismatch.
 - If `node_modules` is incomplete, restore it once with the managed runtime's `npm-cli.js ci`, wait for that process to finish, and then run gates. Do not start overlapping installs.
 - The checkout mixes CRLF and LF. Do not normalize files incidentally; use `git diff --ignore-cr-at-eol` when reviewing semantic changes.
-- The final full browser log for this pass is `peegee-cache-rest/target/playwright-full-final.log` (generated evidence, not a source file).
+- The clean focused browser log is retained at `peegee-cache-rest/target/playwright-full-final.log`. Final matrix logs are under `target/u11-verification/reactor-postgresql-{15.17,16.13,17.11,18.3}.log`; separately named `.failed-*` logs record exploratory failures and are not acceptance evidence. These generated files are not committed source.
+- A module-only REST run can resolve stale locally installed snapshot dependencies. Prefer a full reactor, or install the current upstream modules first, before treating a module-only result as authoritative.
 
 ---
 
-## 11. Suggested commit message
+## 11. Commit record
 
-```
-feat(management-ui): complete U11 parity and harden browser verification
+Commit `3305c30069152d64a0bc1adb5c560e368e3b8a5c` (`feat(management-ui): complete U11 parity and harden browser verification`) is the base U11 parity implementation reviewed by this work.
 
-Complete the reference-parity migration across the management console.
-Build every page on antd and Recharts, route reads and committed
-mutations through RTK Query, and keep live/session state in Zustand.
-Keep entry values, lock owners, Pub/Sub payloads, and advanced-operation
-results on no-store clients and in short-lived component memory.
-
-Replace injectable client ports and hand-built page fixtures with real
-loopback HTTP/SSE tests whose response bodies cross the production Zod
-schemas. Remove the legacy modal, unused common controls, and native
-control CSS now owned by antd. Pin axe-core so browser accessibility
-evidence is evaluated against a reproducible ruleset.
-
-Fix the SSE offline/online ordering race by detaching an active abort
-controller before aborting the old stream, allowing an immediate online
-event to install the replacement connection. Cover the ordering with a
-real loopback stream and browser lifecycle events without transport
-stubs or fake timers.
-
-Adapt Playwright to the rendered antd contracts: select reviewed values
-through AntSelect, wait for observable table/modal/connection states,
-align connection bounds with the backend timeout, preserve modal focus
-and restore behavior, make monitoring assertions cache-aware, and add
-URL/HTML/contrast details to axe failures. Extend fixture diagnostics to
-distinguish expected and allowed failed responses and use exact setup
-scope matches.
-
-Consolidate the U11 handover into the 4 September document and remove
-the superseded 3 September snapshot.
-
-Verification:
-- managed npm quality gate (TypeScript + ESLint): pass
-- monitoring live transport regression: 4/4 pass
-- production Vite build, UI JAR install, REST package: pass
-- focused live/setup/shutdown browser set: 84/84 pass
-- repaired product-journey and lock readiness scenarios: pass
-- complete Failsafe execution: replace with terminal 560-test summary
-
-Remaining owning gates: full UI coverage, complete Maven reactor, and
-PostgreSQL 15-18 compatibility matrix.
-```
+The uncommitted 5 September working tree adds the deterministic readiness/test-budget corrections listed in §7.3 and synchronizes the evidence documents. It completes the owning UI, browser, full-reactor, PostgreSQL 15-18, log, leakage, and banned-pattern gates. Review or commit this working tree as one remediation/evidence change set; do not attribute these post-commit results to the unchanged `3305c30` tree.
 
 ---
 
-## 12. Open questions and risks
+## 12. Remaining non-blocking risks
 
-- **Owning gates remain.** Do not mark U11 complete until the full UI coverage gate, complete Maven reactor, and PostgreSQL 15-18 matrix are recorded.
-- **Scenario accounting.** The merged POM and executable coverage contract require 557 evidence scenarios; the complete Failsafe execution contains 560 tests because three infrastructure tests are outside that catalogue (§7.1).
-- **Coverage margin.** `src/api` is at 83.58% against an 80% threshold; adding untested branches to a client without a loopback case will trip the gate — that is intended.
+- **Owning gates are complete.** The working-tree UI, browser/Failsafe, full-reactor, and PostgreSQL 15-18 gates are recorded in §7.4; U11 is complete.
+- **Scenario accounting.** The POM and executable coverage contract require 557 evidence scenarios; the completed Failsafe execution contains 560 tests because three infrastructure tests are outside that catalogue (§7.1).
+- **Coverage margin.** `src/api` branch coverage is 87.01% against an 80% threshold; adding untested branches to a client without a loopback case can still trip the gate — that is intended.
 - **`components` folder coverage (77%)** is not thresholded; `ConnectionStatus`/`StatCard`/`SetupScopeBar`/`ValueSelect` are exercised through page tests only.
 - **Bundle size advisory.** Vite reports a single JavaScript chunk above 500 kB after minification. This is an optimization opportunity, not a correctness failure.
+- **Toolchain and packaging advisories.** JDK 25 reports Maven/Guice `sun.misc.Unsafe` deprecation; Maven Shade reports known duplicate metadata/classes; npm reports a transitive `glob` deprecation; jsdom/Recharts report non-browser layout limitations. None produced a gate failure, vulnerability, dump, leak, or missing artifact.

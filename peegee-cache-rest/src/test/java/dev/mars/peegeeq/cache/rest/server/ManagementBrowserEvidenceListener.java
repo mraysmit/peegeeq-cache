@@ -50,6 +50,7 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
         STARTED.clear();
         RESULTS.clear();
         clearSensitiveCanaries();
+        ManagementBrowserScreenshots.startRun();
         try {
             Files.deleteIfExists(reportPath());
         } catch (IOException failure) {
@@ -61,8 +62,10 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
     public void executionStarted(TestIdentifier testIdentifier) {
         if (!testIdentifier.isTest()) return;
         STARTED.put(testIdentifier.getUniqueId(), System.nanoTime());
-        metadata(testIdentifier).ifPresent(scenario ->
-                CURRENT_SCENARIO_TITLE.set(scenario.id() + " — " + scenario.name()));
+        metadata(testIdentifier).ifPresent(scenario -> {
+            CURRENT_SCENARIO_TITLE.set(scenario.id() + " — " + scenario.name());
+            ManagementBrowserScreenshots.beginScenario(scenario.id(), config.artifactDirectory());
+        });
     }
 
     @Override
@@ -83,7 +86,8 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
         RESULTS.add(new ManagementBrowserEvidenceReport.ScenarioResult(
                 scenario.id(), scenario.name(), scenario.area(), scenario.risk(), status,
                 durationMillis, scenario.requirement(), scenario.operations(), scenario.evidence(),
-                testExecutionResult.getThrowable().map(ManagementBrowserEvidenceListener::failure).orElse("")));
+                testExecutionResult.getThrowable().map(ManagementBrowserEvidenceListener::failure).orElse(""),
+                ManagementBrowserScreenshots.finishScenario()));
         CURRENT_SCENARIO_TITLE.remove();
     }
 
@@ -112,7 +116,12 @@ public final class ManagementBrowserEvidenceListener implements TestExecutionLis
                     results,
                     sensitiveCanaries());
             try {
-                ManagementBrowserEvidenceWriter.write(report, evidence);
+                boolean completePassingRun = requested.isEmpty() && !config.focusedClassRun()
+                        && config.expectedScenarios() > 0
+                        && results.size() == config.expectedScenarios()
+                        && results.stream().allMatch(result -> result.status().equals("PASSED"));
+                ManagementBrowserEvidenceWriter.write(report, evidence,
+                        completePassingRun ? config.documentationScreenshotsDirectory() : null);
             } catch (IOException failure) {
                 throw new IllegalStateException("Could not write Playwright evidence report " + report, failure);
             }

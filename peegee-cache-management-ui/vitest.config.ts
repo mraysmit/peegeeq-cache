@@ -27,6 +27,12 @@ export default defineConfig({
     },
     environment: 'jsdom',
     include: ['test/**/*.test.{ts,tsx}'],
+    // Each component-test worker owns real loopback HTTP/SSE fixtures. Threads avoid Windows child-
+    // process timer variability while this bound prevents unbounded loopback concurrency;
+    // reconnect behavior remains covered with first-handshake failure fixtures.
+    maxWorkers: 4,
+    pool: 'threads',
+    reporters: ['dot'],
     setupFiles: ['./test/setup.ts'],
     testTimeout: 15_000,
   },

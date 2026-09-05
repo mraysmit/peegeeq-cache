@@ -939,7 +939,7 @@ Phase gate:
 
 Objective: finish the backend as an operable product component rather than a collection of routes.
 
-Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chromium verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, static-route isolation, backend facade parity, and 18 independently degraded runtime capability paths. The merged Playwright catalogue declares 557 desktop-only scenarios. The capability-remediation parent passed 557/557 plus all three runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026; the merged shared-fixture/U11 state requires a fresh cumulative gate.
+Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chromium verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, static-route isolation, backend facade parity, and 18 independently degraded runtime capability paths. The merged Playwright catalogue declares 557 desktop-only scenarios and passed 557/557 plus all three runnable-artifact/evidence checks across the complete PostgreSQL 15-18 matrix on 5 September 2026.
 
 ### M10.1 Mandatory observability
 
@@ -986,16 +986,16 @@ Phase gate: every command succeeds with zero failures, errors, unexpected skips,
 
 Final evidence under OpenJDK 26.0.2:
 
-The PostgreSQL 15–18 compatibility rows below are the retained pre-capability-expansion matrix. The active 557-scenario catalogue has been freshly verified on PostgreSQL 18.3; a fresh PostgreSQL 15–17 parity regate remains release validation.
+The PostgreSQL 15–18 compatibility rows below are the post-U11 merged-working-tree matrix completed on 5 September 2026. Every row includes the active 557-scenario catalogue plus all three infrastructure checks.
 
 | Gate | Result |
 |---|---|
-| PostgreSQL 15.17 complete reactor | Green, 3:28 |
-| PostgreSQL 16.13 complete reactor | Green, 3:30 |
-| PostgreSQL 17.11 complete reactor | Green, 3:34 |
-| PostgreSQL 18.3 complete reactor | Green, 3:28 |
+| PostgreSQL 15.17 complete reactor | Green, 22:23; 560/560 Failsafe |
+| PostgreSQL 16.13 complete reactor | Green, 20:21; 560/560 Failsafe |
+| PostgreSQL 17.11 complete reactor | Green, 20:38; 560/560 Failsafe |
+| PostgreSQL 18.3 complete reactor | Green, 21:21; 560/560 Failsafe |
 | Historical post-hardening complete reactor | 547 Surefire + 562 Failsafe + 123 Vitest; 0 failures/errors/skips before unsupported mobile coverage was removed |
-| Real-browser and runnable-artifact Failsafe gate | Capability-remediation parent green at 557/557 desktop-browser scenarios plus 3/3 runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026; fresh merged-state gate pending |
+| Real-browser and runnable-artifact Failsafe gate | Merged U11 working tree green at 557/557 desktop-browser scenarios plus 3/3 observation/runnable-artifact checks on all PostgreSQL 15-18 rows; 27 XML reports, zero failures/errors/skips |
 | Dependency/build contract | Maven Enforcer dependency convergence and duplicate-version rules green in every row |
 | Release artifacts | `-P release-artifacts -DskipTests package` green for all 11 modules; source and Javadoc jars generated |
 | Repository hygiene | `git diff --check` green; no generated targets, jars, classes, logs, or benchmark results in the change inventory |

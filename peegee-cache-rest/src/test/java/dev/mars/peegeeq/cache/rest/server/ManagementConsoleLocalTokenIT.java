@@ -98,7 +98,8 @@ class ManagementConsoleLocalTokenIT {
         ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
         List<String> browserErrors = new ArrayList<>();
         List<String> failedResponses = new ArrayList<>();
-        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext()) {
+        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext();
+             var screenshots = ManagementBrowserScreenshots.beforeClose(context)) {
             Page page = context.newPage();
             ManagementBrowserOperationTrace operationTrace = new ManagementBrowserOperationTrace();
             operationTrace.attach(page);
@@ -172,7 +173,9 @@ class ManagementConsoleLocalTokenIT {
         List<String> browserErrors = new ArrayList<>();
         var browser = ManagementBrowserPlaywrightSuite.browser();
         try (BrowserContext authenticatedContext = browser.newContext();
-             BrowserContext replayContext = browser.newContext()) {
+             var authenticatedScreenshots = ManagementBrowserScreenshots.beforeClose(authenticatedContext);
+             BrowserContext replayContext = browser.newContext();
+             var replayScreenshots = ManagementBrowserScreenshots.beforeClose(replayContext)) {
             Page authenticatedPage = authenticatedContext.newPage();
             authenticatedPage.onPageError(browserErrors::add);
             assertEquals(200, authenticatedPage.navigate(origin() + "/ui/").status());
@@ -239,7 +242,8 @@ class ManagementConsoleLocalTokenIT {
         String token = bootstrap.token();
         ManagementBrowserEvidenceListener.registerSensitiveCanary(token);
         List<String> browserErrors = new ArrayList<>();
-        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext()) {
+        try (BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext();
+             var screenshots = ManagementBrowserScreenshots.beforeClose(context)) {
             Page page = context.newPage();
             page.onPageError(browserErrors::add);
             assertEquals(200, page.navigate(origin() + "/ui/").status());

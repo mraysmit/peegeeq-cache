@@ -13,6 +13,8 @@ mvn -pl peegee-cache-rest -am verify
 
 The executable is `peegee-cache-rest/target/peegee-cache-rest-0.1.0-SNAPSHOT-runnable.jar`. Verification covers its manifest, Java 21 class-file version, OpenAPI at `openapi/peegeeq-cache-management-v1.yaml`, fallback page at `ui/index.html`, single SLF4J provider, exclusion of test fixtures, startup, readiness, Prometheus scrape, and startup log.
 
+The U11 implementation acceptance completed on 5 September 2026: Phase 8.3 U0-U11 is complete, the packaged browser gate passed 557/557 reportable scenarios plus all three then-existing infrastructure checks, and the full 11-module reactor passed on PostgreSQL 15.17, 16.13, 17.11, and 18.3. Subsequent P7 screenshot acceptance passed a fresh PostgreSQL 18.3 reactor with 563 browser/infrastructure tests, all 557 scenarios captured, and 1,122 PNGs embedded in the portable report. The owning [Playwright plan](design/PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md) records exact evidence and distinguishes that fresh run from the earlier four-version baseline.
+
 ## Startup configuration
 
 The executable defaults to fail-closed local-token mode and also supports explicit trusted-proxy mode. Set its audit key through the process secret store, never in a command-line argument or committed file.
@@ -73,6 +75,11 @@ In local-token mode, the controlling process receives `PEEGEEQ_MANAGEMENT_BOOTST
 5. `DELETE /api/v1/session/local` logs out. Restarting invalidates all sessions and issues a new bootstrap token.
 
 Never put bootstrap/session/CSRF values in URLs, browser storage, source files, screenshots, logs, or telemetry labels.
+
+Development browser evidence is captured directly, without screenshot masking, redaction, or
+replacement values. The operational handling rule above does not authorize altering those captures.
+They show the actual application's password controls and reveal/hide state and remain local generated
+artifacts. See the [screenshot capture rules](guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md#browser-screenshot-evidence).
 
 ## Trusted-proxy authentication
 

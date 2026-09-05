@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management Build and Configuration Decision
 
-**Status:** Accepted and implemented; Phase 8.3 U0-U11 complete as of 3 September 2026
+**Status:** Accepted and implemented; Phase 8.3 U0-U11 complete as of 5 September 2026
 
 **Date:** 20 August 2026
 
@@ -11,7 +11,7 @@ The root Maven reactor remains the only release build entry point. Phase M1 adds
 1. `peegee-cache-management-ui`
 2. `peegee-cache-rest`
 
-`peegee-cache-management-ui` owns Node, npm, TypeScript, Vite, generated-client validation, component/protocol tests, and the compiled webroot. It publishes the webroot as a Maven artifact. `peegee-cache-rest` consumes that artifact during `package`; it never writes generated files into the UI module or copies output into another module's `src` tree. U1 replaced the original placeholder with the tested production asset graph without changing the dependency direction or root build entry point and removed the duplicate REST-owned fallback entry point. `peegee-cache-rest` owns Java Playwright because that boundary can exercise the packaged server, real authentication, HTTP/SSE/WebSocket transports, and PostgreSQL without request interception. U2-U10 retain that dependency direction while delivering the complete console, independent packaged-server Chromium acceptance, and deterministic release artifact.
+`peegee-cache-management-ui` owns Node, npm, TypeScript, Vite, generated-client validation, component/protocol tests, and the compiled webroot. It publishes the webroot as a Maven artifact. `peegee-cache-rest` consumes that artifact during `package`; it never writes generated files into the UI module or copies output into another module's `src` tree. U1 replaced the original placeholder with the tested production asset graph without changing the dependency direction or root build entry point and removed the duplicate REST-owned fallback entry point. `peegee-cache-rest` owns Java Playwright because that boundary can exercise the packaged server, real authentication, HTTP/SSE/WebSocket transports, and PostgreSQL without request interception. U2-U11 retain that dependency direction while delivering the complete reference-parity console, independent packaged-server Chromium acceptance, and deterministic release artifact.
 
 `peegee-cache-rest` depends on `peegee-cache-api`, `peegee-cache-runtime`, and `peegee-cache-observability`. Test scope may depend on `peegee-cache-test-support`. No cache library module depends on REST or UI code. The resulting direction is:
 

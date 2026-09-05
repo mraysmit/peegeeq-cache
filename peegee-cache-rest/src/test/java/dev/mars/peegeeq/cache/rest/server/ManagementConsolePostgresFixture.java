@@ -386,7 +386,7 @@ final class ManagementConsolePostgresFixture {
                 boolean reuseSession,
                 boolean prepareSetup) throws Exception {
             Browser.NewContextOptions options = new Browser.NewContextOptions()
-                    .setExtraHTTPHeaders(trustedProxyHeaders);
+                    .setExtraHTTPHeaders(trustedProxyHeaders).setViewportSize(1440, 900);
             long auditStart = Files.exists(auditPath) ? Files.size(auditPath) : 0L;
             try (BrowserContext browserContext = browser.newContext(options)) {
                 boolean preparedSharedScenario = reuseSession && !sessionCookies.isEmpty();
@@ -427,6 +427,9 @@ final class ManagementConsolePostgresFixture {
                         registerSetup(context);
                     }
                     journey.run(context);
+                    if (!reuseSession || preparedSharedScenario) {
+                        ManagementBrowserScreenshots.captureCurrent(page);
+                    }
                     diagnostics.assertNoBrowserErrors();
                     diagnostics.assertNoUnexpectedFailedResponses();
                     operationTrace.assertObservedExactly(expectedOperations, FIXTURE_OPERATIONS);
@@ -437,7 +440,11 @@ final class ManagementConsolePostgresFixture {
                         cleanupActiveSubscription(page, browserContext);
                     }
                 } catch (Exception | AssertionError failure) {
-                    captureSanitizedFailureScreenshot(page);
+                    try {
+                        ManagementBrowserScreenshots.captureCurrent(page);
+                    } catch (RuntimeException captureFailure) {
+                        failure.addSuppressed(captureFailure);
+                    }
                     if (reuseSession) cleanupActiveSubscriptionQuietly(page, browserContext);
                     throw failure;
                 } finally {
@@ -585,7 +592,9 @@ final class ManagementConsolePostgresFixture {
         dialog.getByRole(com.microsoft.playwright.options.AriaRole.BUTTON,
                 new com.microsoft.playwright.Locator.GetByRoleOptions().setName("Register setup")).click();
         com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat(page.getByText("Setup: " + SETUP_ID,
-                new Page.GetByTextOptions().setExact(true))).isVisible();
+                new Page.GetByTextOptions().setExact(true))).isVisible(
+                        new com.microsoft.playwright.assertions.LocatorAssertions.IsVisibleOptions()
+                                .setTimeout(15_000));
         page.locator("#setup-password").waitFor(new com.microsoft.playwright.Locator.WaitForOptions()
                 .setState(com.microsoft.playwright.options.WaitForSelectorState.DETACHED));
         assertFalse(page.content().contains(DATABASE_PASSWORD));
@@ -599,26 +608,6 @@ final class ManagementConsolePostgresFixture {
         } finally {
             await(pool.close());
             await(vertx.close());
-        }
-    }
-
-    private static void captureSanitizedFailureScreenshot(Page page) {
-        try {
-            page.evaluate("""
-                    () => {
-                      document.querySelectorAll('input[type="password"], textarea')
-                        .forEach(control => { control.value = '[REDACTED]'; });
-                      document.querySelectorAll('.value-content, [data-sensitive="true"]')
-                        .forEach(element => { element.textContent = '[REDACTED]'; });
-                    }
-                    """);
-            Path directory = ManagementBrowserRunConfig.current().artifactDirectory();
-            Files.createDirectories(directory);
-            Path screenshot = directory.resolve(
-                    "failure-" + System.currentTimeMillis() + "-" + Thread.currentThread().threadId() + ".png");
-            page.screenshot(new Page.ScreenshotOptions().setFullPage(true).setPath(screenshot));
-        } catch (Exception ignored) {
-            // Artifact capture must never replace the original browser failure.
         }
     }
 

@@ -2,6 +2,19 @@
 
 This module owns the production React console, generated TypeScript contract types, frontend tests, and the compiled `ui/*` webroot artifact. The root Maven reactor is the authoritative build entry point.
 
+## User guide
+
+The [User Journeys Guide](docs/USER_JOURNEYS_GUIDE.md) covers 16 complete processes with detailed
+worked explanations, example inputs, expected screen states, decision points, completion checks,
+and recovery guidance. It also explains scope, versions, TTL, permissions, and safe retry behavior.
+
+## Screenshots
+
+Open [the screenshot gallery](docs/screenshots/index.html) for visible previews by feature and behavior.
+The PNGs are in the flat [documentation screenshot directory](docs/screenshots/README.md), using descriptive
+filenames rather than scenario IDs. The complete passing browser run refreshes this gallery automatically.
+Captures show the actual development UI without screenshot masks, redaction, or replacement values.
+
 ## Build and verify
 
 From the repository root:
@@ -20,7 +33,17 @@ mvn verify
 
 ## Frontend commands
 
-After Maven has installed the pinned local toolchain, commands can be run from this module with `node/npm.cmd`:
+After Maven has installed the pinned local toolchain, commands can be run from this module. On Windows, prepend the pinned executable directory before invoking npm so child command shims also resolve Node 22 rather than a workstation Node earlier on `PATH`:
+
+```powershell
+$uiNodeDir = (Resolve-Path '.\node').Path
+$env:Path = "$uiNodeDir;$env:Path"
+& '.\node\npm.cmd' run verify
+```
+
+The `preverify` check fails fast and reports the resolved executable when the wrong Node runtime reaches the verification gate.
+
+Available npm commands are:
 
 - `run generate:openapi` — generate build-only TypeScript contract types under `target/generated-sources/openapi`;
 - `run quality` — run TypeScript and ESLint checks;

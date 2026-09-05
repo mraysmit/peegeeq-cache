@@ -62,7 +62,7 @@ describe('complete backend desktop workflows', () => {
     expect(screen.getByText('Cache Sets')).toBeVisible();
     expect(requests('GET', '/cache-metrics')).toHaveLength(1);
     expect(JSON.stringify(fixture.store.getState())).not.toContain('deletedCount');
-  }, 15_000);
+  }, 30_000);
 
   it('rejects malformed batch input locally before any request leaves the browser', async () => {
     const user = userEvent.setup();

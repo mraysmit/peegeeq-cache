@@ -46,6 +46,7 @@ export function PubSubPage({ canOperate, canReveal, maximumChannelBytes, maximum
   const [payload, setPayload] = useState('');
   const [contentType, setContentType] = useState('');
   const [status, setStatus] = useState('');
+  const [liveNotice, setLiveNotice] = useState('');
   const [problem, setProblem] = useState<ManagementQueryError>();
   const [busy, setBusy] = useState(false);
 
@@ -60,9 +61,12 @@ export function PubSubPage({ canOperate, canReveal, maximumChannelBytes, maximum
     if (subscription === undefined) return undefined;
     const live = clients.pubSubStream.connect(`${clients.origin}${subscription.streamPath}`, {
       onMessage: (message) => receiveMessage(message, subscription.bufferLimit),
-      onState: setConnection,
-      onReset: (reason) => { clearMessages(); setStatus(reason); },
-      onError: (message) => setStatus(message),
+      onState: (state) => {
+        setConnection(state);
+        if (state === 'CONNECTED') setLiveNotice('');
+      },
+      onReset: (reason) => { clearMessages(); setLiveNotice(reason); },
+      onError: setLiveNotice,
     });
     return () => { live.stop(); stopLive(); };
   }, [clearMessages, clients, receiveMessage, setConnection, stopLive, subscription]);
@@ -96,6 +100,7 @@ export function PubSubPage({ canOperate, canReveal, maximumChannelBytes, maximum
     void run(async () => {
       const created = await createSubscription({ setupId: selectedSetupId, channel, bufferLimit: bufferEntries }).unwrap();
       clearMessages();
+      setLiveNotice('');
       setSubscription(created);
       setStatus('Non-durable console subscription started. Messages are retained only in a bounded process-local buffer.');
     });
@@ -107,6 +112,7 @@ export function PubSubPage({ canOperate, canReveal, maximumChannelBytes, maximum
       await deleteSubscription({ setupId: selectedSetupId, subscriptionId: subscription.subscriptionId }).unwrap();
       setSubscription(undefined);
       setRevealed(undefined);
+      setLiveNotice('');
       setStatus('Subscription stopped and its retained messages were discarded.');
     });
   };
@@ -146,6 +152,7 @@ export function PubSubPage({ canOperate, canReveal, maximumChannelBytes, maximum
     <Workspace>
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         {problem !== undefined && <ProblemAlert problem={problem} />}
+        {liveNotice !== '' && <Alert message={liveNotice} role="alert" showIcon type="warning" />}
         {status !== '' && <Alert message={status} role="status" showIcon type="info" />}
 
         {subscription === undefined ? (

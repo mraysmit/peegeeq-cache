@@ -61,9 +61,15 @@ The percentages above are method-level traceability, not a weighted score. `Back
 
 The 60 OpenAPI management operations are separately checked for production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The merged desktop-only browser catalogue declares 557 scenarios, 17 named operation-owning journeys, 18 independently degraded capability paths, and 13 isolated packaged Chromium/PostgreSQL journeys.
 
-The capability-remediation parent passed 557/557 packaged desktop-browser scenarios plus 3/3 runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026. The fixture-lifecycle parent subsequently passed its then-current 550-scenario catalogue on 3 September. Because the merged checkout combines the 557-scenario capability catalogue with the shared-fixture lifecycle changes and pending U11 locator changes, a fresh 557-scenario cumulative gate is required before recording merged verification.
+The capability-remediation parent passed 557/557 packaged desktop-browser scenarios plus 3/3 runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026, and the fixture-lifecycle parent subsequently passed its then-current 550-scenario catalogue on 3 September. The merged U11 working tree completed the fresh cumulative gate on 5 September: 557/557 reportable browser scenarios plus all three infrastructure checks, with complete 11-module reactors green on PostgreSQL 15.17, 16.13, 17.11, and 18.3.
 
 ## 4. Source authorities
+
+P7 screenshot acceptance on 5 September adds visual evidence without changing the 557-scenario
+catalogue: all scenarios have viewport/focused captures, with 1,122 PNGs embedded in the portable
+report. The fresh PostgreSQL 18.3 reactor passed 563 Failsafe tests (557 scenarios plus six
+infrastructure checks). The preceding PostgreSQL 15–18 matrix is the pre-P7 baseline; see §18 of
+[the Playwright implementation plan](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md).
 
 The matrix is derived from these implementation sources:
 

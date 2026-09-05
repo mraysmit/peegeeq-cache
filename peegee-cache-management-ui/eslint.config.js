@@ -10,6 +10,14 @@ export default [
   },
   js.configs.recommended,
   {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+      },
+    },
+  },
+  {
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
       ecmaVersion: 'latest',

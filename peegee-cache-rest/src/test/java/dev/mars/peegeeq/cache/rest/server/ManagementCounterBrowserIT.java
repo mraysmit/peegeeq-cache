@@ -80,7 +80,7 @@ class ManagementCounterBrowserIT {
         Page p=c.page();
         switch(i){
             case 0->assertThat(p.getByText("Exact signed 64-bit administration",exact())).isVisible();
-            case 1->assertEquals(List.of("Selection","Namespace","Key","Value","Version","Updated","TTL","Actions"),p.locator("thead th").allTextContents());
+            case 1->{Locator headers=p.locator("thead th");assertThat(headers).hasCount(8);assertEquals(List.of("Selection","Namespace","Key","Value","Version","Updated","TTL","Actions"),headers.allTextContents());}
             case 2->assertThat(row(p,"count")).isVisible(); case 3->assertEquals("42",row(p,"count").locator("td").nth(3).textContent());
             case 4->assertEquals("4",row(p,"count").locator("td").nth(4).textContent()); case 5->assertThat(row(p,"count")).containsText("Persistent");
             case 6->{p.getByLabel("Namespace").fill("logical-orders");assertThat(row(p,"count")).isVisible();}
@@ -106,11 +106,11 @@ class ManagementCounterBrowserIT {
             case 34->{Locator d=manage(p);d.getByLabel("TTL milliseconds").fill("60000");d.getByRole(AriaRole.BUTTON,new Locator.GetByRoleOptions().setName("Set counter TTL")).click();assertThat(p.getByRole(AriaRole.STATUS)).containsText("TTL set");assertEquals("true",scalar(c,"SELECT expires_at IS NOT NULL FROM peegee_cache.cache_counters WHERE counter_key='count'"));}
             case 35->{Locator d=manage(p);d.getByRole(AriaRole.BUTTON,new Locator.GetByRoleOptions().setName("Make counter persistent")).click();assertThat(p.getByRole(AriaRole.STATUS)).containsText("persisted");assertEquals("true",scalar(c,"SELECT expires_at IS NULL FROM peegee_cache.cache_counters WHERE counter_key='count'"));}
             case 36->{Locator d=manage(p);assertThat(d.getByRole(AriaRole.BUTTON,new Locator.GetByRoleOptions().setName("Delete current version"))).isDisabled();d.getByLabel("Confirm counter key").fill("wrong");assertThat(d.getByRole(AriaRole.BUTTON,new Locator.GetByRoleOptions().setName("Delete current version"))).isDisabled();}
-            case 37->{Locator d=manage(p);d.getByLabel("Confirm counter key").fill("count");d.getByRole(AriaRole.BUTTON,new Locator.GetByRoleOptions().setName("Delete current version")).click();assertThat(p.getByRole(AriaRole.STATUS)).containsText("deleted");assertEquals("0",scalar(c,"SELECT count(*) FROM peegee_cache.cache_counters WHERE counter_key='count'"));}
+            case 37->{Locator d=manage(p);d.getByLabel("Confirm counter key").fill("count");d.getByRole(AriaRole.BUTTON,new Locator.GetByRoleOptions().setName("Delete current version")).click();assertThat(p.getByRole(AriaRole.STATUS)).containsText("deleted");assertThat(d).not().isAttached();assertEquals("0",scalar(c,"SELECT count(*) FROM peegee_cache.cache_counters WHERE counter_key='count'"));}
             case 38->assertThat(p.getByRole(AriaRole.BUTTON,new Page.GetByRoleOptions().setName("Preview selected counter deletion"))).isDisabled();
             case 39->assertThat(preview(p)).containsText("1 counters"); case 40->{Locator d=preview(p);d.getByLabel("Type confirmation phrase").fill("wrong");assertThat(deleteBulk(d)).isDisabled();}
             case 41->{Locator d=preview(p);d.getByLabel("Type confirmation phrase").fill(phrase(d));assertThat(deleteBulk(d)).isEnabled();}
-            case 42->{Locator d=preview(p);d.getByLabel("Type confirmation phrase").fill(phrase(d));deleteBulk(d).click();assertThat(p.getByRole(AriaRole.STATUS)).containsText("Deleted 1 of 1");assertEquals("0",scalar(c,"SELECT count(*) FROM peegee_cache.cache_counters WHERE counter_key='count'"));}
+            case 42->{Locator d=preview(p);d.getByLabel("Type confirmation phrase").fill(phrase(d));deleteBulk(d).click();assertThat(p.getByRole(AriaRole.STATUS)).containsText("Deleted 1 of 1");assertThat(d).not().isAttached();assertEquals("0",scalar(c,"SELECT count(*) FROM peegee_cache.cache_counters WHERE counter_key='count'"));}
             case 43->{p.getByLabel("Select logical-orders/count").check();p.getByLabel("Key prefix").fill("c");assertThat(p.getByLabel("Select logical-orders/count")).not().isChecked();}
             default->throw new IllegalArgumentException();
         }

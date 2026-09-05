@@ -185,6 +185,7 @@
                         <peegeeq.runnable.artifact>${project.build.directory}/${project.build.finalName}-runnable.jar</peegeeq.runnable.artifact>
                         <peegeeq.playwright.report>${project.build.directory}/playwright-evidence.html</peegeeq.playwright.report>
                         <peegeeq.playwright.artifacts>${project.build.directory}/playwright-artifacts</peegeeq.playwright.artifacts>
+                        <peegeeq.playwright.screenshots>${project.basedir}/../peegee-cache-management-ui/docs/screenshots</peegeeq.playwright.screenshots>
                         <peegeeq.playwright.headless>${peegeeq.playwright.headless}</peegeeq.playwright.headless>
                         <peegeeq.playwright.slowMo>${peegeeq.playwright.slowMo}</peegeeq.playwright.slowMo>
                         <peegeeq.playwright.pauseBetweenScenarios>${peegeeq.playwright.pauseBetweenScenarios}</peegeeq.playwright.pauseBetweenScenarios>

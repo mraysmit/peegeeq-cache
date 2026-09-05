@@ -21,6 +21,7 @@ class ManagementBrowserRunConfigTest {
         properties.setProperty("peegeeq.playwright.expectedScenarios", "549");
         properties.setProperty("peegeeq.playwright.report", "reports/evidence.html");
         properties.setProperty("peegeeq.playwright.artifacts", "reports/artifacts");
+        properties.setProperty("peegeeq.playwright.screenshots", "docs/screenshots");
         properties.setProperty("peegeeq.runnable.artifact", "artifacts/rest-runnable.jar");
         properties.setProperty("peegeeq.test.postgres.image", "postgres:17-alpine");
 
@@ -35,6 +36,7 @@ class ManagementBrowserRunConfigTest {
         assertEquals(549, config.expectedScenarios());
         assertEquals(Path.of("reports/evidence.html"), config.reportPath());
         assertEquals(Path.of("reports/artifacts"), config.artifactDirectory());
+        assertEquals(Path.of("docs/screenshots"), config.documentationScreenshotsDirectory());
         assertEquals(Path.of("artifacts/rest-runnable.jar"), config.runnableArtifact());
         assertEquals("postgres:17-alpine", config.postgresImage());
     }

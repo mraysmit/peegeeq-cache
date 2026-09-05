@@ -64,11 +64,31 @@ describe('U7 pub/sub protocol and SSE framing', () => {
   });
 
   it('opens the SSE stream with the event-stream accept header and reports the connection lifecycle', async () => {
+    let failuresRemaining = 1;
+    server.use((request, respond) => {
+      if (route('GET', '/stream', request)) {
+        if (failuresRemaining > 0) {
+          failuresRemaining -= 1;
+          return respond.problem(503, 'STREAM_UNAVAILABLE', 'the first stream handshake is unavailable');
+        }
+        return respond.sse([]);
+      }
+      return respond.problem(404, 'NOT_FOUND', `no fixture for ${request.method} ${request.path}`);
+    });
     const states: string[] = [];
     const stream = new FetchSseTransport().connect(`${server.baseUrl}/stream`, { onMessage: () => undefined, onState: (state) => states.push(state) });
     try {
-      await expect.poll(() => states.slice(0, 3)).toEqual(['CONNECTING', 'CONNECTED', 'STALE']);
-      const opened = server.requests.find((request) => request.path === '/stream');
+      await expect.poll(() => ({
+        connected: states.includes('CONNECTED'),
+        online: globalThis.navigator.onLine,
+        requestCount: server.requests.filter((request) => request.path === '/stream').length,
+        states: [...states],
+      }), { timeout: 5_000 }).toMatchObject({ connected: true });
+      const connectedAt = states.indexOf('CONNECTED');
+      await expect.poll(() => states.slice(connectedAt + 1).includes('STALE'), { timeout: 5_000 }).toBe(true);
+      expect(states[0]).toBe('CONNECTING');
+      expect(server.requests.filter((request) => request.path === '/stream')).toHaveLength(2);
+      const opened = server.requests.filter((request) => request.path === '/stream').at(-1);
       expect(opened?.headers.accept).toBe('text/event-stream');
       expect(opened?.headers['last-event-id']).toBeUndefined();
     } finally {

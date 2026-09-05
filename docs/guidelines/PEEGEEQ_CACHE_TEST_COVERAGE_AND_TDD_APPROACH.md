@@ -217,6 +217,39 @@ Desktop zoom and accessibility checks remain valid, but the browser viewport its
 within the supported desktop range. Graceful behavior outside that range is not a product contract
 and receives no scenario credit.
 
+### Browser screenshot evidence
+
+Every reportable `PW-*` scenario must retain a PNG viewport capture and a focused element/panel
+capture from the real browser before fixture cleanup. Follow the sibling PeeGeeQ management UI's
+every-test capture policy and the Utilities UI's paired element/viewport attachment convention.
+Use the supported 1440x900 viewport, disable animations during capture, and wait on visible state.
+Before automatic target selection, wait for finite animations to settle so a closing dialog is not
+selected as the result surface; continuous animations must not block capture. Do not use fixed sleeps.
+The focused target is an explicit scenario locator or the visible dialog, alert, region, or main
+surface. Additional checkpoints may capture intermediate states before a workflow dismisses them.
+
+Capture passing and failing scenarios. Publish the complete passing catalogue to the UI module's
+flat `docs/screenshots/` directory with descriptive feature/behavior filenames and a visible gallery,
+following the sibling UI documentation screenshot convention. Scenario IDs are internal traceability,
+not the user-facing screenshot organization. Raw diagnostic captures may retain a distinct run
+directory and scenario ID plus sequence; link both images to their owning scenario in the portable HTML report. Passing
+acceptance must fail if either image is missing, unreadable, assigned to another scenario, or has
+an unsupported viewport. A failed scenario that cannot reach a capturable page must be reported as
+failed with missing visual evidence, never represented by an unrelated or synthetic screenshot.
+
+Capture the development UI exactly as the browser renders it. Do not add screenshot masks,
+redaction overlays, text-suppression styles, replacement values, or canary-based pixel filtering.
+This applies to every control and value, including passwords, editors, revealed values, and tokens.
+Do not clear form values or mutate application state to produce evidence. The application's own
+password inputs and explicit reveal/hide behavior remain unchanged; screenshot capture must neither
+hide visible content nor reveal content the application has not displayed. This explicit user
+requirement supersedes the earlier blanket screenshot-masking rule.
+Screenshot infrastructure tests use real Chromium and a local HTTP fixture to verify PNG dimensions,
+pixel equality with native browser screenshots, unchanged field values, and file-write failure propagation. They receive no product-scenario
+credit. Generated screenshots and reports remain ignored output, including the published documentation
+PNGs and generated gallery. Preserve source-run identity when republishing; do not claim that copying
+existing verified captures constitutes a new browser run. Focused runs must not replace the full gallery.
+
 ### Browser fixture lifecycle
 
 > **Mandated: reuse one registered setup for ordinary Playwright scenarios.**
