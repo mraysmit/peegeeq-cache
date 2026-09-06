@@ -11,6 +11,7 @@ import java.util.function.Consumer;
 final class ManagementPlaywright {
 
     private static final String HEADLESS_PROPERTY = "peegeeq.playwright.headless";
+    private static final String BROWSER_PROPERTY = "peegeeq.playwright.browser";
     private static final String SLOW_MOTION_PROPERTY = "peegeeq.playwright.slowMo";
     private static final String PAUSE_PROPERTY = "peegeeq.playwright.pauseBetweenScenarios";
 
@@ -18,11 +19,19 @@ final class ManagementPlaywright {
     }
 
     static BrowserType.LaunchOptions launchOptions() {
-        Observation observation = ManagementBrowserRunConfig.current().observation();
-        return new BrowserType.LaunchOptions()
-                .setChannel("chrome")
+        return launchOptions(System.getProperties());
+    }
+
+    static BrowserType.LaunchOptions launchOptions(Properties properties) {
+        Observation observation = observation(properties);
+        String browser = properties.getProperty(BROWSER_PROPERTY, "chrome").trim();
+        if (!browser.equals("chrome") && !browser.equals("chromium")) {
+            throw new IllegalArgumentException(BROWSER_PROPERTY + " must be chrome or chromium");
+        }
+        BrowserType.LaunchOptions options = new BrowserType.LaunchOptions()
                 .setHeadless(observation.headless())
                 .setSlowMo(observation.slowMotionMillis());
+        return browser.equals("chrome") ? options.setChannel("chrome") : options;
     }
 
     static Observation observation() {

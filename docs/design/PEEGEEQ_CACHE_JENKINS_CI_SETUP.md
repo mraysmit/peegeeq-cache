@@ -57,6 +57,19 @@ as deterministic RED evidence, then passed after the repair. The full pinned-Nod
 36 files and 170 tests with lint, type checking, generated API, coverage and production build.
 Build #4 remains failed diagnostic evidence; a later full Jenkins build is required.
 
+Build #5 checked out the setup-reconciliation repair, and the previously failing UI boundary passed
+as part of all 170 frontend tests. The reactor then reached the Java browser suites, where every
+launch failed before a scenario could execute because the worker has no branded Google Chrome at
+`/opt/google/chrome/chrome`. This is worker-runtime RED evidence, not a product assertion failure.
+The sibling `peegeeq` pipeline installs Playwright-managed Chromium rather than requiring a
+machine-wide branded browser. This pipeline now follows that contract: after packaging has resolved
+the pinned Java Playwright dependency, a dedicated stage invokes that exact version's bundled CLI
+to install Chromium for the Jenkins account. Verification and compatibility runs explicitly select
+the managed `chromium` distribution. Local execution retains `chrome` as its default, and the only
+accepted launch values are `chrome` and `chromium`; focused tests prove the default, the CI choice,
+and fail-closed rejection of any other value. Build #5 remains failed diagnostic evidence; the
+repaired revision requires a fresh Jenkins run.
+
 Docker-group membership is root-equivalent authority on the worker. Only trusted repository
 revisions and trusted job administrators may execute or replay this pipeline.
 
@@ -74,6 +87,10 @@ The `RUN_MODE` parameter has four fixed selections:
 Every selection first performs a clean reactor rebuild with tests skipped. Test and benchmark
 commands retain Maven's failure status through `bash -o pipefail` while saving complete logs.
 Concurrent builds are disabled so separate Jenkins runs cannot compete for the worker or Docker.
+For verification selections, the rebuild is followed by installation of the exact
+Playwright-managed Chromium version declared by the REST module. The browser suite is then launched
+with `-Dpeegeeq.playwright.browser=chromium`; this does not install or depend on branded Google
+Chrome. Developer runs continue to default to the locally established Chrome channel.
 
 The compatibility suite is sequential by design. Each version's Surefire and Failsafe XML is copied
 under a version-specific path immediately after execution, so later Maven runs cannot overwrite its
@@ -126,6 +143,11 @@ The current `peegeeq-linux` contract inherited from the sibling pipeline is:
 - `DOCKER_HOST` unset; and
 - sufficient disk, memory and swap for the selected run.
 
+The Jenkins account must also be able to write Playwright's normal per-user browser cache and
+execute the managed Chromium binary. The pipeline obtains the browser through the pinned Java
+Playwright CLI after the preparatory package phase, matching the sibling pipeline's managed-browser
+practice and avoiding privileged operating-system browser installation.
+
 The pipeline verifies each item before rebuilding. It records resources rather than treating the
 current 4-vCPU/15-GiB worker as a universal baseline. That worker represents one characterised
 deployment only. Comparative runs must keep ESXi reservation, VM snapshots, datastore, power
@@ -162,8 +184,8 @@ successfully.
 
 - [x] `Jenkinsfile` is reviewed, committed and present on the configured remote branch.
 - [x] `PeeGeeQ-Cache` is a distinct job; `PeeGeeQ` is unchanged.
-- [ ] The job is constrained to `peegeeq-linux` and concurrent builds are disabled.
-- [ ] Environment preflight passes as the Jenkins account.
+- [x] The job is constrained to `peegeeq-linux` and concurrent builds are disabled.
+- [x] Environment preflight passes as the Jenkins account.
 - [ ] Default `verify` publishes non-empty JUnit results and archived diagnostics.
 - [ ] Compatibility mode publishes evidence for all four PostgreSQL versions.
 - [ ] Calibration archives one valid JSON file per requested fork.

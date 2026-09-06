@@ -552,3 +552,16 @@ completion. The complete pinned Node 22.22.2 UI verification passes 36 files and
 including generated-client validation, type checking, zero-warning lint, coverage (94.18% statements
 and lines, 86.05% branches, 84.77% functions) and the production Vite build. Build #4 is retained as
 useful Linux RED evidence; it is not an accepted Jenkins result.
+
+Jenkins build #5 checked out that repair and passed the complete 170-test frontend boundary,
+including the formerly failing setup-detach case. The Java browser suites then failed uniformly at
+browser startup because the worker does not provide branded Google Chrome at
+`/opt/google/chrome/chrome`; no affected browser scenario reached its product assertions. This is a
+CI runtime mismatch: the sibling `peegeeq` pipeline installs Playwright-managed Chromium, while the
+cache launcher had unconditionally selected the `chrome` channel. The TDD repair adds a validated
+browser-distribution setting with `chrome` retained as the developer default, `chromium` selecting
+Playwright's managed binary, and all other values rejected. The Jenkins pipeline resolves the
+pinned Java Playwright version, installs its Chromium runtime after packaging, and explicitly uses
+that distribution for verification and PostgreSQL compatibility. Focused configuration tests pass
+7/7. Build #5 remains diagnostic RED evidence and a later full Jenkins run is required for
+acceptance.

@@ -1,5 +1,6 @@
 package dev.mars.peegeeq.cache.rest.server;
 
+import com.microsoft.playwright.BrowserType;
 import org.junit.jupiter.api.Test;
 
 import java.util.Properties;
@@ -17,6 +18,26 @@ class ManagementPlaywrightTest {
         assertEquals(true, actual.headless());
         assertEquals(0.0, actual.slowMotionMillis());
         assertEquals(0L, actual.pauseBetweenScenariosMillis());
+    }
+
+    @Test
+    void browserConfigurationUsesChromeByDefaultAndManagedChromiumWhenSelected() {
+        BrowserType.LaunchOptions chrome = ManagementPlaywright.launchOptions(new Properties());
+        assertEquals("chrome", chrome.channel);
+
+        Properties properties = new Properties();
+        properties.setProperty("peegeeq.playwright.browser", "chromium");
+        BrowserType.LaunchOptions chromium = ManagementPlaywright.launchOptions(properties);
+        assertEquals(null, chromium.channel);
+    }
+
+    @Test
+    void browserConfigurationRejectsUnknownDistributions() {
+        Properties properties = new Properties();
+        properties.setProperty("peegeeq.playwright.browser", "firefox");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> ManagementPlaywright.launchOptions(properties));
     }
 
     @Test

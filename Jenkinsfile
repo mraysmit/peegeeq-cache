@@ -119,6 +119,29 @@ pipeline {
             }
         }
 
+        stage('Browser runtime') {
+            when {
+                expression { (params.RUN_MODE ?: 'verify') in ['verify', 'postgresql-compatibility'] }
+            }
+            steps {
+                sh '''
+                    set -eu
+                    playwright_version="$(mvn --batch-mode --no-transfer-progress \
+                      -f peegee-cache-rest/pom.xml help:evaluate \
+                      -Dexpression=playwright.version -q -DforceStdout)"
+                    playwright_root="$HOME/.m2/repository/com/microsoft/playwright"
+                    playwright_jar="$playwright_root/playwright/$playwright_version/playwright-$playwright_version.jar"
+                    driver_jar="$playwright_root/driver/$playwright_version/driver-$playwright_version.jar"
+                    bundle_jar="$playwright_root/driver-bundle/$playwright_version/driver-bundle-$playwright_version.jar"
+                    test -r "$playwright_jar"
+                    test -r "$driver_jar"
+                    test -r "$bundle_jar"
+                    java -cp "$playwright_jar:$driver_jar:$bundle_jar" \
+                      com.microsoft.playwright.CLI install chromium
+                '''
+            }
+        }
+
         stage('Reactor verification') {
             when { expression { (params.RUN_MODE ?: 'verify') == 'verify' } }
             options { timeout(time: 150, unit: 'MINUTES') }
@@ -126,6 +149,7 @@ pipeline {
                 sh '''
                     bash -o pipefail -c \
                       'mvn --batch-mode --no-transfer-progress verify \
+                      -Dpeegeeq.playwright.browser=chromium \
                       -Dpeegeeq.test.postgres.image="$POSTGRES_IMAGE_EFFECTIVE" \
                       2>&1 | tee logs/reactor-verify.log'
                 '''
@@ -152,6 +176,7 @@ pipeline {
                                         find . -type f -not -path './target/jenkins-junit/*' \\( -path '*/target/surefire-reports/*.xml' -o -path '*/target/failsafe-reports/*.xml' \\) -delete
                                         bash -o pipefail -c \
                                           'mvn --batch-mode --no-transfer-progress verify \
+                                          -Dpeegeeq.playwright.browser=chromium \
                                           -Dpeegeeq.test.postgres.image="$PG_IMAGE" \
                                           2>&1 | tee "logs/postgresql-$PG_VERSION.log"'
                                     '''

@@ -17,7 +17,9 @@
     <description>Vert.x management API and static-host packaging boundary.</description>
 
     <properties>
+        <playwright.version>1.55.0</playwright.version>
         <peegeeq.playwright.headless>true</peegeeq.playwright.headless>
+        <peegeeq.playwright.browser>chrome</peegeeq.playwright.browser>
         <peegeeq.playwright.slowMo>0</peegeeq.playwright.slowMo>
         <peegeeq.playwright.pauseBetweenScenarios>0</peegeeq.playwright.pauseBetweenScenarios>
         <peegeeq.playwright.scenarios></peegeeq.playwright.scenarios>
@@ -126,7 +128,7 @@
         <dependency>
             <groupId>com.microsoft.playwright</groupId>
             <artifactId>playwright</artifactId>
-            <version>1.55.0</version>
+            <version>${playwright.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -187,6 +189,7 @@
                         <peegeeq.playwright.artifacts>${project.build.directory}/playwright-artifacts</peegeeq.playwright.artifacts>
                         <peegeeq.playwright.screenshots>${project.basedir}/../peegee-cache-management-ui/docs/screenshots</peegeeq.playwright.screenshots>
                         <peegeeq.playwright.headless>${peegeeq.playwright.headless}</peegeeq.playwright.headless>
+                        <peegeeq.playwright.browser>${peegeeq.playwright.browser}</peegeeq.playwright.browser>
                         <peegeeq.playwright.slowMo>${peegeeq.playwright.slowMo}</peegeeq.playwright.slowMo>
                         <peegeeq.playwright.pauseBetweenScenarios>${peegeeq.playwright.pauseBetweenScenarios}</peegeeq.playwright.pauseBetweenScenarios>
                         <peegeeq.playwright.scenarios>${peegeeq.playwright.scenarios}</peegeeq.playwright.scenarios>
