@@ -515,3 +515,11 @@ gallery were published successfully. The final log contains no build/test failur
 credential-like leakage match. Changed source contains no prohibited mocking framework, disabled
 test, blocking sleep, global-property mutation or whitespace error. Expected existing headless-DOM,
 JDK deprecation, schema-idempotency and deliberate fault-path diagnostics remain classified output.
+
+Commit `8996af9` was pushed to `origin/master` and Jenkins build `PeeGeeQ-Cache #1` checked out that
+exact revision. Jenkins did not expose declarative parameter values on the job's first execution,
+so the environment stage observed an unset `RUN_MODE`. Its log-capture pipeline also failed to
+propagate that error and allowed the tests-skipped rebuild to start. Build #1 is therefore diagnostic
+RED evidence only, regardless of its eventual Jenkins result. The follow-up repair gives first-run
+execution explicit `verify`, PostgreSQL-image and topology defaults and captures preflight output
+without masking the failing command's status. A subsequent build is required for Jenkins acceptance.

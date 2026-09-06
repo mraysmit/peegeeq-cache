@@ -38,6 +38,9 @@ pipeline {
         MAVEN_HOME = '/opt/maven'
         PATH = "/usr/lib/jvm/temurin-25-jdk-amd64/bin:/opt/maven/bin:${env.PATH}"
         CI = 'true'
+        RUN_MODE_EFFECTIVE = "${params.RUN_MODE ?: 'verify'}"
+        POSTGRES_IMAGE_EFFECTIVE = "${params.POSTGRES_IMAGE ?: 'postgres:18.3-alpine'}"
+        DEPLOYMENT_TOPOLOGY_EFFECTIVE = "${params.DEPLOYMENT_TOPOLOGY ?: 'Jenkins peegeeq-linux worker; benchmark JVM and Testcontainers PostgreSQL on the same rootful Docker engine'}"
     }
 
     options {
@@ -58,15 +61,17 @@ pipeline {
         stage('Environment contract') {
             steps {
                 sh '''
-                    set -eu
+                    set -u
                     mkdir -p logs benchmark-results
 
-                    {
+                    status=0
+                    (
+                        set -eu
                         echo "build_tag=$BUILD_TAG"
                         echo "node_name=$NODE_NAME"
                         echo "workspace=$WORKSPACE"
-                        echo "run_mode=$RUN_MODE"
-                        echo "deployment_topology=$DEPLOYMENT_TOPOLOGY"
+                        echo "run_mode=$RUN_MODE_EFFECTIVE"
+                        echo "deployment_topology=$DEPLOYMENT_TOPOLOGY_EFFECTIVE"
                         date --utc --iso-8601=seconds
                         uname -a
                         java -version
@@ -96,7 +101,9 @@ pipeline {
                         df -h /
                         free -h
                         swapon --show
-                    } 2>&1 | tee logs/jenkins-worker-environment.log
+                    ) > logs/jenkins-worker-environment.log 2>&1 || status=$?
+                    cat logs/jenkins-worker-environment.log
+                    exit "$status"
                 '''
             }
         }
@@ -113,13 +120,13 @@ pipeline {
         }
 
         stage('Reactor verification') {
-            when { expression { params.RUN_MODE == 'verify' } }
+            when { expression { (params.RUN_MODE ?: 'verify') == 'verify' } }
             options { timeout(time: 150, unit: 'MINUTES') }
             steps {
                 sh '''
                     bash -o pipefail -c \
                       'mvn --batch-mode --no-transfer-progress verify \
-                      -Dpeegeeq.test.postgres.image="$POSTGRES_IMAGE" \
+                      -Dpeegeeq.test.postgres.image="$POSTGRES_IMAGE_EFFECTIVE" \
                       2>&1 | tee logs/reactor-verify.log'
                 '''
             }
@@ -277,7 +284,7 @@ pipeline {
                         : '**/target/surefire-reports/*.xml,**/target/failsafe-reports/*.xml'
                     junit(
                         testResults: junitPattern,
-                        allowEmptyResults: !(params.RUN_MODE in ['verify', 'postgresql-compatibility'])
+                        allowEmptyResults: !((params.RUN_MODE ?: 'verify') in ['verify', 'postgresql-compatibility'])
                     )
                 } finally {
                     archiveArtifacts(

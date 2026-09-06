@@ -21,11 +21,15 @@ The authenticated Jenkins server at `http://192.168.137.11:8080` now contains a 
 job named `PeeGeeQ-Cache`. It is configured as **Pipeline script from SCM**, using Git repository
 `https://github.com/mraysmit/peegeeq-cache.git`, branch specifier `*/master`, script path
 `Jenkinsfile`, lightweight checkout, and job-level non-concurrent execution. It has no automatic
-trigger and no builds have been started. The existing `PeeGeeQ` job was not reconfigured.
+trigger. The existing `PeeGeeQ` job was not reconfigured.
 
-The job is intentionally not run yet: the current Jenkinsfile and benchmark implementation changes
-remain local and the configured remote branch does not contain them. Its first build is permitted
-only after the reviewed changes are committed and pushed.
+The reviewed benchmark/Jenkins implementation is committed as `8996af9` and is present on
+`origin/master`. The first attempted build checked out that exact revision, but Jenkins had not yet
+persisted the declarative parameters and therefore supplied no `RUN_MODE`. That attempt is invalid
+evidence: it exposed a first-build initialization defect before verification began. The follow-up
+pipeline revision supplies explicit first-run defaults and propagates every environment-preflight
+failure independently of console-log capture. Only a later completed build may satisfy the
+acceptance checklist below.
 
 Docker-group membership is root-equivalent authority on the worker. Only trusted repository
 revisions and trusted job administrators may execute or replay this pipeline.
@@ -130,8 +134,8 @@ successfully.
 
 ## Acceptance checklist
 
-- [ ] `Jenkinsfile` is reviewed, committed and present on the configured remote branch.
-- [ ] `PeeGeeQ-Cache` is a distinct job; `PeeGeeQ` is unchanged.
+- [x] `Jenkinsfile` is reviewed, committed and present on the configured remote branch.
+- [x] `PeeGeeQ-Cache` is a distinct job; `PeeGeeQ` is unchanged.
 - [ ] The job is constrained to `peegeeq-linux` and concurrent builds are disabled.
 - [ ] Environment preflight passes as the Jenkins account.
 - [ ] Default `verify` publishes non-empty JUnit results and archived diagnostics.
