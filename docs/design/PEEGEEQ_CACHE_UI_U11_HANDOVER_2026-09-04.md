@@ -532,3 +532,9 @@ product-test failure. The preparatory phase is corrected to `clean package -Dski
 full `verify` remains the selected acceptance stage. Post-build JUnit publication now tolerates no
 reports only after an earlier failure, avoiding a secondary publication exception while preserving
 the non-empty report requirement for successful verification and compatibility builds.
+
+Build #3 did not allocate a workspace. Jenkins' controller-side Groovy parser rejected the JUnit
+guard because a continued expression began its next line with `&&`; the newer local Groovy parser
+had accepted the same syntax. The operator is moved to the preceding line. This is parser RED
+evidence, and the next launch requires Jenkins-controller validation of the complete declarative
+pipeline rather than relying on the local compiler alone.

@@ -40,6 +40,12 @@ JUnit publication permits an empty result set only when an earlier stage has alr
 successful verification or compatibility execution still requires non-empty reports. Build #2 is
 diagnostic RED evidence, not a test result.
 
+Build #3 then exposed a Jenkins-controller parser compatibility issue before workspace allocation:
+the controller's Groovy parser rejects a continued boolean expression when `&&` begins the next
+line, although the newer local Groovy compiler accepts it. The operator now ends the preceding line.
+This attempt is parser RED evidence only. Subsequent revisions must be checked with Jenkins' own
+declarative-pipeline validator, not only the local Groovy compiler, before another build is started.
+
 Docker-group membership is root-equivalent authority on the worker. Only trusted repository
 revisions and trusted job administrators may execute or replay this pipeline.
 
