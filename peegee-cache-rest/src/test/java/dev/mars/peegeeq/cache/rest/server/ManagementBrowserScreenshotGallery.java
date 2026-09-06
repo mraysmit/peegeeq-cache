@@ -3,9 +3,11 @@ package dev.mars.peegeeq.cache.rest.server;
 import javax.imageio.ImageIO;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -96,7 +98,7 @@ public final class ManagementBrowserScreenshotGallery {
             for (var capture : scenario.captures) {
                 String filename = base + (capture.sequence.equals("1") ? "" : "-capture-" + capture.sequence)
                         + "-" + capture.kind + ".png";
-                Files.write(directory.resolve(filename), capture.bytes);
+                writeIfChanged(directory.resolve(filename), capture.bytes);
                 out.append("<figure><a href=\"").append(filename).append("\"><img loading=\"lazy\" src=\"")
                         .append(filename).append("\" alt=\"").append(escape(scenario.name + " — " + capture.kind))
                         .append("\"></a><figcaption>").append(filename).append("</figcaption></figure>");
@@ -109,7 +111,12 @@ public final class ManagementBrowserScreenshotGallery {
                 document.querySelectorAll('article').forEach(card=>card.hidden=!card.dataset.search.includes(query));
                 });</script></main></body></html>
                 """);
-        Files.writeString(directory.resolve("index.html"), out);
+        writeIfChanged(directory.resolve("index.html"), out.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void writeIfChanged(Path target, byte[] content) throws IOException {
+        if (Files.exists(target) && Arrays.equals(Files.readAllBytes(target), content)) return;
+        Files.write(target, content);
     }
 
     private static String slug(String value) {

@@ -1072,10 +1072,31 @@ The PostgreSQL 15–18 compatibility matrix is now encoded in `.github/workflows
 
 The following external actions are intentionally deferred until the project is ready for its first release candidate. They are not complete and must be reviewed before making production capacity/SLO claims or publishing public artifacts:
 
-- [ ] **Production-topology benchmark:** identify the intended database, network, storage, compute, JVM, pool, and workload topology; run at least three full-duration captures from a clean release-candidate checkout; retain the self-contained HTML evidence; and review throughput, tail latency, telemetry overhead, expiry lag, and failover recovery against the proposed production objectives. Local Testcontainers results remain regression evidence only.
+- [ ] **Parameterised performance and deployment characterisation:** implement configurable workload/parameter sweeps and observation timeframes with interval statistics; analyse degradation onset, progression and recovery across an explicitly recorded experiment matrix. Retain at least three independent full-duration captures per selected release-evidence configuration, increasing repetitions where uncertainty requires it, with time-series evidence and diagnostics. Predefined throughput/latency targets are not an entry requirement. Record actual deployment settings and measured limits; existing local summaries are regression evidence, not universal capacity claims.
 - [ ] **Maven Central publication:** verify ownership of the `dev.mars` namespace, select a non-SNAPSHOT release version, prepare release notes, provide the Central Portal token and GPG signing key through external secret storage, run the documented signed deployment, review Central's validation result, and manually promote the deployment. No credentials or private signing material belong in this repository.
 
 Review trigger: revisit both items before declaring the first release candidate production-ready. Use `docs/PEEGEEQ_CACHE_BENCHMARKS.md` and `docs/PEEGEEQ_CACHE_RELEASE_PACKAGING.md` as the execution runbooks.
+
+This action is detailed in the [parameterised performance and degradation analysis
+plan](PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md). The revised B0–B6 sequence starts with experiment
+and interval contracts, time-series recording and controlled load scheduling; production target
+selection does not block framework implementation. External access is required only for the
+corresponding deployment campaigns. B0/B1 are in progress: planning/accounting and JSON contracts
+now have a bounded interval/latency recorder and incremental checkpoint pipeline, including real
+PostgreSQL-to-pipeline-to-JSON verification and a local recorder-cost probe. No revised phase is yet
+complete. Automatic count/time publication, explicit finalisation and read-only recovery inspection
+are now implemented, as is the repeatable concurrent/fork recorder-and-checkpoint calibration command.
+Automatic restart/resume, final long-soak persistence strategy and parameter-matrix workload execution
+remain pending. B2 has now started with a pull-driven closed-loop/rate-controlled scheduling engine,
+bounded admission, queue expiry, physical-slot retention after logical timeout, late-completion
+accounting and JSON-compatible scheduler diagnostics. The managed Vert.x execution adapter, phase
+transitions, stop/drain and workload/checkpoint coupling remain open; the bounded integration-test
+driver is not that adapter. See performance-plan §§16–19 for limits and evidence; calibration and
+integration verification are not database capacity measurements.
+The first B2 slice is accepted: 21 focused scheduler/recorder/PostgreSQL checks pass, followed by
+484 tests in 76 fresh selected-reactor Surefire reports with zero failures/errors/skips. Earlier
+Docker runtime-socket and auto-update interruptions are retained as failed-attempt diagnostics, not
+acceptance. Docker Desktop 4.89.0 / engine 29.7.2 was healthy for the final PostgreSQL 18.3 gate.
 
 ## 9. Summary
 

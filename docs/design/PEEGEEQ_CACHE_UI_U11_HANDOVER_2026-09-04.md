@@ -338,3 +338,180 @@ The uncommitted 5 September working tree adds the deterministic readiness/test-b
 - **`components` folder coverage (77%)** is not thresholded; `ConnectionStatus`/`StatCard`/`SetupScopeBar`/`ValueSelect` are exercised through page tests only.
 - **Bundle size advisory.** Vite reports a single JavaScript chunk above 500 kB after minification. This is an optimization opportunity, not a correctness failure.
 - **Toolchain and packaging advisories.** JDK 25 reports Maven/Guice `sun.misc.Unsafe` deprecation; Maven Shade reports known duplicate metadata/classes; npm reports a transitive `glob` deprecation; jsdom/Recharts report non-browser layout limitations. None produced a gate failure, vulnerability, dump, leak, or missing artifact.
+
+## 13. Subsequent benchmark work (6 September 2026)
+
+The [parameterised performance plan](PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md) now governs the
+separate performance/degradation analysis work. B0 is in progress: the first timeframe and
+cumulative interval-accounting contracts have 11 passing focused tests after a recorded RED run.
+Experiment/matrix specification and live recording are still pending; the legacy benchmark runner
+and UI/browser behavior are unchanged. See that plan's implementation-evidence section and
+`target/benchmark-b0-{red,green,verify}.log` for the scope and verification records.
+The benchmark/dependency eight-module verification also passed: 409 tests in 59 Surefire reports,
+zero failures/errors/skips, including 27 benchmark tests and existing PostgreSQL 18.3 integration
+tests. No fresh full UI/browser reactor or four-version matrix is claimed for these pure contracts.
+
+The subsequent B0 slice adds typed load parameters, bounded lazy parameter-matrix expansion,
+versioned experiment/run descriptors, and repetition/fork budgets. It has 13 additional tests,
+bringing focused B0 coverage to 24, including an assertion-RED/GREEN duplicate signed-zero case.
+See section 13 of the performance plan and `target/benchmark-b0-matrix-*.log`. These are planning
+contracts only: no load scheduler, live recorder, external campaign or fork launcher is wired yet.
+The subsequent eight-module benchmark/dependency verification passed 422 tests in 62 fresh XML
+reports, zero failures/errors/skips, including 40 benchmark-module tests. Its log is
+`target/benchmark-b0-matrix-verify.log`; expected fault-test diagnostics were reviewed.
+
+The next B0 slice establishes one authoritative JSON checkpoint file per actual execution, with
+configuration, interval counters/rates, metrics, diagnostics and unfinished/failed/completed status.
+Seven test-first JSON cases bring focused B0 coverage to 31. Latency collection, analysis and the
+JSON-derived HTML view remain pending. See performance-plan section 14 and `target/benchmark-json-*.log`;
+the legacy executable benchmark and browser/UI results are unchanged.
+The JSON slice's eight-module verification passed 429 tests across 63 fresh XML reports, zero
+failures/errors/skips, including 47 benchmark-module tests. Logs and expected fault diagnostics
+were reviewed; see `target/benchmark-json-verify.log`.
+
+The next B1 slice adds bounded latency distributions and synchronised interval recording, with
+outcome/sample-count validation in the per-run JSON. Ten new pure tests cover distributions and
+rollover/concurrency; a supplemental real-PostgreSQL test verifies 40 cache workflows in two JSON
+measurement intervals. See performance-plan section 15 and `target/benchmark-recorder-*.log`.
+Downstream bounded checkpoint orchestration, overhead calibration and the load scheduler remain
+pending; no completed B1 phase or production performance claim is made.
+Recorder/dependency verification passed 440 tests across 66 fresh XML reports, zero failures/errors/
+skips, including 58 benchmark tests. See `target/benchmark-recorder-verify.log`; logs and expected
+fault diagnostics were reviewed.
+
+The next B1 slice adds `BenchmarkCheckpointWriter` (delta histories, bounded retained state, streamed
+atomic single-JSON replacement) and `BenchmarkCheckpointPipeline` (Vert.x worker ownership, explicit
+count/byte admission limits, fail-stop propagation and drain). Eight test-first cases and another
+real-PostgreSQL recorder/pipeline integration case bring the benchmark module to 67 tests. The
+eight-module verification passed 449 tests across 68 fresh XML reports, zero failures/errors/skips,
+at 14:38:23 +08:00; all eight focused tests passed again after tightening the capacity assertion.
+See performance-plan §16 and `target/benchmark-checkpoint-*.log` / `target/benchmark-pipeline-*.log`.
+The latest logs retain only the already-classified tooling/schema and intentional fault diagnostics.
+
+A separate local recorder-cost probe retained all 27 raw windows in
+`target/benchmark-calibration-probe/d2b558f9-e7bb-409a-8c11-64ddb8310a26.json`. This is one-JVM,
+single-thread diagnostic evidence, not a reusable calibration runner or deployment benchmark.
+B1 remains in progress: automatic cadence, restart/recovery, long-run disk/heap behavior and repeatable
+fork/concurrency calibration remain. Incremental checkpoint memory is bounded but each publication
+still copies/hashes growing history; long-soak write cost is not solved. The legacy runner, UI and
+screenshots are unchanged. Continue from performance-plan §11, not from earlier historical B0 notes.
+
+The next B1 slice implements `BenchmarkCheckpointSession`: count/time publication of recorded
+intervals, one active plus one bounded staged batch, resolved cadence policy in the run JSON, and
+explicit draining finalisation. `BenchmarkCheckpointRecovery` performs read-only streamed structural/
+metadata inspection; UNFINALISED requires owner review, not an assumption that the process crashed.
+It does not repair, seize ownership or resume an interrupted execution. See performance-plan §17.
+Six initial session tests and four recovery tests followed recorded compilation-RED/GREEN cycles;
+supplemental terminal-byte-boundary and real-PostgreSQL session checks bring the module to 79 tests.
+A suspicious ten-second test-fixture timeout was found during log review, corrected and made an
+explicit failure condition before acceptance; the corrected six-test fixture run took 0.807 seconds.
+
+`target/benchmark-cadence-verify.log` records all eight selected modules passing, 461 tests across
+70 fresh reports, zero failures/errors/skips, at 14:47:59 +08:00. The post-review checkpoint/PostgreSQL
+rerun passed all 22 tests. Logs retain only the classified tooling/schema and deliberate fault-test
+diagnostics. B1 stays in progress: repeatable concurrent/fork/long-run calibration, constrained-heap
+and disk-cost verification, recorder rollover and workload scheduling remain next. Automatic
+restart/resume remains unsupported. No legacy benchmark, UI, screenshot or publication change.
+
+The next B1 slice adds a maintained `benchmark-calibration` Maven profile and Java configuration,
+runner and entry point. Each invocation is a fresh JVM/fork with explicit concurrency, histogram
+layout, warm-up/measurement/window durations, checkpoint frequency, heap and file-size budget.
+It retains all paired baseline/recorded observations, per-task timing/allocation, heap/GC and actual
+checkpoint write costs in one JSON file. Outcomes and latency samples are synthetic recorder inputs,
+never cache/database measurements. The old disposable probe is not treated as the new implementation.
+
+Eight calibration tests now include real heap-limited child JVMs, failure evidence, exit codes and the
+Maven launch contract. Test-first boundary assertions corrected doubled-window overflow and missing
+unpublished-data diagnostics. Fork tests exposed a genuine shutdown/exit defect; a context-free Vert.x
+completion bridge now reports the run outcome after cleanup, and tests reject terminated-executor
+output or silent exit 0. No failure is suppressed. See performance-plan §18 and
+`target/benchmark-calibration-{red,boundary-red,boundary-green,fork-red,shutdown-red,shutdown-green,profile-red,final-green}.log`.
+
+`target/benchmark-calibration-verify.log` records all eight selected modules passing: 469 tests in
+74 fresh Surefire reports, zero failures/errors/skips, including 87 benchmark tests and PostgreSQL
+18.3 integration, completed at 15:01:15 +08:00. The budget-child IOException is deliberate failure-path
+evidence, separate from a failing test. The runbook documents the opt-in command and repeated-fork
+workflow; the production benchmark/capture command, UI/screenshots and publication status are unchanged.
+
+After verification, three independent 32 MiB JVM invocations of the new Maven profile completed with
+four concurrent recorder tasks, 1,024 buckets, 620 paired windows and 62 running-checkpoint records
+per run. Each produced a ~37.6 MB JSON file larger than its maximum Java heap; all counts/distributions
+reconcile and no work remains outstanding. Artifacts are under `benchmark-results/calibration-b1-20260906/`,
+with exact identities and derived figures in performance-plan §18. Logs are
+`target/benchmark-calibration-endurance-fork-{0,1,2}.log`; the last invocation finished at 15:05:30 +08:00.
+Early write medians of 31.6–37.7 ms increased to 180.1–200.0 ms in the last ten writes. This is a
+measured checkpoint-cost growth finding, not a hidden fixed-overhead assumption or production limit.
+Continue with product workload scheduling/rollover while retaining explicit publication-pressure
+accounting; the final long-soak persistence strategy and automated restart/resume remain open.
+
+### B2 scheduling/accounting slice — implemented and accepted (6 September)
+
+Read the testing standard, consolidated coding/lifecycle guidance and main implementation-plan
+principles before continuing. The first B2 engine is `BenchmarkWorkloadScheduler`: injected clock,
+closed-loop/rate-controlled demand, exact rational scheduling, bounded queue/physical concurrency,
+explicit generator misses, queue expiry, logical timeouts retaining physical slots, late/duplicate
+callback accounting, actual-boundary recorder samples and JSON-compatible diagnostics. No production
+timer/cancellation/phase adapter or campaign command has been added. The new PostgreSQL test driver
+is deliberately test-owned and is not presented as production orchestration. UI/screenshots unchanged.
+
+Strict TDD logs are under `target/benchmark-scheduler-*`. The initial eight scheduler tests ran RED
+before the engine, then GREEN with six recorder tests. Later RED/GREEN cycles added diagnostics and
+corrected closed-loop concurrency being restricted by a rate-only catch-up cap. The final focused
+unit result is **18 tests, zero failures/errors/skips** (12 scheduler, six recorder), in
+`target/benchmark-scheduler-closed-loop-green.log`. Review performance-plan §19 for the intermediate
+failed metrics implementation and shell-exit caveat; neither is claimed as an acceptance run.
+
+`BenchmarkSchedulerIntegrationTest` adds three invocations: real SET/GET workflows under
+both load models, incremental single-JSON publication, and real slow PostgreSQL queries proving
+logical timeout does not release physical capacity. All three now execute successfully.
+`target/benchmark-scheduler-integration.log` reports the 18 pure tests passing and one PostgreSQL
+class setup error because Docker was stopped/unavailable. A CLI startup timed out. Starting the
+installed Docker Desktop application exposed a backend crash while accessing/removing its local
+`sailor-ingest.sock` runtime entry. Read-only inspection found a zero-length reparse point. Docker
+data/settings were not reset, upgraded or deleted; repair is outside this implementation slice.
+
+The user authorised local Docker repair. Docker was stopped and only affected runtime sockets and the
+secrets-engine runtime directory were moved to timestamped `.stale-*` backups; images, volumes,
+settings and project files were not deleted. A first successful focused run was followed by Docker
+Desktop auto-updating 4.88.0 to 4.89.0 during the initial full gate, restarting the backend and
+removing the live Docker pipe. That interrupted Maven run was stopped and is diagnostic only. After
+one post-update cleanup and a single controlled start, engine 29.7.2 remained healthy.
+
+Final evidence: `target/benchmark-scheduler-integration-green.log` has **21 focused tests**, zero
+failures/errors/skips (12 scheduler, six recorder, three real PostgreSQL). The acceptance log
+`target/benchmark-scheduler-verify-final.log` has **484 tests in 76 fresh Surefire reports**, zero
+failures/errors/skips, including 102 benchmark tests on PostgreSQL 18.3; it completed at 15:55:48
++08:00. Log review found only established/intentional failure-path output. The failed setup log and
+auto-update-interrupted `target/benchmark-scheduler-verify.log` are not acceptance evidence.
+One PostgreSQL container stranded in CREATED state by that interrupted current run was identified by
+its Testcontainers session labels and removed; unrelated older stopped containers were not touched.
+
+**Next:** implement managed execution, independent timers, bounded stop/drain, phase-aware rollover
+and explicit publication-pressure accounting. Current benchmark source banned-pattern and whitespace
+scans are clean; no broader PostgreSQL matrix, UI run or deployment-capacity result is claimed.
+
+### Pre-Jenkins repository acceptance — complete (6 September)
+
+The repository-owned Jenkins pipeline and operations guide have been added for the separate
+`PeeGeeQ-Cache` job. The live job is configured from `*/master`, has no automatic trigger and had
+not been run at this checkpoint. The sibling `PeeGeeQ` job was not changed. The first Jenkins run
+must use the committed remote revision; it must not be represented as evidence before that run
+finishes and its published artifacts are reviewed.
+
+The first complete local reactor attempt passed every Java, UI and browser scenario but correctly
+failed its evidence gate when Windows refused to overwrite an unchanged documentation PNG that was
+open through a viewer's memory mapping. A test-first repair reproduced that exact filesystem error.
+Gallery publication now compares verified bytes and leaves an unchanged image in place, retaining
+the same descriptive flat filename and the original unmodified pixels. Changed images are still
+written normally and any genuine publication error remains fatal. No screenshot is masked,
+substituted, renamed by scenario identifier or exempted from evidence validation.
+
+The final fresh acceptance command was `mvn --batch-mode --no-transfer-progress verify`. It completed
+at 19:52:17 +08:00 in 33:06 with all eleven reactor modules successful. The UI gate passed 36 files
+and 170 tests. Java Surefire/Failsafe evidence contains 158 reports and 1,237 tests with zero
+failures, errors or skips; REST unit tests report 177 and the browser/integration suite reports 563.
+Both the 192,785,943-byte self-contained Playwright report and the feature-organised screenshot
+gallery were published successfully. The final log contains no build/test failure line or
+credential-like leakage match. Changed source contains no prohibited mocking framework, disabled
+test, blocking sleep, global-property mutation or whitespace error. Expected existing headless-DOM,
+JDK deprecation, schema-idempotency and deliberate fault-path diagnostics remain classified output.

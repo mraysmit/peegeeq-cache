@@ -6,9 +6,12 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
+
+import static java.nio.file.StandardOpenOption.READ;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -38,6 +41,20 @@ class ManagementBrowserScreenshotGalleryTest {
                 + row("PW-ENTRY-002", "Entry lifecycle", "ENTRY"), directory);
         assertArrayEquals(png(1440, 900), Files.readAllBytes(directory.resolve("entry-entry-lifecycle-viewport.png")));
         assertTrue(Files.exists(directory.resolve("entry-entry-lifecycle-2-viewport.png")));
+    }
+
+    @Test void doesNotRewriteAnUnchangedScreenshotThatIsOpenByAViewer() throws Exception {
+        String html = row("PW-ENTRY-001", "Entry lifecycle", "ENTRY");
+        ManagementBrowserScreenshotGallery.publish(html, directory);
+        Path screenshot = directory.resolve("entry-entry-lifecycle-viewport.png");
+
+        try (FileChannel channel = FileChannel.open(screenshot, READ)) {
+            var viewedImage = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+            assertEquals((byte) 0x89, viewedImage.get(0));
+            ManagementBrowserScreenshotGallery.publish(html, directory);
+        }
+
+        assertArrayEquals(png(1440, 900), Files.readAllBytes(screenshot));
     }
 
     @Test void escapesLabelsAndKeepsNamesInsideTheFlatDirectory() throws Exception {

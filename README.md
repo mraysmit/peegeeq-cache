@@ -11,6 +11,10 @@
 
 Management-server deployment, security, audit, Prometheus, and recovery procedures are in [docs/PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md](docs/PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md).
 
+Jenkins verification, PostgreSQL compatibility, recorder calibration, and controlled benchmark
+execution are defined in the repository [Jenkinsfile](Jenkinsfile) and documented in
+[docs/design/PEEGEEQ_CACHE_JENKINS_CI_SETUP.md](docs/design/PEEGEEQ_CACHE_JENKINS_CI_SETUP.md).
+
 peegee-cache is a library-first cache and coordination library that runs on PostgreSQL. It provides key/value storage, TTL expiry, atomic counters, distributed locks, conditional writes, namespaces, scanning, and lightweight pub/sub inside the same transactional envelope as your business data.
 
 ## Why PostgreSQL instead of a dedicated cache?

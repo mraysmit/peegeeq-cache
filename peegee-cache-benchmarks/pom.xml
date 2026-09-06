@@ -112,6 +112,53 @@
 
     <profiles>
         <profile>
+            <id>benchmark-calibration</id>
+            <properties>
+                <peegeeq.calibration.heap>64m</peegeeq.calibration.heap>
+                <peegeeq.calibration.outputDirectory>benchmark-results/calibration</peegeeq.calibration.outputDirectory>
+                <peegeeq.calibration.concurrency>4</peegeeq.calibration.concurrency>
+                <peegeeq.calibration.bucketCount>128</peegeeq.calibration.bucketCount>
+                <peegeeq.calibration.warmupMillis>1000</peegeeq.calibration.warmupMillis>
+                <peegeeq.calibration.measurementMillis>5000</peegeeq.calibration.measurementMillis>
+                <peegeeq.calibration.windowMillis>250</peegeeq.calibration.windowMillis>
+                <peegeeq.calibration.checkpointWindows>4</peegeeq.calibration.checkpointWindows>
+                <peegeeq.calibration.maximumEvidenceBytes>67108864</peegeeq.calibration.maximumEvidenceBytes>
+                <peegeeq.calibration.forkIndex>0</peegeeq.calibration.forkIndex>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <configuration>
+                            <arguments combine.self="override">
+                                <argument>-Xmx${peegeeq.calibration.heap}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>dev.mars.peegeeq.cache.benchmark.BenchmarkCalibrationMain</argument>
+                                <argument>${peegeeq.calibration.outputDirectory}</argument>
+                                <argument>${peegeeq.calibration.concurrency}</argument>
+                                <argument>${peegeeq.calibration.bucketCount}</argument>
+                                <argument>${peegeeq.calibration.warmupMillis}</argument>
+                                <argument>${peegeeq.calibration.measurementMillis}</argument>
+                                <argument>${peegeeq.calibration.windowMillis}</argument>
+                                <argument>${peegeeq.calibration.checkpointWindows}</argument>
+                                <argument>${peegeeq.calibration.maximumEvidenceBytes}</argument>
+                                <argument>${peegeeq.calibration.forkIndex}</argument>
+                            </arguments>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>calibrate-recorder-and-checkpoints</id>
+                                <phase>integration-test</phase>
+                                <goals><goal>exec</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
             <id>benchmark</id>
             <build>
                 <plugins>
