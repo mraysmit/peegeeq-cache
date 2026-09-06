@@ -523,3 +523,12 @@ propagate that error and allowed the tests-skipped rebuild to start. Build #1 is
 RED evidence only, regardless of its eventual Jenkins result. The follow-up repair gives first-run
 execution explicit `verify`, PostgreSQL-image and topology defaults and captures preflight output
 without masking the failing command's status. A subsequent build is required for Jenkins acceptance.
+
+Jenkins build #2 checked out the first repair, selected `verify` and passed the full environment
+contract. Its preparatory `clean install -DskipTests` then reached the REST module's mandatory
+Playwright evidence check without having executed the evidence-producing tests. The resulting
+failure occurred before the reactor-verification stage and is a second valid RED diagnostic, not a
+product-test failure. The preparatory phase is corrected to `clean package -DskipTests`; Maven's
+full `verify` remains the selected acceptance stage. Post-build JUnit publication now tolerates no
+reports only after an earlier failure, avoiding a secondary publication exception while preserving
+the non-empty report requirement for successful verification and compatibility builds.

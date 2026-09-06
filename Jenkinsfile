@@ -113,7 +113,7 @@ pipeline {
                 sh '''
                     set -eu
                     bash -o pipefail -c \
-                      'mvn --batch-mode --no-transfer-progress clean install -DskipTests \
+                      'mvn --batch-mode --no-transfer-progress clean package -DskipTests \
                       2>&1 | tee logs/rebuild.log'
                 '''
             }
@@ -282,9 +282,11 @@ pipeline {
                     def junitPattern = params.RUN_MODE == 'postgresql-compatibility'
                         ? 'target/jenkins-junit/**/*.xml'
                         : '**/target/surefire-reports/*.xml,**/target/failsafe-reports/*.xml'
+                    def requiresResults = currentBuild.currentResult == 'SUCCESS'
+                        && ((params.RUN_MODE ?: 'verify') in ['verify', 'postgresql-compatibility'])
                     junit(
                         testResults: junitPattern,
-                        allowEmptyResults: !((params.RUN_MODE ?: 'verify') in ['verify', 'postgresql-compatibility'])
+                        allowEmptyResults: !requiresResults
                     )
                 } finally {
                     archiveArtifacts(

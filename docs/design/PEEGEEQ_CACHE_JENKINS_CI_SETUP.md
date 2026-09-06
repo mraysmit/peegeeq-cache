@@ -31,6 +31,15 @@ pipeline revision supplies explicit first-run defaults and propagates every envi
 failure independently of console-log capture. Only a later completed build may satisfy the
 acceptance checklist below.
 
+Build #2 proved those corrections: it checked out the repaired revision, selected `verify` and
+passed the complete worker/Docker contract. It then exposed a separate phase-selection error in the
+preparatory build: Maven `clean install -DskipTests` still reaches the mandatory Playwright evidence
+check in `verify`, where no report can exist because the tests were intentionally skipped. The
+pipeline now uses `clean package -DskipTests` for compilation/packaging before the selected suite.
+JUnit publication permits an empty result set only when an earlier stage has already failed; a
+successful verification or compatibility execution still requires non-empty reports. Build #2 is
+diagnostic RED evidence, not a test result.
+
 Docker-group membership is root-equivalent authority on the worker. Only trusted repository
 revisions and trusted job administrators may execute or replay this pipeline.
 
