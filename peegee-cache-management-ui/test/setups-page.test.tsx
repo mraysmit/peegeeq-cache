@@ -67,15 +67,24 @@ describe('functional setup management page', () => {
   let listFailure: { status: number; code: string; detail: string; correlationId: string } | undefined;
   let registrationBody: unknown;
   let connectionRequestBody: unknown;
+  let blockNextList: boolean;
+  let releaseBlockedList: (() => void) | undefined;
 
   beforeEach(async () => {
     registry = [primary];
     listFailure = undefined;
     registrationBody = undefined;
     connectionRequestBody = undefined;
-    server = await startLoopbackServer((request, respond) => {
+    blockNextList = false;
+    releaseBlockedList = undefined;
+    server = await startLoopbackServer(async (request, respond) => {
       if (route('GET', '/api/v1/session', request)) return respond.json(200, session);
       if (route('GET', '/api/v1/setups', request)) {
+        if (blockNextList) {
+          blockNextList = false;
+          await new Promise<void>((resolve) => { releaseBlockedList = resolve; });
+          releaseBlockedList = undefined;
+        }
         if (listFailure !== undefined) return respond.problem(listFailure.status, listFailure.code, listFailure.detail, { correlationId: listFailure.correlationId });
         return respond.json(200, setupSummaryListSchema.parse({ items: registry }));
       }
@@ -228,8 +237,15 @@ describe('functional setup management page', () => {
     const row = (await screen.findByText('Primary cache')).closest('tr') as HTMLElement;
     await user.click(within(row).getByRole('button', { name: 'Detach' }));
     const dialog = await screen.findByRole('dialog', { name: 'Detach Primary cache?' });
+    blockNextList = true;
     await user.click(within(dialog).getByRole('button', { name: 'Detach' }));
 
+    await vi.waitFor(() => expect(releaseBlockedList).toBeTypeOf('function'));
+    try {
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    } finally {
+      releaseBlockedList?.();
+    }
     expect(await screen.findByRole('button', { name: 'Connect' })).toBeVisible();
     expect(screen.getByRole('status')).toHaveTextContent('Primary cache was detached.');
     expect(selected).toContain(undefined);

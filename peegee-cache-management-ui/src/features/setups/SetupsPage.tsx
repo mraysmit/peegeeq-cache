@@ -177,6 +177,7 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
       if (action === 'connect') await connectSetup({ setupId: setup.setupId }).unwrap();
       if (action === 'detach') await detachSetup({ setupId: setup.setupId }).unwrap();
       if (action === 'forget') await forgetSetup({ setupId: setup.setupId }).unwrap();
+      await setups.refetch().unwrap();
       if (action !== 'connect' && selectedSetupId === setup.setupId) onSelectSetup(undefined);
       setNotice(`${setup.displayName} was ${pastTense(action)}.`);
       setPendingAction(undefined);

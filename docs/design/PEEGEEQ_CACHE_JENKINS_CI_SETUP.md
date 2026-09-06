@@ -46,6 +46,17 @@ line, although the newer local Groovy compiler accepts it. The operator now ends
 This attempt is parser RED evidence only. Subsequent revisions must be checked with Jenkins' own
 declarative-pipeline validator, not only the local Groovy compiler, before another build is started.
 
+Build #4 validated the repaired pipeline path: controller parsing, SCM checkout, environment
+preflight, preparatory packaging and entry into the full reactor all succeeded. The reactor then
+found one real Linux UI failure out of 170 tests. A successful setup-detach request displayed its
+success notice while the RTK-invalidated setup-list refresh was still asynchronous; under the
+Jenkins worker's timing the row remained `CONNECTED` and never rendered `Connect` before timeout.
+The lifecycle action now awaits an authoritative list reconciliation before it clears selection and
+announces completion. A deliberately blocked loopback-list response reproduced the premature notice
+as deterministic RED evidence, then passed after the repair. The full pinned-Node UI gate passes all
+36 files and 170 tests with lint, type checking, generated API, coverage and production build.
+Build #4 remains failed diagnostic evidence; a later full Jenkins build is required.
+
 Docker-group membership is root-equivalent authority on the worker. Only trusted repository
 revisions and trusted job administrators may execute or replay this pipeline.
 

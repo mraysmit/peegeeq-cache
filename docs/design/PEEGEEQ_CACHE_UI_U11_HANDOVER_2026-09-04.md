@@ -538,3 +538,17 @@ guard because a continued expression began its next line with `&&`; the newer lo
 had accepted the same syntax. The operator is moved to the preceding line. This is parser RED
 evidence, and the next launch requires Jenkins-controller validation of the complete declarative
 pipeline rather than relying on the local compiler alone.
+
+Build #4 passed controller parsing, checkout, the full Jenkins worker contract and preparatory
+packaging, then entered the real reactor verification. It found one Linux-visible UI failure:
+169/170 tests passed, but setup detach displayed “Primary cache was detached” before the
+authoritative setup-list reconciliation completed, leaving the old `CONNECTED` row and `Detach`
+action visible until timeout. The production action had relied on asynchronous RTK invalidation.
+
+A deterministic loopback test now holds the post-detach list response and asserts that no success
+notice is exposed while the row is stale. It failed before the implementation change and passes
+after `SetupsPage` awaits the authoritative list refetch before clearing scope and announcing
+completion. The complete pinned Node 22.22.2 UI verification passes 36 files and all 170 tests,
+including generated-client validation, type checking, zero-warning lint, coverage (94.18% statements
+and lines, 86.05% branches, 84.77% functions) and the production Vite build. Build #4 is retained as
+useful Linux RED evidence; it is not an accepted Jenkins result.
