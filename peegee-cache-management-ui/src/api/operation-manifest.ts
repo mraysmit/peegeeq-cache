@@ -53,7 +53,7 @@ export const operationManifest: readonly OperationClassification[] = [
   ...classify('session', 'SESSION', ['getSession']),
   ...classify('session', 'LOCAL_BOOTSTRAP', ['exchangeLocalToken']),
   ...classify('session', 'VIEW_MUTATE', ['deleteLocalSession']),
-  ...classify('setups', 'VIEW', ['listSetups', 'getSetup', 'getSetupHealth', 'getSetupCapabilities']),
+  ...classify('setups', 'VIEW', ['listSetups', 'getSetup', 'getSetupHealth']),
   ...classify('setups', 'OPERATE', [
     'registerSetup',
     'testUnregisteredSetup',

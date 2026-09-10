@@ -52,9 +52,8 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
             }
             requireCanonicalSetupId(match.setupId());
             if (match.kind() == RouteKind.DETAILS) {
-                writeJson(request, details(registry.details(match.setupId())), correlationId);
-            } else if (match.kind() == RouteKind.CAPABILITIES) {
-                writeJson(request, capabilities(registry.capabilities(match.setupId())), correlationId);
+                writeJson(request, details(
+                        registry.details(match.setupId()), registry.limits(match.setupId())), correlationId);
             } else {
                 registry.health(match.setupId())
                         .onSuccess(health -> writeJson(request, health(health), correlationId))
@@ -75,10 +74,14 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
                 .end(body.toString());
     }
 
-    private ObjectNode details(SetupDetails details) {
+    private ObjectNode details(SetupDetails details, SetupLimits limits) {
         ObjectNode node = json.createObjectNode();
         node.set("setup", summary(details.setup()));
         node.put("migrationVersion", details.migrationVersion());
+        ObjectNode limitsNode = node.putObject("limits");
+        limitsNode.put("pubSubChannelMaxBytes", limits.pubSubChannelMaxBytes());
+        limitsNode.put("pubSubPayloadMaxBytes", limits.pubSubPayloadMaxBytes());
+        limitsNode.put("maximumValueBytes", limits.maximumValueBytes());
         ObjectNode runtime = node.putObject("runtime");
         if (details.runtime().defaultTtlMillis() == null) {
             runtime.putNull("defaultTtlMillis");
@@ -115,36 +118,6 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
         node.put("latencyMillis", health.latencyMillis());
         node.put("checkedAt", health.checkedAt().toString());
         node.put("detail", health.detail());
-        return node;
-    }
-
-    private ObjectNode capabilities(SetupCapabilities capabilities) {
-        ObjectNode node = json.createObjectNode();
-        node.put("migrationVersion", capabilities.migrationVersion());
-        ObjectNode features = node.putObject("capabilities");
-        features.put("namespaceInspection", capabilities.features().namespaceInspection());
-        features.put("entryInspection", capabilities.features().entryInspection());
-        features.put("expiredEntryInspection", capabilities.features().expiredEntryInspection());
-        features.put("entryMutation", capabilities.features().entryMutation());
-        features.put("counterInspection", capabilities.features().counterInspection());
-        features.put("counterMutation", capabilities.features().counterMutation());
-        features.put("lockInspection", capabilities.features().lockInspection());
-        features.put("forcedLockRelease", capabilities.features().forcedLockRelease());
-        features.put("bulkEntryDelete", capabilities.features().bulkEntryDelete());
-        features.put("bulkCounterDelete", capabilities.features().bulkCounterDelete());
-        features.put("pubSub", capabilities.features().pubSub());
-        features.put("databaseStatistics", capabilities.features().databaseStatistics());
-        features.put("entryValueReveal", capabilities.features().entryValueReveal());
-        features.put("lockOwnerReveal", capabilities.features().lockOwnerReveal());
-        features.put("pubSubPayloadReveal", capabilities.features().pubSubPayloadReveal());
-        features.put("batchEntryOperations", capabilities.features().batchEntryOperations());
-        features.put("valueScan", capabilities.features().valueScan());
-        features.put("cacheMetrics", capabilities.features().cacheMetrics());
-        features.put("ownerLockOperations", capabilities.features().ownerLockOperations());
-        ObjectNode limits = node.putObject("limits");
-        limits.put("pubSubChannelMaxBytes", capabilities.limits().pubSubChannelMaxBytes());
-        limits.put("pubSubPayloadMaxBytes", capabilities.limits().pubSubPayloadMaxBytes());
-        limits.put("maximumValueBytes", capabilities.limits().maximumValueBytes());
         return node;
     }
 
@@ -194,7 +167,6 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
         }
         return switch (segments[1]) {
             case "health" -> new RouteMatch(segments[0], RouteKind.HEALTH);
-            case "capabilities" -> new RouteMatch(segments[0], RouteKind.CAPABILITIES);
             default -> null;
         };
     }
@@ -234,8 +206,7 @@ public final class SetupReadRoutes implements ManagementRequestRouter {
     private enum RouteKind {
         LIST,
         DETAILS,
-        HEALTH,
-        CAPABILITIES
+        HEALTH
     }
 
     private record RouteMatch(String setupId, RouteKind kind) {

@@ -20,7 +20,6 @@ const session = currentSessionSchema.parse({
   user: 'overview-operator', roles: ['viewer', 'operator'], serverVersion: '0.1.0-SNAPSHOT', apiVersion: 'v1',
   authenticationMode: 'LOCAL_TOKEN', csrfToken: 'overview-test-csrf-token-with-forty-five-characters',
   sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z',
-  features: { setupRegistration: true, sensitiveReveal: true },
 });
 
 const overview = overviewSchema.parse({

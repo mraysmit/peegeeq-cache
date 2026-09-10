@@ -68,7 +68,6 @@ public final class ManagementBrowserSelection {
     }
 
     public static List<ManagementBrowserCase> accessibilityScenarios() { return select(ManagementAccessibilityBrowserIT.scenarios()); }
-    public static List<ManagementBrowserCase> capabilityScenarios() { return select(ManagementCapabilityBrowserIT.scenarios()); }
     public static List<ManagementBrowserCase> counterScenarios() { return select(ManagementCounterBrowserIT.scenarios()); }
     public static List<ManagementBrowserCase> entryAdministrationScenarios() { return select(ManagementEntryAdministrationBrowserIT.scenarios()); }
     public static List<ManagementBrowserCase> entryBulkScenarios() { return select(ManagementEntryBulkBrowserIT.scenarios()); }
@@ -94,7 +93,6 @@ public final class ManagementBrowserSelection {
 
     private static List<ManagementBrowserCase> parameterizedCatalogue(Class<?> type) {
         if (type == ManagementAccessibilityBrowserIT.class) return ManagementAccessibilityBrowserIT.scenarios();
-        if (type == ManagementCapabilityBrowserIT.class) return ManagementCapabilityBrowserIT.scenarios();
         if (type == ManagementCounterBrowserIT.class) return ManagementCounterBrowserIT.scenarios();
         if (type == ManagementEntryAdministrationBrowserIT.class) return ManagementEntryAdministrationBrowserIT.scenarios();
         if (type == ManagementEntryBulkBrowserIT.class) return ManagementEntryBulkBrowserIT.scenarios();
@@ -133,7 +131,6 @@ public final class ManagementBrowserSelection {
                     ManagementPubSubBrowserIT.class,
                     ManagementLiveTransportBrowserIT.class,
                     ManagementMonitoringBrowserIT.class,
-                    ManagementCapabilityBrowserIT.class,
                     ManagementViewerBrowserIT.class,
                     ManagementBoundaryBrowserIT.class,
                     ManagementAccessibilityBrowserIT.class,

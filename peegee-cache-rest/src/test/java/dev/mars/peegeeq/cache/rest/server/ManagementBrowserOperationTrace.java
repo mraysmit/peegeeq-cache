@@ -28,7 +28,6 @@ final class ManagementBrowserOperationTrace {
             entry("POST /api/v1/setups/{setupId}/detach", "detachSetup"),
             entry("DELETE /api/v1/setups/{setupId}", "forgetSetup"),
             entry("GET /api/v1/setups/{setupId}/health", "getSetupHealth"),
-            entry("GET /api/v1/setups/{setupId}/capabilities", "getSetupCapabilities"),
             entry("GET /api/v1/setups/{setupId}/overview", "getOverview"),
             entry("GET /api/v1/setups/{setupId}/namespaces", "listNamespaces"),
             entry("GET /api/v1/setups/{setupId}/namespaces/export", "exportNamespaces"),

@@ -69,10 +69,8 @@ class ManagementConsoleProductJourneysIT {
             })
     void setupTestRegisterInspectDetachReconnectAndForgetUsesTheRealDatabase() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), false, context -> {
-            context.diagnostics().allowFailedResponse(409, "/api/v1/setups/{setupId}/capabilities");
             context.diagnostics().allowFailedResponse(404, "/api/v1/setups/{setupId}");
             context.diagnostics().allowFailedResponse(404, "/api/v1/setups/{setupId}/health");
-            context.diagnostics().allowFailedResponse(404, "/api/v1/setups/{setupId}/capabilities");
             context.diagnostics().expectFailedResponse(403, "/api/v1/setups/actions/test");
             ManagementConsolePostgresFixture.authenticate(context);
             ManagementConsolePostgresFixture.registerSetup(context);
@@ -144,13 +142,13 @@ class ManagementConsoleProductJourneysIT {
 
     @ManagementBrowserScenario(
             id = "PW-SHELL-001",
-            requirement = "UI design: setup and namespace scope persistence must be revalidated against capabilities",
+            requirement = "UI design: setup and namespace scope persistence must be restored from session storage",
             area = ManagementBrowserArea.SHELL,
             risk = ManagementBrowserRisk.HIGH,
-            action = "Select a setup and namespace, reload the page, and inspect capability-driven navigation",
-            expectedResult = "Valid scope is restored and only server-advertised feature navigation is available",
+            action = "Select a setup and namespace, reload the page, and inspect navigation",
+            expectedResult = "Valid scope is restored and every management section stays reachable",
             cleanup = "Clear the isolated context scope and close all fixture resources",
-            operations = {"getSetupCapabilities", "listNamespaces", "getNamespace"},
+            operations = {"getSetup", "listNamespaces", "getNamespace"},
             evidence = {
                     ManagementBrowserEvidence.VISIBLE_RESULT,
                     ManagementBrowserEvidence.HTTP_OPERATION,
@@ -158,9 +156,9 @@ class ManagementConsoleProductJourneysIT {
                     ManagementBrowserEvidence.RESOURCE_CLEANUP
             })
     @ManagementBrowserJourney(
-            value = "scope-and-capabilities",
-            operations = {"getSetupCapabilities", "getNamespace"})
-    void setupAndNamespaceScopeAreRevalidatedByTheRealCapabilityContract() throws Exception {
+            value = "scope-restoration",
+            operations = {"getNamespace"})
+    void setupAndNamespaceScopeAreRestoredFromSessionStorage() throws Exception {
         ManagementConsolePostgresFixture.run(temporaryDirectory, POSTGRES.postgres(), true, context -> {
             Page page = context.page();
 

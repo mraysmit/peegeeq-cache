@@ -607,7 +607,7 @@ Prerequisites:
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md)
 
-**Backend-functionality coverage authority:** [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The matrix maps all 32 public data-service methods and all 30 `ManagementService` methods to the 60 declared management operations and their production desktop workflows, with no open functionality gaps.
+**Backend-functionality coverage authority:** [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The matrix maps all 32 public data-service methods and all 29 `ManagementService` methods to the 59 declared management operations and their production desktop workflows, with no open functionality gaps.
 
 **Status:** **U0-U11 COMPLETE** — the desktop-only production console implements setup and complete runtime configuration, overview, namespace, entry inspection/administration, counters, locks, Pub/Sub, monitoring, activity, settings, privacy, and the Advanced operations facade-parity surface using the mandated Ant Design, Recharts, RTK Query, Zustand, and Zod boundaries. Mobile and tablet behavior is outside the product boundary. Java Playwright owns 17 independent packaged-application journeys; a separate executable accountability contract covers all 60 management operations, and runtime tracing verifies declared operations from observed browser requests and WebSocket openings. The 5 September 2026 acceptance passed 557/557 browser scenarios plus three infrastructure checks and complete 11-module PostgreSQL 15-18 reactors.
 
@@ -685,7 +685,7 @@ The review also removed `VertxAwait`. PostgreSQL fixtures, repository/service/SQ
 
 Management API M1 is complete. `peegee-cache-rest/src/main/openapi/peegeeq-cache-management-v1.yaml` declares the exact reviewed 50-operation inventory, complete path/query/header/precondition parameters, required and optional request bodies, success statuses/schemas/headers, RFC-style problem responses, security profiles, aggregate/query models, typed SSE events, and typed WebSocket frames. Ten `ManagementOpenApiContractTest` tests compare this boundary to the reviewed manifest and validate it with Swagger Parser 2.1.46 with zero parser messages. Thirteen additional tests cover canonical identifier encoding, exact ETags and preconditions, scoped signed cursors, decimal/timestamp representation, strict request handling, safe problems, and literal prefix escaping.
 
-Management API M2 is complete. `peegee-cache-api` provides immutable management queries, metadata, requests, mutation outcomes, reveal snapshots, capability/limit models, the asynchronous `ManagementService`, and a source-compatible `PeeGeeCache.management()` fallback. The audit SPI uses externally resolved versioned HMAC keys, stores only bounded fingerprints in default intents, guards terminal completion, and keeps mandatory audit failures distinct from optional telemetry failures. Twenty-four focused M2 tests are green, and the release-artifact profile generates API source and Javadoc jars.
+Management API M2 is complete. `peegee-cache-api` provides immutable management queries, metadata, requests, mutation outcomes, reveal snapshots, limit models, and the asynchronous `ManagementService` (the capability models and the `PeeGeeCache.management()` fallback were removed on 10 September 2026). The audit SPI uses externally resolved versioned HMAC keys, stores only bounded fingerprints in default intents, guards terminal completion, and keeps mandatory audit failures distinct from optional telemetry failures. Twenty-four focused M2 tests are green, and the release-artifact profile generates API source and Javadoc jars.
 
 The completed M3 change set corrects the management read contract and implements the PostgreSQL read model. `NamespaceStats` now matches the OpenAPI aggregate and `NamespaceDetails` adds repository-level distributions; `ManagementTtlFilter` represents live/persistent/expiring/include-expired query intent; management entry metadata no longer exposes the internal last-access timestamp; and typed not-found/readiness exceptions preserve error meaning. The shared API `ManagementCursorCodec` authenticates bounded, versioned, query-scoped keyset positions with HMAC-SHA-256, while the REST codec delegates and maps typed protocol errors.
 
@@ -738,7 +738,7 @@ The implemented boundary is:
 
 - `peegee-cache-api` owns the management query, reveal, mutation, result, audit, and reusable signed-cursor contracts established in M2/M3;
 - `peegee-cache-pg` owns schema-validated/parameterized inspection SQL plus atomic entry/counter/lock reveal and mutation behavior;
-- the mutation-aware `PgManagementService` advertises the completed M4 capabilities, requires audit reservation before database access, and returns statement-produced outcomes/metadata; its original constructor remains inspection-only for source compatibility;
+- the mutation-aware `PgManagementService` requires audit reservation before database access and returns statement-produced outcomes/metadata;
 - `peegee-cache-rest` owns the cursor/protocol boundary, durable audit, both session modes, setup registry/server lifecycle, setup actions, all safe-read routes, and all M8 reveal/administration routes;
 - entry values, raw identifiers, credentials, cursor keys, and audit keys remain absent from ordinary logs and default authoritative audit intents;
 - No management-backend or management-UI implementation stage remains. Production deployment/topology validation and credentialed public publication are separate external release-readiness actions; Phase 8.3 U0-U11 is complete.
@@ -755,7 +755,7 @@ Completed M5 sequence:
 
 ## 3.4 Management UI progress
 
-U0-U4 are complete. U4 adds metadata-only filtered entry browsing/details, encoded arbitrary-identifier routes, safe type-specific value formatting, and role/feature/capability-gated non-cacheable reveal with component-only memory, explicit copy/hide, mandatory automatic cleanup, full regression, and packaged PostgreSQL console acceptance.
+U0-U4 are complete. U4 adds metadata-only filtered entry browsing/details, encoded arbitrary-identifier routes, safe type-specific value formatting, and role-gated non-cacheable reveal with component-only memory, explicit copy/hide, mandatory automatic cleanup, full regression, and packaged PostgreSQL console acceptance.
 
 U5-U10 are complete. The console provides observed-version entry CAS and guarded bulk deletion; precision-safe counters; masked, version-checked locks; bounded non-durable Pub/Sub; strict SSE/WebSocket clients; database/runtime monitoring; bounded activity and notifications; allowlisted preferences; accessible modal focus management; desktop axe scanning; screenshot inspection; and cross-surface sensitive-state assertions. These slices have strict client/component tests, backend PostgreSQL/concurrency/audit/transport/telemetry coverage, and independent packaged Chromium journeys against real TLS PostgreSQL.
 

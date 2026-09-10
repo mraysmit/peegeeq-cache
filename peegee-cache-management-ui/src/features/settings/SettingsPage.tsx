@@ -2,7 +2,7 @@ import { Alert, Card, Col, Descriptions, Form, Row, Space, Typography } from 'an
 import { useState } from 'react';
 
 import type { BrowserSession } from '../../api/session-client';
-import type { SetupCapabilities } from '../../api/setup-schemas';
+import type { SetupLimits } from '../../api/setup-schemas';
 import { ValueSelect } from '../../components/common/ValueSelect';
 import { loadPreferences, savePreferences, type Preferences } from '../../state/preferences';
 import {
@@ -18,7 +18,8 @@ import {
 const { Title, Text, Paragraph } = Typography;
 
 interface SettingsPageProps {
-  readonly capabilities?: SetupCapabilities;
+  readonly limits?: SetupLimits;
+  readonly migrationVersion?: string;
   readonly selectedSetupId?: string;
   readonly session: BrowserSession;
 }
@@ -27,9 +28,9 @@ interface SettingsPageProps {
  * Settings (reference layout: Descriptions cards for effective state, a Form of Selects for the
  * allowlisted display preferences). Only display preferences are persisted, through the
  * allowlisting `savePreferences`; every other value on the page is read from the session or the
- * selected setup's capability snapshot.
+ * selected setup's details.
  */
-export function SettingsPage({ capabilities, selectedSetupId, session }: SettingsPageProps) {
+export function SettingsPage({ limits, migrationVersion, selectedSetupId, session }: SettingsPageProps) {
   const [preferences, setPreferences] = useState(loadPreferences);
   const [saved, setSaved] = useState(false);
   const update = <K extends keyof Preferences>(name: K, value: Preferences[K]) => {
@@ -71,14 +72,14 @@ export function SettingsPage({ capabilities, selectedSetupId, session }: Setting
               </Descriptions>
             </Card>
           </Col>
-          {capabilities !== undefined && (
+          {limits !== undefined && (
             <Col lg={8} sm={12} xs={24}>
               <Card className="overview-panel" title={<Title level={2} style={{ margin: 0, fontSize: 18 }}>Effective limits</Title>}>
                 <Descriptions column={1} size="small">
-                  <Descriptions.Item label="Maximum value bytes">{String(capabilities.limits.maximumValueBytes)}</Descriptions.Item>
-                  <Descriptions.Item label="Pub/Sub payload bytes">{String(capabilities.limits.pubSubPayloadMaxBytes)}</Descriptions.Item>
-                  <Descriptions.Item label="Pub/Sub channel bytes">{String(capabilities.limits.pubSubChannelMaxBytes)}</Descriptions.Item>
-                  <Descriptions.Item label="Migration version">{capabilities.migrationVersion}</Descriptions.Item>
+                  <Descriptions.Item label="Maximum value bytes">{String(limits.maximumValueBytes)}</Descriptions.Item>
+                  <Descriptions.Item label="Pub/Sub payload bytes">{String(limits.pubSubPayloadMaxBytes)}</Descriptions.Item>
+                  <Descriptions.Item label="Pub/Sub channel bytes">{String(limits.pubSubChannelMaxBytes)}</Descriptions.Item>
+                  {migrationVersion !== undefined && <Descriptions.Item label="Migration version">{migrationVersion}</Descriptions.Item>}
                 </Descriptions>
               </Card>
             </Col>

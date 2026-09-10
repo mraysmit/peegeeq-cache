@@ -1,12 +1,12 @@
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
-  Alert, Button, Card, Checkbox, Descriptions, Empty, Form, Input, InputNumber, List, Modal, Space, Table, Tag, Typography, type InputRef,
+  Alert, Button, Card, Checkbox, Descriptions, Empty, Form, Input, InputNumber, Modal, Space, Table, Tag, Typography, type InputRef,
 } from 'antd';
 import { useRef, useState, type ReactNode } from 'react';
 
 import type { BrowserSession } from '../../api/session-client';
 import type { SetupConnectionRequest, SetupRegistrationRequest } from '../../api/setup-client';
-import type { SetupCapabilities, SetupConnectionTest, SetupDetails, SetupHealth, SetupSummary } from '../../api/setup-schemas';
+import type { SetupConnectionTest, SetupDetails, SetupHealth, SetupSummary } from '../../api/setup-schemas';
 import { ValueSelect } from '../../components/common/ValueSelect';
 import { formatDisplayBytes } from '../../presentation/display-bytes';
 import { humanize } from '../../presentation/display-format';
@@ -16,7 +16,6 @@ import {
   useConnectSetupMutation,
   useDetachSetupMutation,
   useForgetSetupMutation,
-  useLazyGetSetupCapabilitiesQuery,
   useLazyGetSetupDetailsQuery,
   useLazyGetSetupHealthQuery,
   useListSetupsQuery,
@@ -30,7 +29,7 @@ const { Title, Text } = Typography;
 interface SetupsPageProps {
   readonly session: BrowserSession;
   readonly selectedSetupId?: string;
-  readonly onSelectSetup: (setupId: string | undefined, capabilities?: SetupCapabilities) => void;
+  readonly onSelectSetup: (setupId: string | undefined) => void;
 }
 
 type ConfirmedAction = 'connect' | 'detach' | 'forget';
@@ -79,7 +78,6 @@ const initialRegistration: SetupRegistrationRequest = {
  */
 export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPageProps) {
   const setups = useListSetupsQuery();
-  const [loadCapabilities] = useLazyGetSetupCapabilitiesQuery();
   const [loadDetails] = useLazyGetSetupDetailsQuery();
   const [loadHealth] = useLazyGetSetupHealthQuery();
   const [testConnection] = useTestSetupConnectionMutation();
@@ -93,7 +91,7 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
   const [notice, setNotice] = useState<string>();
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [details, setDetails] = useState<{ details: SetupDetails; health: SetupHealth; capabilities: SetupCapabilities }>();
+  const [details, setDetails] = useState<{ details: SetupDetails; health: SetupHealth }>();
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [registration, setRegistration] = useState(initialRegistration);
   const [registrationBusy, setRegistrationBusy] = useState(false);
@@ -101,11 +99,10 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
   const [connectionTest, setConnectionTest] = useState<SetupConnectionTest>();
   const [pendingAction, setPendingAction] = useState<PendingAction>();
   const [actionBusy, setActionBusy] = useState(false);
-  const [selectingSetupId, setSelectingSetupId] = useState<string>();
   const setupIdInput = useRef<InputRef | null>(null);
 
   const isOperator = session.roles.includes('operator');
-  const canRegister = isOperator && session.features.setupRegistration;
+  const canRegister = isOperator;
   const rows = setups.data ?? [];
   const listProblem = queryError(setups.error);
   const loading = setups.isFetching;
@@ -130,12 +127,11 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
     setDetailsLoading(true);
     setProblem(undefined);
     try {
-      const [loadedDetails, health, capabilities] = await Promise.all([
+      const [loadedDetails, health] = await Promise.all([
         loadDetails({ setupId }).unwrap(),
         loadHealth({ setupId }).unwrap(),
-        loadCapabilities({ setupId }).unwrap(),
       ]);
-      setDetails({ details: loadedDetails, health, capabilities });
+      setDetails({ details: loadedDetails, health });
     } catch (failure: unknown) {
       setProblem(asQueryError(failure));
       setDetailsOpen(false);
@@ -144,16 +140,9 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
     }
   };
 
-  const selectSetup = async (setupId: string) => {
-    setSelectingSetupId(setupId);
+  const selectSetup = (setupId: string) => {
     setProblem(undefined);
-    try {
-      onSelectSetup(setupId, await loadCapabilities({ setupId }).unwrap());
-    } catch (failure: unknown) {
-      setProblem(asQueryError(failure));
-    } finally {
-      setSelectingSetupId(undefined);
-    }
+    onSelectSetup(setupId);
   };
 
   const retest = async (setup: SetupSummary) => {
@@ -227,7 +216,7 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
     try {
       const created = await registerSetup(registration).unwrap();
       closeRegistration();
-      onSelectSetup(created.setupId, await loadCapabilities({ setupId: created.setupId }).unwrap());
+      onSelectSetup(created.setupId);
       setNotice(`${created.displayName} was registered and selected.`);
     } catch (failure: unknown) {
       setRegistrationProblem(asQueryError(failure));
@@ -260,7 +249,6 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
 
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         {!isOperator && <Alert message="Viewer access is read-only. An operator can manage setup lifecycles." showIcon type="info" />}
-        {isOperator && !session.features.setupRegistration && <Alert message="Setup registration is disabled by this management server." showIcon type="info" />}
         {notice !== undefined && <Alert message={notice} role="status" showIcon type="success" />}
         {shownProblem !== undefined && <ProblemAlert problem={shownProblem} />}
 
@@ -306,12 +294,12 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
                     const selected = selectedSetupId === setup.setupId;
                     return (
                       <Button
-                        disabled={setup.state !== 'CONNECTED' || selected || selectingSetupId !== undefined}
+                        disabled={setup.state !== 'CONNECTED' || selected}
                         onClick={() => void selectSetup(setup.setupId)}
                         size="small"
                         type="link"
                       >
-                        {selected ? 'Selected' : selectingSetupId === setup.setupId ? 'Selecting…' : 'Use setup'}
+                        {selected ? 'Selected' : 'Use setup'}
                       </Button>
                     );
                   },
@@ -432,7 +420,7 @@ export function SetupsPage({ session, selectedSetupId, onSelectSetup }: SetupsPa
           <Button aria-label="Close details" onClick={() => setDetailsOpen(false)} size="small">Close</Button>
         </div>
         {detailsLoading && <Text aria-busy="true">Loading details…</Text>}
-        {details !== undefined && <SetupDetailsView capabilities={details.capabilities} details={details.details} health={details.health} />}
+        {details !== undefined && <SetupDetailsView details={details.details} health={details.health} />}
       </Modal>
 
       <Modal
@@ -470,10 +458,9 @@ function StateTag({ value }: { readonly value: string }) {
   return <Tag className={`badge badge--${color}`} color={color}>{humanize(value)}</Tag>;
 }
 
-function SetupDetailsView({ details, health, capabilities }: {
+function SetupDetailsView({ details, health }: {
   readonly details: SetupDetails;
   readonly health: SetupHealth;
-  readonly capabilities: SetupCapabilities;
 }) {
   const rows: Array<[string, ReactNode]> = [
     ['Setup ID', details.setup.setupId],
@@ -505,24 +492,12 @@ function SetupDetailsView({ details, health, capabilities }: {
         <p><Text>{health.detail}</Text></p>
         <Text type="secondary">Checked {formatDisplayInstant(health.checkedAt)}</Text>
       </section>
-      <section aria-labelledby="capabilities-title" className="details-section">
-        <Title id="capabilities-title" level={3} style={{ fontSize: 16 }}>Capabilities</Title>
-        <List
-          className="capability-list"
-          dataSource={Object.entries(capabilities.capabilities)}
-          grid={{ gutter: 8, column: 2 }}
-          renderItem={([name, available]) => (
-            <List.Item key={name} style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>{humanizeCapability(name)}</span>
-              <StateTag value={available ? 'AVAILABLE' : 'UNAVAILABLE'} />
-            </List.Item>
-          )}
-          size="small"
-        />
+      <section aria-labelledby="limits-title" className="details-section">
+        <Title id="limits-title" level={3} style={{ fontSize: 16 }}>Effective limits</Title>
         <Descriptions column={3} size="small">
-          <Descriptions.Item label="Maximum value">{formatDisplayBytes(capabilities.limits.maximumValueBytes)}</Descriptions.Item>
-          <Descriptions.Item label="Pub/Sub payload">{formatDisplayBytes(capabilities.limits.pubSubPayloadMaxBytes)}</Descriptions.Item>
-          <Descriptions.Item label="Pub/Sub channel">{formatDisplayBytes(capabilities.limits.pubSubChannelMaxBytes)}</Descriptions.Item>
+          <Descriptions.Item label="Maximum value">{formatDisplayBytes(details.limits.maximumValueBytes)}</Descriptions.Item>
+          <Descriptions.Item label="Pub/Sub payload">{formatDisplayBytes(details.limits.pubSubPayloadMaxBytes)}</Descriptions.Item>
+          <Descriptions.Item label="Pub/Sub channel">{formatDisplayBytes(details.limits.pubSubChannelMaxBytes)}</Descriptions.Item>
         </Descriptions>
       </section>
     </div>
@@ -554,10 +529,6 @@ function asQueryError(failure: unknown): ManagementQueryError {
   return isManagementQueryError(failure)
     ? failure
     : { status: 0, code: 'CONNECTION_FAILED', message: 'The setup request could not be completed' };
-}
-
-function humanizeCapability(value: string): string {
-  return value.replace(/([a-z])([A-Z])/gu, '$1 $2').toLowerCase().replace(/^./u, (letter) => letter.toUpperCase());
 }
 
 function actionTitle(action: ConfirmedAction): string {

@@ -1,6 +1,8 @@
 # PeeGeeQ Cache Management V1 Operation Manifest
 
-**Status:** Reviewed 60-operation contract
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+
+**Status:** Reviewed 59-operation contract
 
 **Date:** 3 September 2026
 
@@ -8,7 +10,7 @@
 
 This is the closed operation inventory used by the M1 OpenAPI completeness test. The authoritative behavioral detail remains [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md). Every row below names an exact method/path, operation identifier, security profile, request and success schema, statuses/headers, capability/limit rules, audit behavior, retry policy, and endpoint-specific problem codes. No abbreviated path is normative.
 
-This manifest proves completeness against the declared management REST boundary. Independent backend-to-REST-to-UI traceability is owned by [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md), and `BackendFunctionalityInventoryTest` ensures all 32 public data-service methods and all 30 `ManagementService` methods map into this inventory.
+This manifest proves completeness against the declared management REST boundary. Independent backend-to-REST-to-UI traceability is owned by [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md), and `BackendFunctionalityInventoryTest` ensures all 32 public data-service methods and all 29 `ManagementService` methods map into this inventory.
 
 ## Shared rules referenced by every row
 
@@ -51,44 +53,43 @@ Common validation applies before service invocation:
 
 ## Session and setup lifecycle
 
-| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Capability and limits | Audit / retry | Specific problems |
+| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Preconditions and limits | Audit / retry | Specific problems |
 |---|---|---|---|---|---|---|---|
 | `getSession` | `GET /api/v1/session` | `SESSION` | none → `CurrentSession` | `200 / N`, may set/rotate `PGQMGMTSESSION` | session idle/absolute limits | no audit / safe read retry | profile problems |
 | `exchangeLocalToken` | `POST /api/v1/session/local` | `LOCAL_BOOTSTRAP` | `LocalTokenExchangeRequest` → `CurrentSession` | `200 / N`, sets rotated `PGQMGMTSESSION` | one 256-bit token, once | authentication event / never | `INVALID_BOOTSTRAP_TOKEN`, `RATE_LIMITED` |
 | `deleteLocalSession` | `DELETE /api/v1/session/local` | `VIEW_MUTATE`, local actor | none → none | `204 / C`, expires cookie | local session only | session event / never | `SESSION_EXPIRED` |
 | `listSetups` | `GET /api/v1/setups` | `VIEW` | none → `SetupSummaryList` | `200 / C` | none | no audit / safe read retry | profile problems |
 | `testUnregisteredSetup` | `POST /api/v1/setups/actions/test` | `OPERATE` | `SetupConnectionRequest` → `SetupConnectionTest` | `200 / C` | 64 KiB; target/TLS policy; setup-test actor/source rate | required `SETUP_TESTED` / never | `TARGET_FORBIDDEN`, `RATE_LIMITED`, `DATABASE_UNAVAILABLE` |
-| `registerSetup` | `POST /api/v1/setups` | `OPERATE` | `SetupRegistrationRequest` → `SetupSummary` | `201 / C` | setup registration enabled; target/TLS policy; connection rate | required `SETUP_REGISTERED` / never | `SETUP_ALREADY_EXISTS`, `TARGET_FORBIDDEN`, `RATE_LIMITED` |
+| `registerSetup` | `POST /api/v1/setups` | `OPERATE` | `SetupRegistrationRequest` → `SetupSummary` | `201 / C` | target/TLS policy; connection rate | required `SETUP_REGISTERED` / never | `SETUP_ALREADY_EXISTS`, `TARGET_FORBIDDEN`, `RATE_LIMITED` |
 | `getSetup` | `GET /api/v1/setups/{setupId}` | `VIEW` | none → `SetupDetails` | `200 / C` | none | no audit / safe read retry | `SETUP_NOT_FOUND` |
 | `connectSetup` | `POST /api/v1/setups/{setupId}/connect` | `OPERATE` | none → `SetupSummary` | `200 / C` | credentials still resolvable; target/TLS policy; connect rate | required `SETUP_CONNECTED` / never | `SETUP_NOT_FOUND`, `SETUP_STATE_CONFLICT`, `TARGET_FORBIDDEN`, `RATE_LIMITED` |
 | `testRegisteredSetup` | `POST /api/v1/setups/{setupId}/test` | `OPERATE` | none → `SetupConnectionTest` | `200 / C` | target/TLS policy; setup-test rate | required `SETUP_TESTED` / never | `SETUP_NOT_FOUND`, `TARGET_FORBIDDEN`, `RATE_LIMITED` |
 | `detachSetup` | `POST /api/v1/setups/{setupId}/detach` | `OPERATE` | none → none | `204 / C` | connected/detachable state | required `SETUP_DETACHED` / never | `SETUP_NOT_FOUND`, `SETUP_STATE_CONFLICT` |
 | `forgetSetup` | `DELETE /api/v1/setups/{setupId}` | `OPERATE` | none → none | `204 / C` | `UI_SESSION` source only | required `SETUP_FORGOTTEN` / never | `SETUP_NOT_FOUND`, `SETUP_ACTION_FORBIDDEN`, `SETUP_STATE_CONFLICT` |
 | `getSetupHealth` | `GET /api/v1/setups/{setupId}/health` | `VIEW` | none → `SetupHealth` | `200 / C` | none | no audit / safe read retry | `SETUP_NOT_FOUND` |
-| `getSetupCapabilities` | `GET /api/v1/setups/{setupId}/capabilities` | `VIEW` | none → `SetupCapabilities` | `200 / C` | returns effective limits and migration version `1` | no audit / safe read retry | `SETUP_NOT_FOUND` |
 
 ## Overview, namespaces, and entries
 
-| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Capability and limits | Audit / retry | Specific problems |
+| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Preconditions and limits | Audit / retry | Specific problems |
 |---|---|---|---|---|---|---|---|
-| `getOverview` | `GET /api/v1/setups/{setupId}/overview` | `VIEW` | none → `Overview` | `200 / C` | namespace inspection | no audit / safe read retry | `SETUP_NOT_FOUND`, `CAPABILITY_UNAVAILABLE` |
-| `listNamespaces` | `GET /api/v1/setups/{setupId}/namespaces` | `VIEW` | `NamespaceQuery` query → `AdminPageNamespaceStats` | `200 / C` | namespace inspection; page 1–200 | no audit / safe read retry | cursor/sort problems, `CAPABILITY_UNAVAILABLE` |
-| `exportNamespaces` | `GET /api/v1/setups/{setupId}/namespaces/export` | `VIEW` | `NamespaceExportQuery` + `Accept` → `NamespaceExport` | `200 / C`, CSV or JSON content type | namespace inspection; maximum 10,000 | no audit / safe read retry | `406 NOT_ACCEPTABLE`, `BULK_SCOPE_CONFLICT`, `CAPABILITY_UNAVAILABLE` |
-| `getNamespace` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}` | `VIEW` | none → `NamespaceDetails` | `200 / C` | namespace inspection; logical empty namespace returns zero model | no audit / safe read retry | `INVALID_IDENTIFIER`, `CAPABILITY_UNAVAILABLE` |
-| `listEntries` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries` | `VIEW` | `EntryQuery` query → `AdminPageManagementEntryMetadata` | `200 / C` | namespace inspection; expired capability when requested; page 1–200 | no audit / safe read retry | identifier/cursor/sort problems, `CAPABILITY_UNAVAILABLE` |
-| `getEntry` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}` | `VIEW` | `includeExpired` query → `ManagementEntryMetadata` | `200 / E` | expired capability when requested | no audit / safe read retry | `ENTRY_NOT_FOUND`, `INVALID_IDENTIFIER`, `CAPABILITY_UNAVAILABLE` |
-| `revealEntryValue` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/value/reveal` | `REVEAL` | optional `RevealReasonRequest` → `RevealedEntryValue` | `200 / R` | sensitive-value reveal; reason absent or 3–240 chars | required `ENTRY_VALUE_REVEALED` / never | `ENTRY_NOT_FOUND`, `CAPABILITY_UNAVAILABLE` |
+| `getOverview` | `GET /api/v1/setups/{setupId}/overview` | `VIEW` | none → `Overview` | `200 / C` | namespace inspection | no audit / safe read retry | `SETUP_NOT_FOUND` |
+| `listNamespaces` | `GET /api/v1/setups/{setupId}/namespaces` | `VIEW` | `NamespaceQuery` query → `AdminPageNamespaceStats` | `200 / C` | namespace inspection; page 1–200 | no audit / safe read retry | cursor/sort problems |
+| `exportNamespaces` | `GET /api/v1/setups/{setupId}/namespaces/export` | `VIEW` | `NamespaceExportQuery` + `Accept` → `NamespaceExport` | `200 / C`, CSV or JSON content type | namespace inspection; maximum 10,000 | no audit / safe read retry | `406 NOT_ACCEPTABLE`, `BULK_SCOPE_CONFLICT` |
+| `getNamespace` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}` | `VIEW` | none → `NamespaceDetails` | `200 / C` | namespace inspection; logical empty namespace returns zero model | no audit / safe read retry | `INVALID_IDENTIFIER` |
+| `listEntries` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries` | `VIEW` | `EntryQuery` query → `AdminPageManagementEntryMetadata` | `200 / C` | namespace inspection; `includeExpired` when requested; page 1–200 | no audit / safe read retry | identifier/cursor/sort problems |
+| `getEntry` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}` | `VIEW` | `includeExpired` query → `ManagementEntryMetadata` | `200 / E` | `includeExpired` when requested | no audit / safe read retry | `ENTRY_NOT_FOUND`, `INVALID_IDENTIFIER` |
+| `revealEntryValue` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/value/reveal` | `REVEAL` | optional `RevealReasonRequest` → `RevealedEntryValue` | `200 / R` | sensitive-value reveal; reason absent or 3–240 chars | required `ENTRY_VALUE_REVEALED` / never | `ENTRY_NOT_FOUND` |
 | `setEntry` | `PUT /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}` | `OPERATE` | `ManagementCacheSetBody` + mode-specific precondition → `ManagementSetResult` | `200` update or `201` create / `E` | decoded value ≤10 MiB; atomic TTL/set mode | required `ENTRY_SET` / never | `PRECONDITION_REQUIRED`, `VERSION_MISMATCH`, `SET_MODE_NOT_APPLIED`, `JSON_VALUE_INVALID`, `VALUE_TYPE_MISMATCH` |
 | `deleteEntry` | `DELETE /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}` | `OPERATE` | exact `If-Match` → none | `204 / C` | atomic exact version | required `ENTRY_DELETED` / never | `PRECONDITION_REQUIRED`, `ENTRY_NOT_FOUND`, `VERSION_MISMATCH` |
 | `expireEntry` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/ttl` | `OPERATE` | `EntryTtlRequest` + exact `If-Match` → `ManagementEntryMetadata` | `200 / E` | positive TTL; atomic exact version | required `ENTRY_TTL_SET` / never | `PRECONDITION_REQUIRED`, `ENTRY_NOT_FOUND`, `VERSION_MISMATCH` |
 | `persistEntry` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/persist` | `OPERATE` | exact `If-Match`, no body → `ManagementEntryMetadata` | `200 / E` | atomic exact version | required `ENTRY_PERSISTED` / never | `PRECONDITION_REQUIRED`, `ENTRY_NOT_FOUND`, `VERSION_MISMATCH` |
 | `touchEntry` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/touch` | `OPERATE` | `EntryTouchRequest` + exact `If-Match` → `ManagementEntryMetadata` | `200 / E`; ETag remains the matched version | null or positive refresh TTL; touch does not increment version | required `ENTRY_TOUCHED` / never | `PRECONDITION_REQUIRED`, `ENTRY_NOT_FOUND`, `VERSION_MISMATCH` |
-| `previewEntryBulkDelete` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/preview` | `OPERATE` | `EntryDeleteSelection` → `BulkDeletePreview` | `200 / C` | bulk-entry capability; explicit 1–1,000 or filter ≤10,000; preview rate; five minutes | required `ENTRY_BULK_PREVIEWED` / never | `BULK_SCOPE_CONFLICT`, `RATE_LIMITED`, `CAPABILITY_UNAVAILABLE` |
+| `previewEntryBulkDelete` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/preview` | `OPERATE` | `EntryDeleteSelection` → `BulkDeletePreview` | `200 / C` | explicit 1–1,000 or filter ≤10,000; preview rate; five minutes | required `ENTRY_BULK_PREVIEWED` / never | `BULK_SCOPE_CONFLICT`, `RATE_LIMITED` |
 | `executeEntryBulkDelete` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/bulk-delete/execute` | `OPERATE` | `ConfirmedEntryDelete` → `BulkDeleteResult` | `200 / C` | actor/setup/namespace scoped; exact phrase; single use | required `ENTRY_BULK_DELETED` / never | `CONFIRMATION_MISMATCH`, `BULK_SCOPE_CONFLICT`, `BULK_PREVIEW_EXPIRED`, `BULK_PREVIEW_USED` |
 
 ## Backend facade parity operations
 
-| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Capability and limits | Audit / retry | Specific problems |
+| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Preconditions and limits | Audit / retry | Specific problems |
 |---|---|---|---|---|---|---|---|
 | `checkEntryExists` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists` | `VIEW` | none → `EntryExistsResult` | `200 / R` | connected runtime; no value transfer | no audit / safe read retry | `SETUP_NOT_FOUND`, `RUNTIME_STOPPED`, `INVALID_IDENTIFIER` |
 | `batchGetEntries` | `POST /api/v1/setups/{setupId}/entries/batch-get` | `REVEAL` | `BatchGetEntriesRequest` → `BatchGetEntriesResult` | `200 / R` | 1–1,000 keys; typed hit/miss values; operation/reveal rate limits | required `BATCH_GET_ENTRIES` / never | `RATE_LIMITED`, `REQUEST_TOO_LARGE`, `INVALID_IDENTIFIER` |
@@ -103,32 +104,32 @@ Common validation applies before service invocation:
 
 ## Counters and locks
 
-| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Capability and limits | Audit / retry | Specific problems |
+| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Preconditions and limits | Audit / retry | Specific problems |
 |---|---|---|---|---|---|---|---|
-| `listCounters` | `GET /api/v1/setups/{setupId}/counters` | `VIEW` | `CounterQuery` query → `AdminPageCounterEntry` | `200 / C` | counter inspection; page 1–200 | no audit / safe read retry | cursor/sort problems, `CAPABILITY_UNAVAILABLE` |
-| `getCounter` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}` | `VIEW` | none → `CounterEntry` | `200 / E` | counter inspection | no audit / safe read retry | `COUNTER_NOT_FOUND`, `CAPABILITY_UNAVAILABLE` |
+| `listCounters` | `GET /api/v1/setups/{setupId}/counters` | `VIEW` | `CounterQuery` query → `AdminPageCounterEntry` | `200 / C` | counter inspection; page 1–200 | no audit / safe read retry | cursor/sort problems |
+| `getCounter` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}` | `VIEW` | none → `CounterEntry` | `200 / E` | counter inspection | no audit / safe read retry | `COUNTER_NOT_FOUND` |
 | `setCounter` | `PUT /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}` | `OPERATE` | `ManagementCounterSetBody` + exact/wildcard precondition → `CounterEntry` | `200` update or `201` create / `E` | counter inspection; atomic value/version/TTL | required `COUNTER_SET` / never | `PRECONDITION_REQUIRED`, `COUNTER_NOT_FOUND`, `VERSION_MISMATCH`, `SET_MODE_NOT_APPLIED` |
 | `adjustCounter` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/increment` | `OPERATE` | `ManagementCounterAdjustBody` + exact/wildcard precondition → `CounterEntry` | `200 / E` | non-zero signed delta; atomic overflow/version/TTL | required `COUNTER_ADJUSTED` / never | `PRECONDITION_REQUIRED`, `COUNTER_NOT_FOUND`, `VERSION_MISMATCH`, `SET_MODE_NOT_APPLIED`, `VALIDATION_FAILED` |
 | `expireCounter` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/ttl` | `OPERATE` | `CounterTtlRequest` + exact `If-Match` → `CounterEntry` | `200 / E` | positive TTL; atomic exact version | required `COUNTER_TTL_SET` / never | `PRECONDITION_REQUIRED`, `COUNTER_NOT_FOUND`, `VERSION_MISMATCH` |
 | `persistCounter` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}/persist` | `OPERATE` | exact `If-Match`, no body → `CounterEntry` | `200 / E` | atomic exact version | required `COUNTER_PERSISTED` / never | `PRECONDITION_REQUIRED`, `COUNTER_NOT_FOUND`, `VERSION_MISMATCH` |
 | `deleteCounter` | `DELETE /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/counters/{encodedKey}` | `OPERATE` | exact `If-Match` → none | `204 / C` | atomic exact version | required `COUNTER_DELETED` / never | `PRECONDITION_REQUIRED`, `COUNTER_NOT_FOUND`, `VERSION_MISMATCH` |
-| `previewCounterBulkDelete` | `POST /api/v1/setups/{setupId}/counters/bulk-delete/preview` | `OPERATE` | `CounterDeleteSelection` → `BulkDeletePreview` | `200 / C` | bulk-counter capability; explicit 1–1,000; preview rate; five minutes | required `COUNTER_BULK_PREVIEWED` / never | `BULK_SCOPE_CONFLICT`, `RATE_LIMITED`, `CAPABILITY_UNAVAILABLE` |
+| `previewCounterBulkDelete` | `POST /api/v1/setups/{setupId}/counters/bulk-delete/preview` | `OPERATE` | `CounterDeleteSelection` → `BulkDeletePreview` | `200 / C` | explicit 1–1,000; preview rate; five minutes | required `COUNTER_BULK_PREVIEWED` / never | `BULK_SCOPE_CONFLICT`, `RATE_LIMITED` |
 | `executeCounterBulkDelete` | `POST /api/v1/setups/{setupId}/counters/bulk-delete/execute` | `OPERATE` | `ConfirmedCounterDelete` → `BulkDeleteResult` | `200 / C` | actor/setup scoped; exact phrase; single use | required `COUNTER_BULK_DELETED` / never | `CONFIRMATION_MISMATCH`, `BULK_SCOPE_CONFLICT`, `BULK_PREVIEW_EXPIRED`, `BULK_PREVIEW_USED` |
-| `listLocks` | `GET /api/v1/setups/{setupId}/locks` | `VIEW` | `LockQuery` query → `AdminPageLockState` | `200 / C` | lock inspection; active locks only; page 1–200 | no audit / safe read retry | cursor problems, `CAPABILITY_UNAVAILABLE` |
-| `getLock` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}` | `VIEW` | none → `LockState` | `200 / E` | lock inspection | no audit / safe read retry | `LOCK_NOT_FOUND`, `CAPABILITY_UNAVAILABLE` |
-| `revealLockOwner` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/owner/reveal` | `REVEAL` | optional `RevealReasonRequest` → `RevealedLockOwner` | `200 / R` | sensitive reveal; reason absent or 3–240 chars | required `LOCK_OWNER_REVEALED` / never | `LOCK_NOT_FOUND`, `CAPABILITY_UNAVAILABLE` |
-| `forceReleaseLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/force-release` | `OPERATE` | `ForceReleaseLockBody` + exact `If-Match` → none | `204 / C` | forced-release capability; exact decoded confirmation; atomic version | required `LOCK_FORCE_RELEASED` / never | `PRECONDITION_REQUIRED`, `CONFIRMATION_MISMATCH`, `LOCK_NOT_FOUND`, `VERSION_MISMATCH`, `CAPABILITY_UNAVAILABLE` |
+| `listLocks` | `GET /api/v1/setups/{setupId}/locks` | `VIEW` | `LockQuery` query → `AdminPageLockState` | `200 / C` | lock inspection; active locks only; page 1–200 | no audit / safe read retry | cursor problems |
+| `getLock` | `GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}` | `VIEW` | none → `LockState` | `200 / E` | lock inspection | no audit / safe read retry | `LOCK_NOT_FOUND` |
+| `revealLockOwner` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/owner/reveal` | `REVEAL` | optional `RevealReasonRequest` → `RevealedLockOwner` | `200 / R` | sensitive reveal; reason absent or 3–240 chars | required `LOCK_OWNER_REVEALED` / never | `LOCK_NOT_FOUND` |
+| `forceReleaseLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/force-release` | `OPERATE` | `ForceReleaseLockBody` + exact `If-Match` → none | `204 / C` | exact decoded confirmation; atomic version | required `LOCK_FORCE_RELEASED` / never | `PRECONDITION_REQUIRED`, `CONFIRMATION_MISMATCH`, `LOCK_NOT_FOUND`, `VERSION_MISMATCH` |
 
 ## Pub/sub, monitoring, and activity
 
-| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Capability and limits | Audit / retry | Specific problems |
+| Operation ID | Method and exact path | Security | Request → success schema | Status / headers | Preconditions and limits | Audit / retry | Specific problems |
 |---|---|---|---|---|---|---|---|
-| `createPubSubSubscription` | `POST /api/v1/setups/{setupId}/pubsub/subscriptions` | `VIEW_MUTATE` | `CreateSubscriptionRequest` → `SubscriptionSummary` | `201 / C` | pub/sub; channel effective byte max; buffer 1–500; actor/setup/process quotas and rate | required `SUBSCRIPTION_CREATED` / never | `PUBSUB_UNAVAILABLE`, `SUBSCRIPTION_LIMIT_REACHED`, `RATE_LIMITED`, `CAPABILITY_UNAVAILABLE` |
+| `createPubSubSubscription` | `POST /api/v1/setups/{setupId}/pubsub/subscriptions` | `VIEW_MUTATE` | `CreateSubscriptionRequest` → `SubscriptionSummary` | `201 / C` | pub/sub; channel effective byte max; buffer 1–500; actor/setup/process quotas and rate | required `SUBSCRIPTION_CREATED` / never | `PUBSUB_UNAVAILABLE`, `SUBSCRIPTION_LIMIT_REACHED`, `RATE_LIMITED` |
 | `streamPubSubMessages` | `GET /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}/stream` | `SSE` | optional `Last-Event-ID` → `PubSubSseEvent` stream | `200 / S` | owner only; one-hour subscription; five-minute resume; bounded entries/bytes | safe stream lifecycle / bounded reconnect | `SUBSCRIPTION_NOT_FOUND`, `SUBSCRIPTION_EXPIRED`, `PUBSUB_UNAVAILABLE` |
 | `revealPubSubPayload` | `POST /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}/messages/{messageId}/payload/reveal` | `REVEAL`, owner | optional `RevealReasonRequest` → `RevealedPubSubPayload` | `200 / R` | retained owner buffer only; reveal rate; nullable content type | required `PUBSUB_PAYLOAD_REVEALED` / never | `SUBSCRIPTION_NOT_FOUND`, `MESSAGE_NOT_FOUND`, `MESSAGE_EXPIRED` |
 | `deletePubSubSubscription` | `DELETE /api/v1/setups/{setupId}/pubsub/subscriptions/{subscriptionId}` | `VIEW_MUTATE`, owner | none → none | `204 / C` | owner only | required `SUBSCRIPTION_DELETED` / never | `SUBSCRIPTION_NOT_FOUND` |
-| `publishPubSubMessage` | `POST /api/v1/setups/{setupId}/pubsub/publish` | `OPERATE` | `PublishRequest` with optional `contentType` → `PublishAccepted` | `200 / C` | pub/sub; channel byte max; encoded wire-payload byte max; publish rate; versioned typed envelope | required `PUBSUB_PUBLISHED` / never | `PAYLOAD_TOO_LARGE`, `RATE_LIMITED`, `PUBSUB_UNAVAILABLE`, `CAPABILITY_UNAVAILABLE` |
-| `getDatabaseMonitoring` | `GET /api/v1/setups/{setupId}/monitoring/database` | `VIEW` | none → `DatabaseMonitoring` | `200 / C` | database-statistics capability; permission fields use availability wrappers | no audit / safe read retry | `CAPABILITY_UNAVAILABLE` |
+| `publishPubSubMessage` | `POST /api/v1/setups/{setupId}/pubsub/publish` | `OPERATE` | `PublishRequest` with optional `contentType` → `PublishAccepted` | `200 / C` | pub/sub; channel byte max; encoded wire-payload byte max; publish rate; versioned typed envelope | required `PUBSUB_PUBLISHED` / never | `PAYLOAD_TOO_LARGE`, `RATE_LIMITED`, `PUBSUB_UNAVAILABLE` |
+| `getDatabaseMonitoring` | `GET /api/v1/setups/{setupId}/monitoring/database` | `VIEW` | none → `DatabaseMonitoring` | `200 / C` | permission fields use availability wrappers | no audit / safe read retry | none |
 | `getRuntimeMonitoring` | `GET /api/v1/setups/{setupId}/monitoring/runtime` | `VIEW` | none → `RuntimeMonitoring` | `200 / C` | process-local bounded dimensions only | no audit / safe read retry | `SETUP_NOT_FOUND` |
 | `streamMetrics` | `GET /api/v1/setups/{setupId}/sse/metrics` | `SSE` | optional `Last-Event-ID` → `MetricsSseEvent` stream | `200 / S` | 15-second snapshots/heartbeat; bounded five-minute resume | safe stream lifecycle / bounded reconnect | `SETUP_NOT_FOUND` |
 | `listActivity` | `GET /api/v1/setups/{setupId}/activity` | `VIEW` | `ActivityQuery` query → `ActivityPage` | `200 / C` | limit default 50/max 200; process-local bounded history | no audit / safe read retry | `INVALID_CURSOR`, `SETUP_NOT_FOUND` |
@@ -150,4 +151,4 @@ Touch is explicitly version-stable: a successful touch returns updated metadata 
 
 ## M1 acceptance use
 
-`ManagementOpenApiContractTest.matchesReviewedOperationManifest` compares all 60 operation IDs and exact method/path pairs in this document with OpenAPI. It also verifies each row's security profile, success status/schema, problem response, headers, and declared transport schemas.
+`ManagementOpenApiContractTest.matchesReviewedOperationManifest` compares all 59 operation IDs and exact method/path pairs in this document with OpenAPI. It also verifies each row's security profile, success status/schema, problem response, headers, and declared transport schemas.

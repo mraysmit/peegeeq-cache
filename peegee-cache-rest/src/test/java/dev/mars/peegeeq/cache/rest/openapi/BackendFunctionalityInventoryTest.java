@@ -71,7 +71,6 @@ class BackendFunctionalityInventoryTest {
             entry("ScanService.scan", Set.of("scanEntries")),
             entry("AdminService.entryStats", Set.of("getNamespace")),
             entry("AdminService.metrics", Set.of("getCacheMetrics")),
-            entry("ManagementService.capabilities", Set.of("getSetupCapabilities")),
             entry("ManagementService.overview", Set.of("getOverview")),
             entry("ManagementService.databaseMonitoring", Set.of("getDatabaseMonitoring")),
             entry("ManagementService.namespaces", Set.of("listNamespaces", "exportNamespaces")),
@@ -110,7 +109,7 @@ class BackendFunctionalityInventoryTest {
                 .map(method -> type.getSimpleName() + "." + method.getName())
                 .forEach(reflected::add));
 
-        assertEquals(62, reflected.size(), "The reviewed public backend denominator changed");
+        assertEquals(61, reflected.size(), "The reviewed public backend denominator changed");
         assertEquals(reflected, MAPPINGS.keySet(),
                 "Every public method must be added to the functionality matrix mapping");
 

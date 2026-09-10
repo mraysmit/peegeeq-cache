@@ -1,10 +1,9 @@
 import { BellOutlined, ClearOutlined, CloseOutlined, DatabaseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { Alert, Badge, Button, ConfigProvider, Drawer, Empty, Layout, List, Menu, Space, Tag, Typography, theme as antdTheme } from 'antd';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 
 import type { BrowserSession, ManagementClientError } from '../api/session-client';
-import type { SetupCapabilities } from '../api/setup-schemas';
 import { BrowserMonitoringSocket } from '../api/monitoring-live';
 import { OverviewPage } from '../features/overview/OverviewPage';
 import { NamespaceDetailsPage } from '../features/namespaces/NamespaceDetailsPage';
@@ -22,11 +21,15 @@ import { useSetupScopeStore } from '../state/scope-store';
 import { useLiveStore } from '../state/live-store';
 import { loadPreferences, PREFERENCES_CHANGED_EVENT, savePreferences } from '../state/preferences';
 import { formatDisplayInstant } from '../presentation/display-time';
-import { useGetSetupCapabilitiesQuery } from '../store/api/setupsApi';
+import { useGetSetupDetailsQuery } from '../store/api/setupsApi';
 import { ConnectionStatus } from '../components/common/ConnectionStatus';
 
 const { Header, Sider, Content } = Layout;
-const { Text, Title } = Typography;
+const { Text } = Typography;
+
+/** Fallbacks used until the selected setup's details (and so its limits) have loaded. */
+const DEFAULT_PUB_SUB_CHANNEL_MAX_BYTES = 63;
+const DEFAULT_PUB_SUB_PAYLOAD_MAX_BYTES = 7_500;
 
 type ManagementShellProps = {
   session: BrowserSession;
@@ -49,18 +52,6 @@ const sections = [
 
 type SectionPath = (typeof sections)[number]['path'];
 
-const capabilityForPath = (path: SectionPath): keyof SetupCapabilities['capabilities'] | undefined => {
-  switch (path) {
-    case '/namespaces': return 'namespaceInspection';
-    case '/keys': return 'entryInspection';
-    case '/counters': return 'counterInspection';
-    case '/locks': return 'lockInspection';
-    case '/pubsub': return 'pubSub';
-    case '/advanced': return 'entryInspection';
-    default: return undefined;
-  }
-};
-
 function activeSection(pathname: string): SectionPath {
   if (pathname === '/') return '/';
   const match = sections.find((section) => section.path !== '/' && (pathname === section.path || pathname.startsWith(`${section.path}/`)));
@@ -74,7 +65,6 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
   const location = useLocation();
   const selectedSetupId = useSetupScopeStore((state) => state.setupId);
   const selectedNamespace = useSetupScopeStore((state) => state.namespace);
-  const selectedCapabilities = useSetupScopeStore((state) => state.capabilities);
   const selectStoredSetup = useSetupScopeStore((state) => state.select);
   const selectNamespace = useSetupScopeStore((state) => state.selectNamespace);
   const clearStoredSetup = useSetupScopeStore((state) => state.clear);
@@ -96,17 +86,13 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
     return () => window.removeEventListener(PREFERENCES_CHANGED_EVENT, applyPreferences);
   }, []);
 
-  // Capabilities for a restored scope come through RTK Query; the Zustand scope store remains
-  // the owner of the selected setup and its capability snapshot (design §8.2).
-  const capabilityLookup = useGetSetupCapabilitiesQuery(
+  // The selected setup's details carry the effective byte limits the Pub/Sub and Settings pages
+  // show; the Zustand scope store remains the owner of the selection itself (design §8.2).
+  const selectedDetails = useGetSetupDetailsQuery(
     { setupId: selectedSetupId ?? '' },
-    { skip: selectedSetupId === undefined || selectedCapabilities !== undefined },
+    { skip: selectedSetupId === undefined },
   );
-  useEffect(() => {
-    if (selectedSetupId === undefined || selectedCapabilities !== undefined) return;
-    if (capabilityLookup.data !== undefined) selectStoredSetup(selectedSetupId, capabilityLookup.data);
-    else if (capabilityLookup.isError) clearStoredSetup();
-  }, [capabilityLookup.data, capabilityLookup.isError, clearStoredSetup, selectStoredSetup, selectedCapabilities, selectedSetupId]);
+  const selectedLimits = selectedDetails.data?.limits;
 
   useEffect(() => {
     if (selectedSetupId === undefined || !notificationsOpen) return undefined;
@@ -114,31 +100,9 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
     return () => { live.stop(); resetLive(); };
   }, [resetLive, monitoringSocket, notificationsOpen, receiveNotification, selectedSetupId, setConnectionState]);
 
-  const selectSetup = (setupId: string | undefined, capabilities?: SetupCapabilities) => {
-    if (setupId === undefined) {
-      clearStoredSetup();
-      return;
-    }
-    if (capabilities !== undefined) selectStoredSetup(setupId, capabilities);
-  };
-
-  const visibleSections = sections.filter((section) => {
-    const capability = capabilityForPath(section.path);
-    if (capability === undefined || selectedSetupId === undefined) return true;
-    return selectedCapabilities?.capabilities[capability] === true;
-  });
-
-  const gated = (
-    capability: keyof SetupCapabilities['capabilities'],
-    label: string,
-    description: string,
-    content: ReactNode,
-  ) => {
-    if (selectedSetupId === undefined) return content;
-    if (selectedCapabilities === undefined) return <CapabilityPending label={label} />;
-    return selectedCapabilities.capabilities[capability]
-      ? content
-      : <CapabilityUnavailable description={description} label={label} />;
+  const selectSetup = (setupId: string | undefined) => {
+    if (setupId === undefined) clearStoredSetup();
+    else selectStoredSetup(setupId);
   };
 
   const endSession = async () => {
@@ -182,7 +146,7 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
             </div>
             <nav aria-label="Management sections">
               <Menu
-                items={visibleSections.map((section) => ({
+                items={sections.map((section) => ({
                   key: section.path,
                   label: <Link to={section.path}>{section.label}</Link>,
                 }))}
@@ -266,16 +230,16 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
                   path="/"
                 />
                 <Route
-                  element={gated('namespaceInspection', 'Namespaces', 'namespace inspection', <NamespacesPage key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)}
+                  element={<NamespacesPage key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />}
                   path="/namespaces"
                 />
                 <Route
-                  element={gated('namespaceInspection', 'Namespaces', 'namespace inspection', (
+                  element={(
                     <NamespaceDetailsRoute
                       onSelectNamespace={selectNamespace}
                       selectedSetupId={selectedSetupId}
                     />
-                  ))}
+                  )}
                   path="/namespaces/:encodedNamespace"
                 />
                 <Route
@@ -289,19 +253,19 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
                   path="/setups"
                 />
                 <Route
-                  element={gated('entryInspection', 'Keys', 'entry inspection', <EntriesPage canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkEntryDelete === true} canInspectExpired={selectedCapabilities?.capabilities.expiredEntryInspection === true} canOperate={isOperator && selectedCapabilities?.capabilities.entryMutation === true} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />)}
+                  element={<EntriesPage canBulkDelete={isOperator} canOperate={isOperator} key={`${selectedSetupId ?? 'no-setup'}:${selectedNamespace ?? 'no-namespace'}`} selectedNamespace={selectedNamespace} selectedSetupId={selectedSetupId} />}
                   path="/keys"
                 />
                 <Route
-                  element={gated('entryInspection', 'Keys', 'entry inspection', <EntryDetailsRoute canOperate={isOperator && selectedCapabilities?.capabilities.entryMutation === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.entryValueReveal === true} selectedSetupId={selectedSetupId} />)}
+                  element={<EntryDetailsRoute canOperate={isOperator} canReveal={isOperator} selectedSetupId={selectedSetupId} />}
                   path="/keys/:encodedNamespace/:encodedKey"
                 />
-                <Route element={gated('counterInspection', 'Counters', 'counter inspection', <CountersPage canBulkDelete={isOperator && selectedCapabilities?.capabilities.bulkCounterDelete === true} canOperate={isOperator && selectedCapabilities?.capabilities.counterMutation === true} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/counters" />
-                <Route element={gated('lockInspection', 'Locks', 'lock inspection', <LocksPage canOperate={isOperator && selectedCapabilities?.capabilities.forcedLockRelease === true} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.lockOwnerReveal === true} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/locks" />
-                <Route element={gated('pubSub', 'Pub/Sub', 'Pub/Sub', <PubSubPage canOperate={isOperator} canReveal={isOperator && session.features.sensitiveReveal && selectedCapabilities?.capabilities.pubSubPayloadReveal === true} key={selectedSetupId ?? 'no-setup'} maximumChannelBytes={selectedCapabilities?.limits.pubSubChannelMaxBytes ?? 63} maximumPayloadBytes={selectedCapabilities?.limits.pubSubPayloadMaxBytes ?? 7_500} selectedSetupId={selectedSetupId} />)} path="/pubsub" />
+                <Route element={<CountersPage canBulkDelete={isOperator} canOperate={isOperator} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/counters" />
+                <Route element={<LocksPage canOperate={isOperator} canReveal={isOperator} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/locks" />
+                <Route element={<PubSubPage canOperate={isOperator} canReveal={isOperator} key={selectedSetupId ?? 'no-setup'} maximumChannelBytes={selectedLimits?.pubSubChannelMaxBytes ?? DEFAULT_PUB_SUB_CHANNEL_MAX_BYTES} maximumPayloadBytes={selectedLimits?.pubSubPayloadMaxBytes ?? DEFAULT_PUB_SUB_PAYLOAD_MAX_BYTES} selectedSetupId={selectedSetupId} />} path="/pubsub" />
                 <Route element={<MonitoringPage key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/monitoring" />
-                <Route element={gated('entryInspection', 'Advanced operations', 'backend operations', <AdvancedOperationsPage canBatch={selectedCapabilities?.capabilities.batchEntryOperations === true} canMetrics={selectedCapabilities?.capabilities.cacheMetrics === true} canOperate={isOperator} canOwnLocks={selectedCapabilities?.capabilities.ownerLockOperations === true} canReveal={isOperator && session.features.sensitiveReveal} canScan={selectedCapabilities?.capabilities.valueScan === true} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />)} path="/advanced" />
-                <Route element={<SettingsPage capabilities={selectedCapabilities} selectedSetupId={selectedSetupId} session={session} />} path="/settings" />
+                <Route element={<AdvancedOperationsPage canOperate={isOperator} canReveal={isOperator} key={selectedSetupId ?? 'no-setup'} selectedSetupId={selectedSetupId} />} path="/advanced" />
+                <Route element={<SettingsPage limits={selectedLimits} migrationVersion={selectedDetails.data?.migrationVersion} selectedSetupId={selectedSetupId} session={session} />} path="/settings" />
                 <Route element={<Navigate replace to="/" />} path="*" />
               </Routes>
             </Content>
@@ -359,24 +323,6 @@ export function ManagementShell({ session, sessionProblem, onLogout }: Managemen
         </Layout>
       </div>
     </ConfigProvider>
-  );
-}
-
-function CapabilityPending({ label }: { readonly label: string }) {
-  return (
-    <section aria-labelledby="capability-pending-title" className="workspace">
-      <Title id="capability-pending-title" level={1}>Loading {label}</Title>
-      <Text aria-busy="true">Loading setup capabilities…</Text>
-    </section>
-  );
-}
-
-function CapabilityUnavailable({ description, label }: { readonly description: string; readonly label: string }) {
-  return (
-    <section aria-labelledby="capability-unavailable-title" className="workspace">
-      <Title id="capability-unavailable-title" level={1}>{label} unavailable</Title>
-      <Text>The active setup does not provide {description}.</Text>
-    </section>
   );
 }
 

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ResourceClient } from '@src/api/resource-client';
 import { SessionClient } from '@src/api/session-client';
 
-const session = { user: 'operator', roles: ['viewer', 'operator'], serverVersion: '1', apiVersion: 'v1', authenticationMode: 'LOCAL_TOKEN', csrfToken: 'c'.repeat(43), sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z', features: { setupRegistration: true, sensitiveReveal: true } } as const;
+const session = { user: 'operator', roles: ['viewer', 'operator'], serverVersion: '1', apiVersion: 'v1', authenticationMode: 'LOCAL_TOKEN', csrfToken: 'c'.repeat(43), sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z' } as const;
 const counter = { namespace: 'orders', encodedNamespace: 'b3JkZXJz', key: 'total', encodedKey: 'dG90YWw', value: '-9223372036854775808', version: '9007199254740993', createdAt: '2026-08-29T10:00:00Z', updatedAt: '2026-08-29T10:01:00Z', ttl: { state: 'PERSISTENT', ttlMillis: null, expiresAt: null } } as const;
 const lock = { namespace: 'orders', encodedNamespace: 'b3JkZXJz', key: 'processor', encodedKey: 'cHJvY2Vzc29y', fencingToken: '9223372036854775807', version: '4', createdAt: '2026-08-29T10:00:00Z', updatedAt: '2026-08-29T10:01:00Z', leaseExpiresAt: '2099-08-29T10:02:00Z', leaseRemainingMillis: 60_000, owner: { state: 'MASKED' } } as const;
 

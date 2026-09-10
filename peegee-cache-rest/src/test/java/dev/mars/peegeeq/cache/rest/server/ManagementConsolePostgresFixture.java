@@ -35,7 +35,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.UnaryOperator;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -85,7 +84,7 @@ final class ManagementConsolePostgresFixture {
             "testUnregisteredSetup", "registerSetup");
     private static final Set<String> FIXTURE_OPERATIONS = Set.of(
             "getSession", "exchangeLocalToken", "listSetups", "testUnregisteredSetup",
-            "registerSetup", "getSetupCapabilities", "getOverview", "getDatabaseMonitoring",
+            "registerSetup", "getSetup", "getOverview", "getDatabaseMonitoring",
             "getRuntimeMonitoring", "listActivity");
     private static final Set<String> ISOLATED_LIFECYCLE_OPERATIONS = Set.of(
             "testUnregisteredSetup", "registerSetup", "connectSetup", "detachSetup",
@@ -126,7 +125,7 @@ final class ManagementConsolePostgresFixture {
             Clock clock,
             Journey journey) throws Exception {
         runIsolated(temporaryDirectory, postgres, seed, clock,
-                List.of(currentScenario().operations()), null, Map.of(), true, journey);
+                List.of(currentScenario().operations()), Map.of(), true, journey);
     }
 
     static void run(
@@ -137,19 +136,7 @@ final class ManagementConsolePostgresFixture {
             List<String> expectedOperations,
             Journey journey) throws Exception {
         runIsolated(temporaryDirectory, postgres, seed, clock,
-                expectedOperations, null, Map.of(), true, journey);
-    }
-
-    static void runWithCapabilities(
-            Path temporaryDirectory,
-            PostgreSQLContainer postgres,
-            boolean seed,
-            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter,
-            List<String> expectedOperations,
-            Journey journey) throws Exception {
-        runIsolated(temporaryDirectory, postgres, seed, Clock.systemUTC(), expectedOperations,
-                java.util.Objects.requireNonNull(capabilitySourceFilter, "capabilitySourceFilter"),
-                Map.of(), false, journey);
+                expectedOperations, Map.of(), true, journey);
     }
 
     static void runTrustedProxy(
@@ -158,7 +145,7 @@ final class ManagementConsolePostgresFixture {
             boolean seed,
             Journey journey) throws Exception {
         runIsolated(temporaryDirectory, postgres, seed, Clock.systemUTC(),
-                List.of(currentScenario().operations()), null,
+                List.of(currentScenario().operations()),
                 Map.of("X-PeeGeeQ-User", "browser-operator",
                         "X-PeeGeeQ-Roles", "viewer,operator"),
                 false, journey);
@@ -171,7 +158,7 @@ final class ManagementConsolePostgresFixture {
             List<String> expectedOperations,
             Journey journey) throws Exception {
         runIsolated(temporaryDirectory, postgres, seed, Clock.systemUTC(),
-                expectedOperations, null, Map.of(), false, journey);
+                expectedOperations, Map.of(), false, journey);
     }
 
     private static void runSelected(
@@ -185,7 +172,7 @@ final class ManagementConsolePostgresFixture {
             return;
         }
         runIsolated(temporaryDirectory, postgres, seed, Clock.systemUTC(),
-                expectedOperations, null, Map.of(), seed && needsPreparedIsolatedSetup(expectedOperations), journey);
+                expectedOperations, Map.of(), seed && needsPreparedIsolatedSetup(expectedOperations), journey);
     }
 
     static boolean canUseSharedSetup(List<String> expectedOperations) {
@@ -218,7 +205,6 @@ final class ManagementConsolePostgresFixture {
             boolean seed,
             Clock clock,
             List<String> expectedOperations,
-            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter,
             Map<String, String> trustedProxyHeaders,
             boolean prepareSetup,
             Journey journey) throws Exception {
@@ -227,7 +213,7 @@ final class ManagementConsolePostgresFixture {
         }
         try (Environment environment = Environment.start(
                 temporaryDirectory.resolve("management-browser-audit.jsonl"),
-                postgres, seed, clock, capabilitySourceFilter, trustedProxyHeaders)) {
+                postgres, seed, clock, trustedProxyHeaders)) {
             environment.run(expectedOperations, journey, false, prepareSetup);
         }
     }
@@ -250,7 +236,7 @@ final class ManagementConsolePostgresFixture {
             Path auditPath = auditDirectory.resolve(
                     "management-browser-audit-" + UUID.randomUUID() + ".jsonl");
             Environment environment = Environment.start(
-                    auditPath, postgres, true, Clock.systemUTC(), null, Map.of());
+                    auditPath, postgres, true, Clock.systemUTC(), Map.of());
             try {
                 environment.run(List.of(), context -> {
                     authenticate(context);
@@ -311,7 +297,6 @@ final class ManagementConsolePostgresFixture {
                 PostgreSQLContainer postgres,
                 boolean seed,
                 Clock clock,
-                UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter,
                 Map<String, String> trustedProxyHeaders) throws Exception {
             Vertx migrationVertx = Vertx.vertx();
             try {
@@ -349,22 +334,13 @@ final class ManagementConsolePostgresFixture {
                         "127.0.0.1", managementPort, origin, targetPolicy, auditPath, auditKey);
                 InetAddress databaseAddress = InetAddress.getByName(postgres.getHost());
                 Buffer serverCertificate = certificate();
-                application = capabilitySourceFilter == null
-                        ? await(ManagementServerApplication.start(
+                application = await(ManagementServerApplication.start(
                         configuration,
                         reference -> reference.equals(auditKey) ? new byte[32] : null,
                         ignored -> List.of(databaseAddress),
                         trustProfile -> trustProfile.equals("test-ca") ? serverCertificate : null,
                         meters,
-                        clock))
-                        : await(ManagementServerApplication.start(
-                        configuration,
-                        reference -> reference.equals(auditKey) ? new byte[32] : null,
-                        ignored -> List.of(databaseAddress),
-                        trustProfile -> trustProfile.equals("test-ca") ? serverCertificate : null,
-                         meters,
-                         clock,
-                         capabilitySourceFilter));
+                        clock));
                 String bootstrapToken = trustedProxy
                         ? ""
                         : application.takeBootstrapToken().orElseThrow();

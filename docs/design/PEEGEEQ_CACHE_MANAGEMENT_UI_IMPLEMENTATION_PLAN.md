@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Management UI Implementation Plan
 
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+
 **Status:** Phase 8.3 U0-U11 COMPLETE — the U11 acceptance baseline passed the managed UI gate (36 files / 170 tests), the complete 557-scenario packaged Chromium catalogue (560 Failsafe tests including three infrastructure checks), and full 11-module reactors on PostgreSQL 15.17, 16.13, 17.11, and 18.3 on 5 September 2026. The subsequent P7 screenshot addition also passed a full PostgreSQL 18.3 reactor: 563 Failsafe tests, all 557 scenarios with paired captures, and 1,122 embedded PNGs. Exact evidence is in §18 of [the Playwright plan](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md).
 **Date:** 3 September 2026
 **Delivery method:** strict test-driven development
@@ -41,7 +43,7 @@ The execution baseline is:
 
 - reproducible Node/npm/Vite lifecycle owned by `peegee-cache-management-ui` and invoked by the root Maven reactor;
 - generated TypeScript compile-time types and runtime Zod validation derived from the stable OpenAPI contract;
-- application shell, routing, theme, session bootstrap, role and capability gates, setup and namespace scope, notifications, and connection state;
+- application shell, routing, theme, session bootstrap, role gates, setup and namespace scope, notifications, and connection state;
 - Overview, Cache Setups, Namespaces, Key Browser, Key Details, Counters, Locks, Pub/Sub, Monitoring, Settings, and recent activity;
 - guarded entry, counter, lock, setup, bulk-delete, and pub/sub operations already exposed by the backend;
 - sensitive-state isolation for bootstrap tokens, passwords, entry values, lock owners, and pub/sub payloads;
@@ -329,7 +331,7 @@ Exit gate:
 - logout/session expiry clears sensitive and scoped state;
 - no browser console, page, storage, URL, or server-log leak is present.
 
-### U2: Setup lifecycle, scope, and capability gating
+### U2: Setup lifecycle and scope
 
 **Status:** COMPLETE
 
@@ -363,7 +365,7 @@ Implementation:
 
 - implement Cache Setups and setup forms using all setup operations;
 - implement setup/namespace scope stores with an explicit session-storage allowlist;
-- implement health/capability discovery, disconnected and empty states, and action gating;
+- implement health discovery, disconnected and empty states, and role-based action gating;
 - serialize concurrent user actions in the UI while retaining server authority.
 
 Exit gate:
@@ -762,7 +764,7 @@ The final suite contains independent, named journeys for:
 1. trusted-proxy session bootstrap, identity/role rotation, bounded expiry, and seamless proxy revalidation; local logout is intentionally absent because the trusted proxy/IdP controls that session;
 2. single-use local-token exchange, replay rejection, storage exclusion, and logout;
 3. setup test/register/detach/reconnect/forget with target-policy failures and password leakage checks;
-4. setup/namespace scope switching and capability-driven navigation;
+4. setup/namespace scope switching and navigation;
 5. Overview and namespace database-truth validation;
 6. entry create, browse, reveal, format, copy/hide, edit with CAS, expire, persist, touch, and delete;
 7. entry bulk preview, exact confirmation, stale conflict, expiry, and replay rejection;

@@ -109,6 +109,9 @@ class SetupReadRoutesTest {
             assertEquals("EXTERNAL", details.path("runtime").path("schemaBootstrapMode").asText());
             assertEquals("NOOP", details.path("runtime").path("telemetryMode").asText());
             assertEquals(3, details.path("runtime").path("poolMaxSize").asInt());
+            assertEquals(49, details.path("limits").path("pubSubChannelMaxBytes").asInt());
+            assertEquals(7_500, details.path("limits").path("pubSubPayloadMaxBytes").asInt());
+            assertEquals(10_485_760, details.path("limits").path("maximumValueBytes").asInt());
             assertFalse(details.path("registeredAt").asText().isBlank());
             assertFalse(details.path("connectedAt").asText().isBlank());
             assertFalse(detailsResponse.body().contains("database-user"));
@@ -127,27 +130,7 @@ class SetupReadRoutesTest {
             assertEquals("UP", health.path("status").asText());
             assertTrue(health.path("schemaReady").asBoolean());
             assertEquals("Database reachable and schema ready", health.path("detail").asText());
-            JsonNode capabilities = JSON.readTree(get(
-                    port, "/api/v1/setups/alpha/capabilities", "role=viewer", null).body());
-            assertEquals("1", capabilities.path("migrationVersion").asText());
-            assertFalse(capabilities.path("capabilities").path("namespaceInspection").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("entryInspection").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("entryMutation").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("counterInspection").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("counterMutation").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("lockInspection").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("forcedLockRelease").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("entryValueReveal").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("lockOwnerReveal").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("pubSub").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("pubSubPayloadReveal").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("batchEntryOperations").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("valueScan").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("cacheMetrics").asBoolean());
-            assertFalse(capabilities.path("capabilities").path("ownerLockOperations").asBoolean());
-            assertEquals(49, capabilities.path("limits").path("pubSubChannelMaxBytes").asInt());
-            assertEquals(7_500, capabilities.path("limits").path("pubSubPayloadMaxBytes").asInt());
-            assertEquals(10_485_760, capabilities.path("limits").path("maximumValueBytes").asInt());
+            assertEquals(404, get(port, "/api/v1/setups/alpha/capabilities", "role=viewer", null).statusCode());
 
             await(registry.detach("alpha"));
             JsonNode detached = JSON.readTree(get(

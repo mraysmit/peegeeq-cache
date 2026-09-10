@@ -14,10 +14,6 @@ const sessionBody = currentSessionSchema.parse({
   csrfToken: 'csrf-token-with-at-least-thirty-two-characters',
   sessionIdleExpiresAt: '2099-01-01T00:00:00Z',
   sessionExpiresAt: '2099-01-01T01:00:00Z',
-  features: {
-    setupRegistration: true,
-    sensitiveReveal: true,
-  },
 });
 
 const revealed = revealedEntryValueSchema.parse({

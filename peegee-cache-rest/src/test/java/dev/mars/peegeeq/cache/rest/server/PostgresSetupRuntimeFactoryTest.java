@@ -1,7 +1,6 @@
 package dev.mars.peegeeq.cache.rest.server;
 
 import dev.mars.peegeeq.cache.pg.bootstrap.PgSchemaMigrator;
-import dev.mars.peegeeq.cache.api.management.ManagementCapability;
 import dev.mars.peegeeq.cache.api.management.ManagementActivityEvent;
 import dev.mars.peegeeq.cache.api.management.ManagementActivityResource;
 import dev.mars.peegeeq.cache.api.management.ManagementActivityResourceType;
@@ -72,6 +71,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PostgresSetupRuntimeFactoryTest {
@@ -123,7 +123,7 @@ class PostgresSetupRuntimeFactoryTest {
     }
 
     @Test
-    void configuredRuntimeAffectsRealCacheAndCapabilities() throws Exception {
+    void configuredRuntimeAffectsRealCacheAndLimits() throws Exception {
         InetAddress pinnedAddress = InetAddress.getByName(postgres.getHost());
         SetupTargetPolicy policy = new SetupTargetPolicy(
                 Set.of("internal.example"), Set.of("127.0.0.0/8"),
@@ -181,7 +181,8 @@ class PostgresSetupRuntimeFactoryTest {
             assertEquals("configured_cache", configuredRuntime.pubSubChannelPrefix());
             assertEquals("EXTERNAL", configuredRuntime.schemaBootstrapMode());
             assertFalse(configuredRuntime.pubSubEnabled());
-            assertFalse(registry.capabilities("configured-runtime").features().pubSub());
+            assertEquals(63 - "configured_cache".length() - 2,
+                    registry.limits("configured-runtime").pubSubChannelMaxBytes());
 
             CacheKey key = new CacheKey("runtime-config", "default-ttl");
             java.time.Instant beforeSet = java.time.Instant.now();
@@ -198,6 +199,23 @@ class PostgresSetupRuntimeFactoryTest {
     }
 
     @Test
+    void rejectsMissingAuditCollaboratorsAtConstruction() {
+        SetupTargetPolicy policy = new SetupTargetPolicy(
+                Set.of("internal.example"), Set.of("127.0.0.0/8"),
+                Set.of(5432), true, false, false, false, Set.of("test-ca"));
+
+        assertThrows(NullPointerException.class, () -> new PostgresSetupRuntimeFactory(
+                policy,
+                ignored -> List.of(),
+                ignored -> serverCertificate,
+                Duration.ofSeconds(10),
+                null,
+                null,
+                Clock.systemUTC(),
+                () -> UUID.randomUUID().toString()));
+    }
+
+    @Test
     void registeredApplyRuntimeCanBeRetestedWithoutStallingReadiness() throws Exception {
         InetAddress pinnedAddress = InetAddress.getByName(postgres.getHost());
         SetupTargetPolicy policy = new SetupTargetPolicy(
@@ -207,7 +225,15 @@ class PostgresSetupRuntimeFactoryTest {
                 policy,
                 ignored -> List.of(pinnedAddress),
                 ignored -> serverCertificate,
-                Duration.ofSeconds(10));
+                Duration.ofSeconds(10),
+                new RecordingAuditSink(),
+                new ManagementAuditFingerprinter(
+                        new ManagementSecretReference("test-audit-key"),
+                        ignored -> new byte[32],
+                        "test-audit-key",
+                        128),
+                Clock.systemUTC(),
+                () -> UUID.randomUUID().toString());
         SetupRegistry registry = new SetupRegistry(factory, ignored -> null);
         SetupRuntimeConfiguration configuration = new SetupRuntimeConfiguration(
                 3_600_000L,
@@ -295,12 +321,10 @@ class PostgresSetupRuntimeFactoryTest {
             assertTrue(health.schemaReady());
             assertTrue(health.latencyMillis() >= 0);
             assertEquals("Database reachable and schema ready", health.detail());
-            SetupCapabilities capabilities = registry.capabilities("orders");
-            assertEquals("1", capabilities.migrationVersion());
-            assertTrue(capabilities.features().namespaceInspection());
-            assertEquals(7_500, capabilities.limits().pubSubPayloadMaxBytes());
-            assertTrue(registry.management("orders").capabilities().supports(
-                    ManagementCapability.NAMESPACE_INSPECTION));
+            SetupLimits limits = registry.limits("orders");
+            assertEquals("1", registry.details("orders").migrationVersion());
+            assertEquals(7_500, limits.pubSubPayloadMaxBytes());
+            assertEquals(10_485_760, limits.maximumValueBytes());
             assertTrue(await(registry.management("orders").databaseStats()).schemaBytes() != null);
             seedInspectionData();
             int managementPort = freePort();

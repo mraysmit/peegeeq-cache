@@ -1,5 +1,6 @@
 package dev.mars.peegeeq.cache.rest.server;
 
+import dev.mars.peegeeq.cache.api.management.ManagementLimits;
 import dev.mars.peegeeq.cache.api.management.ManagementSecretProvider;
 import dev.mars.peegeeq.cache.api.management.ManagementService;
 import dev.mars.peegeeq.cache.api.PeeGeeCache;
@@ -19,7 +20,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +32,7 @@ public final class SetupRegistry {
     private final ManagementSecretProvider secretProvider;
     private final Clock clock;
     private final ManagementRuntimeMonitor runtimeMonitor;
-    private final UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter;
+    private final ManagementLimits managementLimits;
     private final Map<String, Entry> entries = new HashMap<>();
     private final Set<String> pendingRegistrations = new HashSet<>();
     private final List<SetupScopeLifecycle> scopeLifecycles = new ArrayList<>();
@@ -40,21 +40,21 @@ public final class SetupRegistry {
     private Future<Void> closing;
 
     public SetupRegistry(SetupRuntimeFactory runtimeFactory, ManagementSecretProvider secretProvider) {
-        this(runtimeFactory, secretProvider, Clock.systemUTC(), null, UnaryOperator.identity());
+        this(runtimeFactory, secretProvider, Clock.systemUTC(), null, ManagementLimits.defaults());
     }
 
     public SetupRegistry(
             SetupRuntimeFactory runtimeFactory,
             ManagementSecretProvider secretProvider,
             ManagementRuntimeMonitor runtimeMonitor) {
-        this(runtimeFactory, secretProvider, Clock.systemUTC(), runtimeMonitor, UnaryOperator.identity());
+        this(runtimeFactory, secretProvider, Clock.systemUTC(), runtimeMonitor, ManagementLimits.defaults());
     }
 
     SetupRegistry(
             SetupRuntimeFactory runtimeFactory,
             ManagementSecretProvider secretProvider,
             Clock clock) {
-        this(runtimeFactory, secretProvider, clock, null, UnaryOperator.identity());
+        this(runtimeFactory, secretProvider, clock, null, ManagementLimits.defaults());
     }
 
     SetupRegistry(
@@ -62,7 +62,7 @@ public final class SetupRegistry {
             ManagementSecretProvider secretProvider,
             Clock clock,
             ManagementRuntimeMonitor runtimeMonitor) {
-        this(runtimeFactory, secretProvider, clock, runtimeMonitor, UnaryOperator.identity());
+        this(runtimeFactory, secretProvider, clock, runtimeMonitor, ManagementLimits.defaults());
     }
 
     SetupRegistry(
@@ -70,13 +70,12 @@ public final class SetupRegistry {
             ManagementSecretProvider secretProvider,
             Clock clock,
             ManagementRuntimeMonitor runtimeMonitor,
-            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter) {
+            ManagementLimits managementLimits) {
         this.runtimeFactory = Objects.requireNonNull(runtimeFactory, "runtimeFactory");
         this.secretProvider = Objects.requireNonNull(secretProvider, "secretProvider");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.runtimeMonitor = runtimeMonitor;
-        this.capabilitySourceFilter = Objects.requireNonNull(
-                capabilitySourceFilter, "capabilitySourceFilter");
+        this.managementLimits = Objects.requireNonNull(managementLimits, "managementLimits");
     }
 
     public Future<SetupConnectionTest> test(SetupDefinition definition, SetupSecret suppliedSecret) {
@@ -100,9 +99,9 @@ public final class SetupRegistry {
         try {
             operation = runtimeFactory.create(definition, secret)
                     .compose(runtime -> runtime.verifyReady()
-                            .map(ignored -> capabilities(runtime, definition.runtimeConfiguration()))
-                            .compose(capabilities -> runtime.closeAsync().map(capabilities))
-                            .map(capabilities -> connectionTest(started, capabilities))
+                            .map(ignored -> limits(definition.runtimeConfiguration()))
+                            .compose(limits -> runtime.closeAsync().map(limits))
+                            .map(limits -> connectionTest(started, limits))
                             .recover(failure -> runtime.closeAsync()
                                     .recover(closeFailure -> Future.succeededFuture())
                                     .compose(ignored -> Future.failedFuture(failure))));
@@ -117,14 +116,13 @@ public final class SetupRegistry {
         });
     }
 
-    private static SetupConnectionTest connectionTest(long started, SetupCapabilities supported) {
+    private static SetupConnectionTest connectionTest(long started, SetupLimits limits) {
         return new SetupConnectionTest(
                 true,
                 SetupSchemaState.READY,
                 "1",
                 Math.max(0, (System.nanoTime() - started) / 1_000_000),
-                supported.features(),
-                supported.limits());
+                limits);
     }
 
     public Future<SetupSummary> register(SetupDefinition definition, SetupSecret suppliedSecret) {
@@ -215,6 +213,15 @@ public final class SetupRegistry {
         return requireEntry(setupId).details();
     }
 
+    /** Effective byte limits for a registered setup; available whether or not it is connected. */
+    public synchronized SetupLimits limits(String setupId) {
+        return limits(requireEntry(setupId).definition.runtimeConfiguration());
+    }
+
+    private SetupLimits limits(SetupRuntimeConfiguration runtimeConfiguration) {
+        return SetupLimits.from(runtimeConfiguration, managementLimits);
+    }
+
     public Future<SetupHealth> health(String setupId) {
         Entry entry = requireEntry(setupId);
         ManagedSetupRuntime runtime;
@@ -254,31 +261,6 @@ public final class SetupRegistry {
                 LOGGER.warn("management.setup.health_event_failed");
             }
         });
-    }
-
-    public synchronized SetupCapabilities capabilities(String setupId) {
-        Entry entry = requireEntry(setupId);
-        synchronized (entry) {
-            if (entry.runtime == null) {
-                throw new SetupRegistryException(
-                        409, "SETUP_NOT_CONNECTED", "Setup is not connected");
-            }
-            return capabilities(entry.runtime, entry.definition.runtimeConfiguration());
-        }
-    }
-
-    private SetupCapabilities capabilities(
-            ManagedSetupRuntime runtime, SetupRuntimeConfiguration runtimeConfiguration) {
-        SetupCapabilities.Source source = new SetupCapabilities.Source(
-                runtime.management().capabilities(),
-                runtime.supportsPubSub(),
-                runtime.supportsPubSubPayloadReveal(),
-                runtime.supportsBatchEntryOperations(),
-                runtime.supportsValueScan(),
-                runtime.supportsCacheMetrics(),
-                runtime.supportsOwnerLockOperations());
-        return SetupCapabilities.from(capabilitySourceFilter.apply(source))
-                .withRuntimeConfiguration(runtimeConfiguration);
     }
 
     public ManagementService management(String setupId) {

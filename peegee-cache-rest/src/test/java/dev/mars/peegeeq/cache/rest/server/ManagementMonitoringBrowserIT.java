@@ -99,14 +99,14 @@ class ManagementMonitoringBrowserIT {
         }
         if (index == 28) {
             return List.of(
-                    "getSetupCapabilities",
+                    "getSetup",
                     "getDatabaseMonitoring",
                     "getRuntimeMonitoring",
                     "listActivity");
         }
         if (index == 29) {
             return List.of(
-                    "getSetupCapabilities",
+                    "getSetup",
                     "listNamespaces",
                     "getNamespace",
                     "listEntries",
@@ -114,9 +114,9 @@ class ManagementMonitoringBrowserIT {
                     "revealEntryValue");
         }
         if (index == 30) {
-            return List.of("getSetupCapabilities", "getSetup", "getSetupHealth");
+            return List.of("getSetup", "getSetupHealth");
         }
-        return List.of("getSetupCapabilities");
+        return List.of("getSetup");
     }
 
     @ParameterizedTest(name = "{0}")

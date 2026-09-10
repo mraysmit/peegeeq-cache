@@ -24,6 +24,7 @@ Use the files with that distinction in mind.
 ## Local-first guidance
 
 - `pgq-coding-principles.md`: primary coding and testing guidance carried into this repo
+- `PEEGEEQ_CACHE_TEST_COMMANDS.md`: the exact Maven and npm commands for this reactor, `Tee-Object` log naming, rebuild-before-verify, scoped-versus-gate rules, and how to report a run; the root `CLAUDE.md` carries the same workflow rules
 - `VERTX_MULTI-STATEMENT_SQL_BUG_ANALYSIS.md`: imported postmortem adapted with tenant-isolation notes for this repo
 - `PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md` §5 "Management UI component and client tests": the normative frontend rules — Ant Design 5 and Recharts only, RTK Query/Zustand state ownership, no test doubles of any kind, loopback-server fixtures produced by Zod schemas, and the `test/quality` guard tests
 

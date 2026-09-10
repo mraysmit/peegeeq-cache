@@ -17,7 +17,7 @@ describe('complete backend desktop workflows', () => {
   afterEach(async () => { await fixture.close(); });
 
   const page = (props: Partial<Parameters<typeof AdvancedOperationsPage>[0]> = {}) => renderWithProviders(
-    <AdvancedOperationsPage canBatch canMetrics canOperate canOwnLocks canReveal canScan selectedSetupId="primary-cache" {...props} />,
+    <AdvancedOperationsPage canOperate canReveal selectedSetupId="primary-cache" {...props} />,
     { store: fixture.store },
   );
   const requests = (method: string, suffix: string) => fixture.requests((request) => request.method === method && request.path.endsWith(suffix));
@@ -76,12 +76,13 @@ describe('complete backend desktop workflows', () => {
     expect(fixture.requests((request) => request.method === 'POST')).toHaveLength(0);
   });
 
-  it('withholds capability-gated panels', async () => {
-    page({ canBatch: false, canMetrics: false, canOwnLocks: false, canScan: false });
+  it('withholds operator and reveal panels from viewers while keeping metrics available', async () => {
+    page({ canOperate: false, canReveal: false });
     expect(await screen.findByRole('button', { name: 'Check entry existence' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Exact core metrics' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Batch get' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Batch set' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Exact core metrics' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Cross-namespace batch delete' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Owner lock lifecycle' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Run backend scan' })).not.toBeInTheDocument();
   });

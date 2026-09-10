@@ -1,10 +1,12 @@
 # PeeGeeQ Cache Playwright Implementation Plan
 
-Status: **P0-P7 COMPLETE — 557-SCENARIO DESKTOP-ONLY IMPLEMENTATION, POSTGRESQL 15-18 BASELINE, AND PER-SCENARIO SCREENSHOT ACCEPTANCE VERIFIED**
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+
+Status: **P0-P7 COMPLETE — 539-SCENARIO DESKTOP-ONLY IMPLEMENTATION (557 BEFORE THE 10 SEPTEMBER 2026 CAPABILITY-GATING REMOVAL), POSTGRESQL 15-18 BASELINE, AND PER-SCENARIO SCREENSHOT ACCEPTANCE VERIFIED**
 
 Required minimum: **540 distinct Playwright browser scenarios**
 
-Current implemented catalogue: **557 Java Playwright scenarios implementing 17 named browser journeys and 13 parameterized scenario catalogues**
+Current implemented catalogue: **539 Java Playwright scenarios implementing 17 named browser journeys and 12 parameterized scenario catalogues**
 
 Implementation evidence as of 3 September 2026:
 
@@ -107,7 +109,7 @@ The following do not count as distinct scenarios:
 | Area | Distinct scenarios |
 |---|---:|
 | Authentication, sessions, CSRF, roles, and expiry | 46 |
-| Application shell, routing, scope, navigation, and capability degradation | 52 |
+| Application shell, routing, scope, and navigation | 34 |
 | Setup lifecycle, target policy, and viewer setup controls | 57 |
 | Overview, namespaces, pagination, and export | 46 |
 | Entry inspection, reveal, formatting, cleanup, and viewer behavior | 55 |
@@ -118,7 +120,7 @@ The following do not count as distinct scenarios:
 | Monitoring, activity, notifications, and settings | 34 |
 | Backend facade parity | 1 |
 | Desktop accessibility, privacy, packaging, and shutdown | 48 |
-| **Total** | **557** |
+| **Total** | **539** |
 
 The existing 19 Playwright tests are included in this total after each is assigned a compliant scenario identifier and satisfies the stronger evidence contract.
 
@@ -131,7 +133,7 @@ A committed scenario catalogue must be introduced before the test count expands.
 - source requirement and document section;
 - owning feature area;
 - risk classification;
-- authentication mode, role, and capability prerequisites;
+- authentication mode and role prerequisites;
 - required setup and PostgreSQL seed state;
 - browser actions;
 - expected visible result;
@@ -182,14 +184,14 @@ Performance must improve without weakening isolation:
 - never share a `Page` between scenarios;
 - stop process-local subscriptions after their owning scenario;
 - assert from durable audit evidence that the shared setup was registered exactly once;
-- retain dedicated server/session/setup environments for setup registration/connect/detach/forget, local-token session deletion or expiry, advertised-capability variants, trusted-proxy identity variants, startup, and server shutdown while continuing to reuse the suite browser process; and
+- retain dedicated server/session/setup environments for setup registration/connect/detach/forget, local-token session deletion or expiry, trusted-proxy identity variants, startup, and server shutdown while continuing to reuse the suite browser process; and
 - serialize scenarios that intentionally alter shared server state.
 
 ### 7.3 Fixture services
 
 The fixture must provide purpose-built helpers for:
 
-- deterministic setup registration and capability selection through the UI;
+- deterministic setup registration and scope selection through the UI;
 - database seeding and read-only oracle queries;
 - durable audit intent/outcome inspection;
 - observed HTTP, SSE, and WebSocket operation tracing;
@@ -272,7 +274,6 @@ Shell coverage includes:
 - browser back/forward history;
 - encoded identifiers;
 - setup and namespace scope changes;
-- capability-driven navigation;
 - unknown routes and asset-like misses;
 - theme and harmless preference persistence; and
 - error containment without credential leakage.
@@ -290,7 +291,7 @@ Setup coverage includes:
 - target-policy allow and deny decisions;
 - DNS/address pinning and TLS failures;
 - duplicate setup identifiers;
-- health and capability changes;
+- health and effective-limit changes;
 - concurrent actions;
 - credential cleanup; and
 - setup-switch cancellation and stale-response isolation.
@@ -322,7 +323,7 @@ Inspection and reveal coverage includes:
 - signed 64-bit boundaries;
 - Unicode, markup, and hostile-looking text;
 - masking and reveal authorization;
-- feature and capability gating;
+- role gating;
 - clipboard behavior;
 - automatic hiding; and
 - cleanup on route, setup, namespace, visibility, expiry, and logout transitions.
@@ -470,7 +471,7 @@ All timing behavior uses Playwright conditions, server events, deterministic clo
 
 ### 12.1 Complete local and CI gate
 
-The standard release gate runs all 557 scenarios headlessly:
+The standard release gate runs all 539 scenarios headlessly:
 
 ```text
 mvn verify
@@ -485,13 +486,13 @@ Tags and scenario IDs support focused execution by feature, risk, operation, or 
 Run one feature class with Maven Failsafe's standard class selector:
 
 ```text
-mvn -pl peegee-cache-rest -am -Dit.test=ManagementCapabilityBrowserIT verify
+mvn -pl peegee-cache-rest -am -Dit.test=ManagementCounterBrowserIT verify
 ```
 
 Run one or more exact scenario IDs across fixed and parameterized browser tests:
 
 ```text
-mvn -pl peegee-cache-rest -am -Dpeegeeq.playwright.scenarios=PW-CAPABILITY-008 verify
+mvn -pl peegee-cache-rest -am -Dpeegeeq.playwright.scenarios=PW-COUNTER-008 verify
 ```
 
 Unknown, malformed, or duplicate IDs fail before browser work begins. Exact selection derives its expected report count from the unique requested IDs; a feature-class run reports the scenarios discovered in that class without applying the complete-suite count gate.
@@ -522,7 +523,7 @@ The final suite must remain practical without weakening coverage:
 - publish slowest-scenario and slowest-fixture diagnostics; and
 - fail when a scenario exceeds its reviewed timeout without a justified exception.
 
-The root reactor must run all 557 scenarios on PostgreSQL 18. PostgreSQL 15-17 compatibility may be sharded in CI, but every shard is mandatory and the combined result must contain all 557 unique scenarios.
+The root reactor must run all 539 scenarios on PostgreSQL 18. PostgreSQL 15-17 compatibility may be sharded in CI, but every shard is mandatory and the combined result must contain all 539 unique scenarios.
 
 ## 14. Consolidated HTML evidence
 

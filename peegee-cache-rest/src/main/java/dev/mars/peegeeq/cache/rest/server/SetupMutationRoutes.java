@@ -412,35 +412,11 @@ public final class SetupMutationRoutes implements ManagementRequestRouter {
         node.put("schemaState", test.schemaState().name());
         node.put("migrationVersion", test.migrationVersion());
         node.put("latencyMillis", test.latencyMillis());
-        putFeatures(node.putObject("capabilities"), test.capabilities());
         ObjectNode limits = node.putObject("limits");
         limits.put("pubSubChannelMaxBytes", test.limits().pubSubChannelMaxBytes());
         limits.put("pubSubPayloadMaxBytes", test.limits().pubSubPayloadMaxBytes());
         limits.put("maximumValueBytes", test.limits().maximumValueBytes());
         return node;
-    }
-
-    private static void putFeatures(
-            ObjectNode node, SetupCapabilities.Features features) {
-        node.put("namespaceInspection", features.namespaceInspection());
-        node.put("entryInspection", features.entryInspection());
-        node.put("expiredEntryInspection", features.expiredEntryInspection());
-        node.put("entryMutation", features.entryMutation());
-        node.put("counterInspection", features.counterInspection());
-        node.put("counterMutation", features.counterMutation());
-        node.put("lockInspection", features.lockInspection());
-        node.put("forcedLockRelease", features.forcedLockRelease());
-        node.put("bulkEntryDelete", features.bulkEntryDelete());
-        node.put("bulkCounterDelete", features.bulkCounterDelete());
-        node.put("pubSub", features.pubSub());
-        node.put("databaseStatistics", features.databaseStatistics());
-        node.put("entryValueReveal", features.entryValueReveal());
-        node.put("lockOwnerReveal", features.lockOwnerReveal());
-        node.put("pubSubPayloadReveal", features.pubSubPayloadReveal());
-        node.put("batchEntryOperations", features.batchEntryOperations());
-        node.put("valueScan", features.valueScan());
-        node.put("cacheMetrics", features.cacheMetrics());
-        node.put("ownerLockOperations", features.ownerLockOperations());
     }
 
     private SetupPayload parsePayload(byte[] body, boolean registration) {

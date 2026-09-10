@@ -187,7 +187,7 @@ class ManagementShellBrowserIT {
             requirement = "UI design: the Pub/Sub route begins stopped and exposes bounded subscription controls",
             area = ManagementBrowserArea.SHELL, risk = ManagementBrowserRisk.HIGH,
             action = "Open Pub/Sub without creating a subscription",
-            expectedResult = "Subscribe and publish controls show server capability limits without opening a transport",
+            expectedResult = "Subscribe and publish controls show server byte limits without opening a transport",
             cleanup = "Verify no subscription exists and close all fixture resources",
             evidence = {ManagementBrowserEvidence.VISIBLE_RESULT, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
@@ -228,7 +228,7 @@ class ManagementShellBrowserIT {
             action = "Open Settings after selecting a setup",
             expectedResult = "Connection and transport facts identify local-token authentication and the active setup",
             cleanup = "Close the isolated context and reset the schema",
-            operations = {"getSetupCapabilities"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT,
+            operations = {"getSetup"}, evidence = {ManagementBrowserEvidence.VISIBLE_RESULT,
             ManagementBrowserEvidence.HTTP_OPERATION, ManagementBrowserEvidence.RESOURCE_CLEANUP})
     @Test
     void settingsDeepLinkReportsEffectiveConnectionState() throws Exception {

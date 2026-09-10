@@ -45,7 +45,7 @@ describe('U6 counter and lock pages', () => {
     expect(fixture.requests((request) => request.method !== 'GET')).toHaveLength(0);
   });
 
-  it('degrades bulk-delete and forced-release capabilities independently', async () => {
+  it('degrades bulk-delete and forced-release controls independently', async () => {
     const view = counters({ canBulkDelete: false });
     expect(await screen.findByRole('button', { name: 'Create counter' })).toBeVisible();
     expect(await screen.findByRole('button', { name: 'Manage total' })).toBeVisible();

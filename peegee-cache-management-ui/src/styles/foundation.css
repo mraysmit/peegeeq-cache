@@ -443,24 +443,6 @@ body {
 .validation--valid { color: #0b6336; }
 .validation--invalid { color: #862d28; }
 
-.capability-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-  padding: 0;
-  list-style: none;
-}
-
-.capability-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 0.45rem;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -499,9 +481,5 @@ body {
   .reveal-form {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .capability-list {
-    grid-template-columns: 1fr;
   }
 }

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { currentSessionSchema } from '@src/api/protocol-schemas';
 import { ManagementClientError, SessionClient } from '@src/api/session-client';
 import { SetupClient, type SetupRegistrationRequest } from '@src/api/setup-client';
-import { setupCapabilitiesSchema, setupConnectionTestSchema, setupDetailsSchema, setupHealthSchema, setupSummaryListSchema, setupSummarySchema } from '@src/api/setup-schemas';
+import { setupConnectionTestSchema, setupDetailsSchema, setupHealthSchema, setupSummaryListSchema, setupSummarySchema } from '@src/api/setup-schemas';
 import { invalidBody, route, startLoopbackServer, type LoopbackServer } from './support/loopback-server';
 
 const sessionBody = currentSessionSchema.parse({
@@ -15,7 +15,6 @@ const sessionBody = currentSessionSchema.parse({
   csrfToken: 'setup-client-csrf-token-with-forty-three-characters',
   sessionIdleExpiresAt: '2099-01-01T00:00:00Z',
   sessionExpiresAt: '2099-01-01T01:00:00Z',
-  features: { setupRegistration: true, sensitiveReveal: true },
 });
 
 const setup = setupSummarySchema.parse({
@@ -41,27 +40,6 @@ const connectionTest = setupConnectionTestSchema.parse({
   schemaState: 'READY',
   migrationVersion: '1',
   latencyMillis: 9,
-  capabilities: {
-    namespaceInspection: true,
-    entryInspection: true,
-    expiredEntryInspection: true,
-    entryMutation: true,
-    counterInspection: true,
-    counterMutation: true,
-    lockInspection: true,
-    forcedLockRelease: true,
-    bulkEntryDelete: true,
-    bulkCounterDelete: true,
-    pubSub: true,
-    databaseStatistics: true,
-    entryValueReveal: true,
-    lockOwnerReveal: true,
-    pubSubPayloadReveal: true,
-    batchEntryOperations: true,
-    valueScan: true,
-    cacheMetrics: true,
-    ownerLockOperations: true,
-  },
   limits: {
     pubSubChannelMaxBytes: 63,
     pubSubPayloadMaxBytes: 8_000,
@@ -89,6 +67,7 @@ const details = setupDetailsSchema.parse({
     telemetryMode: 'NOOP',
     poolMaxSize: 12,
   },
+  limits: { pubSubChannelMaxBytes: 49, pubSubPayloadMaxBytes: 7_500, maximumValueBytes: 10_485_760 },
   registeredAt: '2099-01-01T00:00:00Z',
   connectedAt: '2099-01-01T00:01:00Z',
 });
@@ -189,7 +168,7 @@ describe('setup management protocol client', () => {
     } satisfies Partial<ManagementClientError>);
   });
 
-  it('discovers runtime health and capabilities through validated setup endpoints', async () => {
+  it('discovers runtime health and effective limits through validated setup endpoints', async () => {
     const health = setupHealthSchema.parse({
       status: 'UP',
       schemaReady: true,
@@ -197,27 +176,22 @@ describe('setup management protocol client', () => {
       checkedAt: '2099-01-01T00:00:00Z',
       detail: 'PostgreSQL and cache schema are ready',
     });
-    const capabilities = setupCapabilitiesSchema.parse({
-      migrationVersion: connectionTest.migrationVersion,
-      capabilities: connectionTest.capabilities,
-      limits: connectionTest.limits,
-    });
     server.use((request, respond) => {
       if (route('GET', '/api/v1/session', request)) return respond.json(200, sessionBody);
       if (request.path.endsWith('/health')) return respond.json(200, health);
-      if (request.path.endsWith('/capabilities')) return respond.json(200, capabilities);
+      if (request.path === '/api/v1/setups/primary-cache') return respond.json(200, details);
       return respond.problem(404, 'NOT_FOUND', request.path);
     });
     const client = await authenticated();
 
     await expect(client.health(setup.setupId)).resolves.toEqual(health);
-    await expect(client.capabilities(setup.setupId)).resolves.toMatchObject({
+    await expect(client.details(setup.setupId)).resolves.toMatchObject({
       migrationVersion: '1',
-      capabilities: { namespaceInspection: true, pubSub: true },
+      limits: { pubSubChannelMaxBytes: 49, pubSubPayloadMaxBytes: 7_500, maximumValueBytes: 10_485_760 },
     });
     expect(server.requests.slice(1).map((request) => request.path)).toEqual([
       '/api/v1/setups/primary-cache/health',
-      '/api/v1/setups/primary-cache/capabilities',
+      '/api/v1/setups/primary-cache',
     ]);
   });
 });

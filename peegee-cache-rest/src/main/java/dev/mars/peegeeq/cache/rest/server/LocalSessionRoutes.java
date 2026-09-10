@@ -131,9 +131,6 @@ public final class LocalSessionRoutes implements ManagementRequestRouter {
         response.put("csrfToken", session.csrfToken());
         response.put("sessionIdleExpiresAt", session.idleExpiresAt().toString());
         response.put("sessionExpiresAt", session.absoluteExpiresAt().toString());
-        ObjectNode features = response.putObject("features");
-        features.put("setupRegistration", true);
-        features.put("sensitiveReveal", true);
         String cookie = session.cookie().name() + '=' + session.cookie().value()
                 + "; Path=/; HttpOnly; SameSite=Strict"
                 + (session.cookie().secure() ? "; Secure" : "");

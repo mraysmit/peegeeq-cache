@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Backend-to-REST-to-UI Functionality Coverage Matrix
 
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+
 **Status:** COMPLETE — 100% VERIFIED
 
 **Product boundary:** Desktop management console only
@@ -57,9 +59,9 @@ Strictly counting the 32 public data-service methods in `CacheService`, `Counter
 | `MISSING` | 0 | 0% |
 | **Total** | **32** | **100%** |
 
-The percentages above are method-level traceability, not a weighted score. `BackendFunctionalityInventoryTest` independently reflects all seven public data-service contracts plus `ManagementService`, asserts the exact 62-method combined inventory (32 data-service and 30 management methods), and fails if any public method lacks a reviewed OpenAPI mapping.
+The percentages above are method-level traceability, not a weighted score. `BackendFunctionalityInventoryTest` independently reflects all seven public data-service contracts plus `ManagementService`, asserts the exact 61-method combined inventory (32 data-service and 29 management methods), and fails if any public method lacks a reviewed OpenAPI mapping.
 
-The 60 OpenAPI management operations are separately checked for production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The merged desktop-only browser catalogue declares 557 scenarios, 17 named operation-owning journeys, 18 independently degraded capability paths, and 13 isolated packaged Chromium/PostgreSQL journeys.
+The 59 OpenAPI management operations are separately checked for production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The merged desktop-only browser catalogue declares 539 scenarios, 17 named operation-owning journeys, and 13 isolated packaged Chromium/PostgreSQL journeys.
 
 The capability-remediation parent passed 557/557 packaged desktop-browser scenarios plus 3/3 runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026, and the fixture-lifecycle parent subsequently passed its then-current 550-scenario catalogue on 3 September. The merged U11 working tree completed the fresh cumulative gate on 5 September: 557/557 reportable browser scenarios plus all three infrastructure checks, with complete 11-module reactors green on PostgreSQL 15.17, 16.13, 17.11, and 18.3.
 
@@ -142,7 +144,6 @@ These are management-specific capabilities layered over the core services. Their
 
 | Management method | OpenAPI operation(s) | Production desktop workflow | Required evidence | Status |
 |---|---|---|---|---|
-| `capabilities` | `getSetupCapabilities` | Capability-driven navigation/actions and setup details | `B/O/R/U/P` | `COMPLETE` |
 | `overview` | `getOverview` | Overview page | `B/O/R/U/P` | `COMPLETE` |
 | `databaseMonitoring` | `getDatabaseMonitoring` | Overview/Monitoring database panels | `B/O/R/U/P` | `COMPLETE` |
 | `namespaces` | `listNamespaces`, `exportNamespaces` | Namespaces list, filters, pagination, export | `B/O/R/U/P` | `COMPLETE` |
@@ -197,7 +198,7 @@ These operations make the management application usable but are not substitutes 
 | Session | `getSession`, `exchangeLocalToken`, `deleteLocalSession` | Login/bootstrap, shell identity, logout/expiry cleanup | `COMPLETE` |
 | Setup registry | `listSetups`, `registerSetup`, `getSetup`, `forgetSetup` | Setups list, registration, details, forget | `COMPLETE` |
 | Setup validation/lifecycle | `testUnregisteredSetup`, `connectSetup`, `testRegisteredSetup`, `detachSetup` | Test form/setup, connect, retest, detach | `COMPLETE` |
-| Setup state | `getSetupHealth`, `getSetupCapabilities` | Setup health/details and capability gating | `COMPLETE` |
+| Setup state | `getSetupHealth` | Setup health/details and effective limits | `COMPLETE` |
 | Runtime monitoring | `getRuntimeMonitoring`, `streamMetrics`, `listActivity`, `monitoringWebSocket` | Monitoring, activity, live state, shell notifications | `COMPLETE` |
 
 The 60-operation accountability contract proves that every declared OpenAPI operation has a production owner and is observed in its claimed browser journey. `BackendFunctionalityInventoryTest` supplies the independent reverse check from all 32 public data-service methods and all 30 `ManagementService` methods into those operations.
@@ -217,7 +218,7 @@ The 60-operation accountability contract proves that every declared OpenAPI oper
 | CONFIG-03 | Write-behind enabled/flush interval/max buffer/flush batch/retries/shutdown drain | Registration/test contract, setup details, and runtime behavior controls | `COMPLETE` | Configuration mapping, combination validation, route round trip, and UI tests cover every value. Runtime backlog/failure metrics remain monitoring data, not configuration exposure. |
 | CONFIG-04 | PostgreSQL schema | Setup registration form/contract | `COMPLETE` | Keep validation and canonical display. |
 | CONFIG-05 | Pub/Sub channel prefix | Registration/test contract, setup details, and runtime behavior controls | `COMPLETE` | The validated prefix is passed to the production runtime, and the advertised usable channel-byte limit is derived from the effective prefix plus PostgreSQL's 63-byte identifier ceiling. |
-| CONFIG-06 | Pub/Sub connection enablement | Explicit registration control, details, and `pubSub` capability flag | `COMPLETE` | Real PostgreSQL integration proves disabled mode starts without a listener and advertises `pubSub=false`. |
+| CONFIG-06 | Pub/Sub connection enablement | Explicit registration control and setup details `runtime.pubSubEnabled` | `COMPLETE` | Real PostgreSQL integration proves disabled mode starts without a listener and reports `pubSubEnabled=false` in setup details. |
 | CONFIG-07 | Schema bootstrap mode | Explicit `EXTERNAL`/`APPLY` registration control and setup details | `COMPLETE` | Factory tests cover `EXTERNAL`; the packaged setup journey registers with `APPLY` and verifies migration/startup; a real-PostgreSQL regression retests the registered APPLY runtime and proves shutdown leaves zero setup application connections. |
 | CONFIG-08 | Telemetry adapter | Explicit `NOOP` mode plus built-in exact management metrics | `COMPLETE` | `NOOP` is the only telemetry adapter shipped by the public runtime; the enum and UI intentionally expose exactly that supported set. `getCacheMetrics` preserves `MetricsSnapshot` semantics independently. |
 | CONFIG-09 | Pool maximum size | Setup registration and setup details | `COMPLETE` | — |
@@ -232,7 +233,7 @@ The 60-operation accountability contract proves that every declared OpenAPI oper
 | `GAP-SCAN-001` | Added bounded privileged value scan preserving every `ScanRequest` option/result. | Backend scan suite, route/client/page tests, `PW-BACKEND-001`. |
 | `GAP-ADMIN-001` | Added exact `MetricsSnapshot` endpoint and UI panel. | Exact-field/precision route and UI tests plus `PW-BACKEND-001`. |
 | `GAP-PARITY-001`–`005` | Corrected the false-complete mappings for cross-namespace `deleteMany`, per-item `setMany`, Pub/Sub `contentType`, namespace TTL-state counts, and exact database/expiry aggregate fields. | Strengthened 62-method inventory, exact OpenAPI schema assertions, route/client/component tests, real PostgreSQL Pub/Sub tests, and `PW-BACKEND-001`. |
-| `GAP-RUNTIME-001`–`005` | Added complete runtime configuration contract, factory wiring, setup UI/details, prefix-aware capability derivation, and supported telemetry mode. | Configuration mapping/validation tests, real PostgreSQL effect/retest/cleanup tests, setup UI tests, and packaged setup journey. |
+| `GAP-RUNTIME-001`–`005` | Added complete runtime configuration contract, factory wiring, setup UI/details, prefix-aware limit derivation, and supported telemetry mode. | Configuration mapping/validation tests, real PostgreSQL effect/retest/cleanup tests, setup UI tests, and packaged setup journey. |
 
 ## 13. Required closure gates
 

@@ -186,12 +186,11 @@ class ManagementMetadataModelsTest {
     }
 
     @Test
-    void capabilitiesExposeEffectiveLimitsAndDefaultToUnsupported() {
-        AdminCapabilities capabilities = AdminCapabilities.unsupported();
+    void limitsExposeEffectiveDefaultsAndRejectInvalidValues() {
+        ManagementLimits limits = ManagementLimits.defaults();
 
-        assertTrue(capabilities.supported().isEmpty());
-        assertFalse(capabilities.supports(ManagementCapability.ENTRY_REVEAL));
-        assertEquals(200, capabilities.limits().maximumPageSize());
+        assertEquals(200, limits.maximumPageSize());
+        assertEquals(10L * 1024 * 1024, limits.maximumValueBytes());
         assertThrows(IllegalArgumentException.class,
                 () -> new ManagementLimits(0, 1_000, 10_000, 500, 5));
     }

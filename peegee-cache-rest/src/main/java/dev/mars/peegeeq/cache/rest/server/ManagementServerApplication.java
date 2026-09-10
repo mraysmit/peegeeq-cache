@@ -29,7 +29,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.UnaryOperator;
 
 /** Production composition root for the complete management HTTP runtime. */
 public final class ManagementServerApplication {
@@ -67,25 +66,12 @@ public final class ManagementServerApplication {
             TrustProfileCertificateResolver trustProfiles,
             MeterRegistry meterRegistry,
             Clock clock) {
-        return start(configuration, secrets, targetResolver, trustProfiles, meterRegistry, clock,
-                UnaryOperator.identity());
-    }
-
-    static Future<ManagementServerApplication> start(
-            ManagementServerConfiguration configuration,
-            ManagementSecretProvider secrets,
-            TargetAddressResolver targetResolver,
-            TrustProfileCertificateResolver trustProfiles,
-            MeterRegistry meterRegistry,
-            Clock clock,
-            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter) {
         Objects.requireNonNull(configuration, "configuration");
         Objects.requireNonNull(secrets, "secrets");
         Objects.requireNonNull(targetResolver, "targetResolver");
         Objects.requireNonNull(trustProfiles, "trustProfiles");
         Objects.requireNonNull(meterRegistry, "meterRegistry");
         Objects.requireNonNull(clock, "clock");
-        Objects.requireNonNull(capabilitySourceFilter, "capabilitySourceFilter");
 
         ManagementRuntimeMonitor runtimeMonitor = new ManagementRuntimeMonitor(clock, System::nanoTime);
         MicrometerManagementTelemetry telemetry = new MicrometerManagementTelemetry(
@@ -113,8 +99,7 @@ public final class ManagementServerApplication {
                         durable,
                         telemetry,
                         runtimeMonitor,
-                        clock,
-                        capabilitySourceFilter))
+                        clock))
                 .recover(failure -> vertx.close()
                         .recover(ignored -> Future.succeededFuture())
                         .compose(ignored -> Future.failedFuture(failure)));
@@ -144,8 +129,7 @@ public final class ManagementServerApplication {
             DurableManagementAuditSink durable,
             MicrometerManagementTelemetry telemetry,
             ManagementRuntimeMonitor runtimeMonitor,
-            Clock clock,
-            UnaryOperator<SetupCapabilities.Source> capabilitySourceFilter) {
+            Clock clock) {
         try {
             ManagementActivityStore activity = new ManagementActivityStore(ACTIVITY_CAPACITY);
             ManagementLiveEventHub liveEvents = new ManagementLiveEventHub(
@@ -162,7 +146,7 @@ public final class ManagementServerApplication {
                     clock,
                     () -> UUID.randomUUID().toString());
             SetupRegistry registry = new SetupRegistry(
-                    runtimeFactory, secrets, clock, runtimeMonitor, capabilitySourceFilter);
+                    runtimeFactory, secrets, clock, runtimeMonitor, configuration.limits());
             BrowserRequestSecurity browserSecurity = new BrowserRequestSecurity(
                     configuration.originPolicy());
             ManagementRateLimiter rateLimiter = defaultRateLimiter(clock, telemetry);

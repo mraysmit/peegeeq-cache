@@ -25,8 +25,7 @@ public final class ManagementM7RouteInventory {
         ids.addAll(Set.of(
                 "listSetups",
                 "getSetup",
-                "getSetupHealth",
-                "getSetupCapabilities"));
+                "getSetupHealth"));
         ids.addAll(Set.of(
                 "testUnregisteredSetup",
                 "registerSetup",

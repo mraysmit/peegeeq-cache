@@ -1,7 +1,6 @@
 package dev.mars.peegeeq.cache.rest.server;
 
 import dev.mars.peegeeq.cache.api.management.ManagementService;
-import dev.mars.peegeeq.cache.api.management.UnsupportedManagementService;
 import dev.mars.peegeeq.cache.api.PeeGeeCache;
 import dev.mars.peegeeq.cache.api.pubsub.PubSubService;
 import io.vertx.core.Future;
@@ -29,7 +28,7 @@ public interface ManagedSetupRuntime {
     }
 
     default ManagementService management() {
-        return UnsupportedManagementService.instance();
+        throw new SetupRegistryException(409, "SETUP_MANAGEMENT_UNAVAILABLE", "Setup management is unavailable");
     }
 
     default PubSubService pubSub() {
@@ -39,30 +38,6 @@ public interface ManagedSetupRuntime {
     /** Complete cache facade used by routes that expose the public backend service surface. */
     default PeeGeeCache cache() {
         throw new SetupRegistryException(409, "SETUP_CACHE_UNAVAILABLE", "Setup cache is unavailable");
-    }
-
-    default boolean supportsPubSub() {
-        return false;
-    }
-
-    default boolean supportsPubSubPayloadReveal() {
-        return false;
-    }
-
-    default boolean supportsBatchEntryOperations() {
-        return false;
-    }
-
-    default boolean supportsValueScan() {
-        return false;
-    }
-
-    default boolean supportsCacheMetrics() {
-        return false;
-    }
-
-    default boolean supportsOwnerLockOperations() {
-        return false;
     }
 
     Future<Void> closeAsync();

@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Management UI — U11 Reference-Parity Migration Handover (4 September 2026)
 
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+
 **Author:** Claude (Cowork session), on behalf of Mark A Ray-Smith; updated by Codex after the Windows verification and evidence review
 **Evidence review:** 5 September 2026
 **Repository:** `peegeeq-cache` — module `peegee-cache-management-ui`, plus the Java Playwright suite in `peegee-cache-rest/src/test/java/dev/mars/peegeeq/cache/rest/server`
@@ -87,15 +89,15 @@ Dev: `vitest 3.2.7`, `@vitest/coverage-v8 3.2.7`, `@testing-library/react 16.3.0
 
 ### 2.3 Zustand (`src/state`)
 
-- `scope-store.ts` / `scope-storage.ts` — selected setup, its capability snapshot, selected namespace (allowlisted persistence).
+- `scope-store.ts` / `scope-storage.ts` — selected setup and selected namespace (allowlisted persistence). The capability snapshot was removed on 10 September 2026.
 - `live-store.ts` — monitoring `connectionState`, notification drawer state and bounded envelope buffer, the per-setup Overview `trend` (`recordSnapshot`, the reference `updateChartData` pattern), and, new in U11.7, the Pub/Sub slice: `pubSubConnection`, `pubSubMessages`, `setPubSubConnection`, `receivePubSubMessage(message, bufferLimit)`, `clearPubSubMessages`, `stopPubSub`. Metadata only (`payloadState: 'MASKED'`); payloads never enter it.
 - `preferences.ts` — the allowlisted display preferences and `PREFERENCES_CHANGED_EVENT`.
 
 ### 2.4 Shell and common components
 
 - `src/app/App.tsx` — session gate (antd `Card`/`Form`/`Input.Password`/`Spin`/`Alert`), store per session client, `resetApiState` on teardown; `ManagementShell` no longer receives a `sessionClient` prop (deleted in U11.7).
-- `src/app/ManagementShell.tsx` — antd `ConfigProvider` (theme algorithm + **`virtual={false}`**, see §6.1), `Layout`/`Sider` (`aria-label="Primary navigation"`), `Menu` of router `Link`s inside `<nav aria-label="Management sections">`, header status group, notifications `Drawer` with the inner `<aside aria-label="Notifications">`, capability-gated routes; pages receive only capability flags and scope, never clients.
-- `src/components/common/` — `ConnectionStatus`, `StatCard` (`.metric-card`, antd `Statistic`), `SetupScopeBar` (`useListSetupsQuery` + lazy capabilities → Zustand scope), `ValueSelect` (§6.1). `ConfirmDialog.tsx` and `FilterBar.tsx` were unused and are deleted (§4.5).
+- `src/app/ManagementShell.tsx` — antd `ConfigProvider` (theme algorithm + **`virtual={false}`**, see §6.1), `Layout`/`Sider` (`aria-label="Primary navigation"`), `Menu` of router `Link`s inside `<nav aria-label="Management sections">`, header status group, notifications `Drawer` with the inner `<aside aria-label="Notifications">`, routes rendered directly (capability gating removed 10 September 2026); pages receive only role flags, setup-details limits, and scope, never clients.
+- `src/components/common/` — `ConnectionStatus`, `StatCard` (`.metric-card`, antd `Statistic`), `SetupScopeBar` (`useListSetupsQuery` → Zustand scope, committed immediately), `ValueSelect` (§6.1). `ConfirmDialog.tsx` and `FilterBar.tsx` were unused and are deleted (§4.5).
 
 ### 2.5 Pages (`src/features`)
 
@@ -103,7 +105,7 @@ Dev: `vitest 3.2.7`, `@vitest/coverage-v8 3.2.7`, `@testing-library/react 16.3.0
 |---|---|---|---|
 | `overview/OverviewPage`, `OverviewMonitoring`, `SessionTrendChart` | `useGetOverviewQuery` etc.; Recharts trend from the live store | — | — |
 | `monitoring/MonitoringPage` | database/runtime/activity queries; metrics SSE via `clients.metricsStream` upserting `inspectionApi` cache | — | — |
-| `setups/SetupsPage` | list, lazy details/health/capabilities | register, testConnection, testRegistered, connect, detach, forget | password never leaves component state |
+| `setups/SetupsPage` | list, lazy details/health | register, testConnection, testRegistered, connect, detach, forget | password never leaves component state |
 | `namespaces/NamespacesPage`, `NamespaceDetailsPage` | namespaces, namespace details, export | — | — |
 | `entries/EntriesPage` | `useGetEntriesQuery` keyed by setup/namespace/filters/cursor | setEntry (create), preview/execute bulk delete | — |
 | `entries/EntryDetailsPage` | `useGetEntryQuery` (`includeExpired`) | setEntry, expire, persist, touch, delete | reveal on `clients.inspection.revealEntryValue`, component memory, auto-hide, `visibilitychange`, route/setup change |
@@ -111,7 +113,7 @@ Dev: `vitest 3.2.7`, `@vitest/coverage-v8 3.2.7`, `@testing-library/react 16.3.0
 | `locks/LocksPage` | `useGetLocksQuery`, `useLazyGetLockQuery` (cache bypassed) | forceRelease | owner reveal on `clients.resource.revealLockOwner` |
 | `advanced/AdvancedOperationsPage` | none through RTK Query | none through RTK Query | everything on `clients.backendCapability` (no-store); results cleared on `visibilitychange`, unmount, and "Clear sensitive state" |
 | `pubsub/PubSubPage` | live SSE via `clients.pubSubStream` → live store | createSubscription, publish, deleteSubscription | payload reveal on `clients.pubSub.revealPayload` |
-| `settings/SettingsPage` | session + capability props | none (localStorage allowlist only) | — |
+| `settings/SettingsPage` | session + setup-details limits props | none (localStorage allowlist only) | — |
 
 ---
 
@@ -124,19 +126,19 @@ Dev: `vitest 3.2.7`, `@vitest/coverage-v8 3.2.7`, `@testing-library/react 16.3.0
 - `entry-fixture.ts` — `startEntryFixture(initial = entryMetadata)` → `{ server, store, sessionClient, state, requests(predicate), close }`. Serves session, empty setup list, the entry list (cursor `entry-cursor-2` → key `next-page`), entry GET, reveal POST (no-store headers), PUT set entry (version+1, or `state.setEntryProblem`), POST ttl/persist/touch, DELETE, bulk-delete preview/execute. Fixtures: `entryMetadata` (namespace `客户/订单`, key `café/東京/🔒?x=1`, version `9007199254740993` — encodings derived from the production codec) and `ordersMetadata` (`orders`/`order:1`, version 3).
 - `resource-fixture.ts` — `startResourceFixture()` with mutable `state.counters`/`state.locks`, so committed mutations are visible to the next read exactly like PostgreSQL truth: counters list with namespace/prefix filters, counter GET/PUT/increment/ttl/persist/DELETE with `If-Match`/`If-None-Match` checks and signed 64-bit overflow → `COUNTER_OVERFLOW`, bulk preview/execute, locks list/GET, owner reveal (no-store), force-release with version check, and every backend-capability route (exists, batch-get/set/delete, scan, cache-metrics, acquire/renew/release/ownership) with no-store headers.
 
-### 3.2 Current source inventory (36 files / 170 tests)
+### 3.2 Current source inventory (36 files / 168 tests after 10 September 2026; 170 at handover)
 
 Page and shell tests (all through `renderWithProviders` over a loopback server):
 
-- `app.test.tsx` (5): navigation/identity/role/connection/logout button; theme + notifications without exposing the CSRF token, preference persisted; capability-gated route (`Counters unavailable`, no `/counters` request); restored scope re-reading `/capabilities` once; **the real `App` under `/ui`**: 401 → bootstrap gate, rejected token → `BOOTSTRAP_TOKEN_INVALID` with the field cleared, accepted token exchanged on the wire, shell rendered without the token or CSRF proof in the DOM, `End local session` → `DELETE /api/v1/session/local` with `X-PeeGeeQ-CSRF`.
+- `app.test.tsx` (4): navigation/identity/role/connection/logout button; theme + notifications without exposing the CSRF token, preference persisted; every section reachable once a setup is selected, with the shell reading that setup's details (and so its limits) exactly once; **the real `App` under `/ui`**: 401 → bootstrap gate, rejected token → `BOOTSTRAP_TOKEN_INVALID` with the field cleared, accepted token exchanged on the wire, shell rendered without the token or CSRF proof in the DOM, `End local session` → `DELETE /api/v1/session/local` with `X-PeeGeeQ-CSRF`.
 - `overview-page.test.tsx` (3), `monitoring-page.test.tsx` (1), `setups-page.test.tsx` (6), `namespaces-page.test.tsx` (4) — U11.3/U11.4, unchanged except that `overview-page` now awaits each independently loaded section (`findBy*`).
-- `entries-page.test.tsx` (3): capability-gated `Include expired` absent from the open listbox and the query string `ttlState=ALL_LIVE&sort=key:asc&limit=50`; setup and namespace scope required before any `/entries` request; metadata without values, 64-bit version formatted, filters on the wire (`prefix`, `valueType`, `ttlState`), cursor stack `[null, null, 'entry-cursor-2']` (going back is served from the RTK Query cache and never fabricates a cursor).
+- `entries-page.test.tsx` (2): setup and namespace scope required before any `/entries` request; metadata without values, 64-bit version formatted, filters on the wire (`prefix`, `valueType`, `ttlState`), cursor stack `[null, null, 'entry-cursor-2']` (going back is served from the RTK Query cache and never fabricates a cursor).
 - `entry-details-page.test.tsx` (3): viewer sees `Value hidden` and no reveal; reveal POSTs to the exact encoded route with `{ reason }` and the CSRF header, the value is absent from the URL, Web Storage, and Redux state, explicit copy and hide; auto-hide after the server window (25 ms), hide on `visibilitychange`, hide on route/setup change (3 reveals counted).
 - `entry-administration-pages.test.tsx` (9): viewer surfaces with no non-GET request; single-entry administration with bulk delete disabled; create with `If-None-Match: *` and a JSON contract value; CAS default with `If-Match: "v3"`, committed version re-read into `Descriptions`; upsert without precondition and `REPLACE` TTL only when chosen; `VERSION_MISMATCH` preserving input and refetching metadata; TTL/touch/persist/delete with `If-Match` and the exact bodies; bulk preview of exact-version targets and execution only after the typed phrase; matching-filter preview sending the applied server filter, cancelled without execution.
 - `counter-lock-pages.test.tsx` (9): viewer read-only and owner masked; bulk-delete and forced-release degraded independently; live trimmed filters clearing the selection; `COUNTER_OVERFLOW` alert then a committed `-2` adjustment (`If-Match: "v3"`) re-read into the table and delete with the observed version; create by exact value (`If-None-Match: *`, minimum signed 64-bit) appearing in the list; create by signed adjustment (`createIfMissing`, `REPLACE` TTL); bulk preview/execute with `DELETE 1 COUNTERS`; lock dialog re-reading before display and before release (`If-Match: "v5"` after the fixture advanced the version), owner reveal hidden on explicit hide and `visibilitychange`, focus on `Confirm lock key`; stale release → `VERSION_MISMATCH` without releasing.
-- `advanced-operations-page.test.tsx` (4): existence/scan/batch-get/batch-set/batch-delete/metrics with the typed contract bodies, results kept out of Redux; malformed batch input rejected locally before any request; capability-gated panels withheld; owner-token lock lifecycle (`acquire`, `renew`, `ownership`, `release`) with the token absent from Redux and cleared by "Clear sensitive state".
+- `advanced-operations-page.test.tsx` (4): existence/scan/batch-get/batch-set/batch-delete/metrics with the typed contract bodies, results kept out of Redux; malformed batch input rejected locally before any request; operator and reveal panels withheld from viewers while metrics stay available; owner-token lock lifecycle (`acquire`, `renew`, `ownership`, `release`) with the token absent from Redux and cleared by "Clear sensitive state".
 - `pubsub-page.test.tsx` (4): viewer subscription with the message arriving through the real SSE stream into the live store (no publish/reveal); non-durable labelling, masked metadata, reveal held only in component memory, hide on explicit hide/`visibilitychange`/stop, stop deleting the subscription and closing the stream (`closed === opened === 1`); publish with CSRF header, described as acceptance not delivery, payload cleared; UTF-8 byte limits for channel, buffer entries, and publish channel enforced before transport.
-- `settings-page.test.tsx` (2): every preference driven through antd Selects, the exact allowlisted record in `localStorage`, five change events, no request; rendering without a setup/capabilities.
+- `settings-page.test.tsx` (2): every preference driven through antd Selects, the exact allowlisted record in `localStorage`, five change events, no request; rendering without a setup or effective limits.
 
 Client and contract tests (loopback, schema-produced bodies, `server.use` per case): `session-client` (8, incl. 401 → CSRF dropped, unreadable body, non-problem failure, cacheable sensitive response), `setup-client` (4), `inspection-client` (15), `entry-administration-client` (9, incl. precondition validation and `VERSION_MISMATCH`), `resource-client` (4), `backend-capability-client` (4), `pubsub-live` (4, incl. SSE lifecycle and `Accept` header), `pubsub-live-http` (1, resume with `Last-Event-ID`), `monitoring-live` (4, including immediate offline/online reconnect), `store` (6), `protocol-schemas` (8), `operation-manifest` (3), `identifier-codec` (12), `preferences` (3), `scope-store` (4), `scope-storage` (4), `display-bytes` (2), `display-time` (2), `entry-formatters` (3).
 
@@ -243,12 +245,12 @@ Several product-journey assertions match text exactly; the antd rewrite keeps th
 
 ### 7.1 Catalogue accounting
 
-`ManagementBrowserCoverageTest` and the REST POM define 557 reportable evidence scenarios. With P7, a complete Failsafe run is expected to contain 563 JUnit tests: the 557 scenarios plus one Playwright observation test, two runnable-artifact tests, and three screenshot infrastructure tests. The pre-P7 U11 matrix below contains 560 tests. Keep catalogue and execution totals separate; they describe different layers and are not contradictory. Record those numbers as current evidence only when report timestamps and the Maven summary correspond to the handed-over source state.
+`ManagementBrowserCoverageTest` and the REST POM define 539 reportable evidence scenarios since 10 September 2026 (557 at handover; the 18 `PW-CAPABILITY-*` cases were removed with capability gating, see §14). With P7, a complete Failsafe run is expected to contain 545 JUnit tests: the 539 scenarios plus one Playwright observation test, two runnable-artifact tests, and three screenshot infrastructure tests. The pre-P7 U11 matrix below contains 560 tests. Keep catalogue and execution totals separate; they describe different layers and are not contradictory. Record those numbers as current evidence only when report timestamps and the Maven summary correspond to the handed-over source state.
 
 ### 7.2 Browser-contract adaptations
 
 - **`AntSelect.java`** clicks the visible antd selector container (the native search input is read-only), selects options through their reviewed `data-value`, exposes option values/labels in display order, and reads the selected value from `.ant-select-selection-item [data-value]`.
-- Overview and monitoring locators use antd `Statistic` and `Descriptions`; setup details use `Descriptions`; entry metadata uses its accessible region; namespace, entry, capability, monitoring/settings, and shell scenarios select values through `AntSelect`.
+- Overview and monitoring locators use antd `Statistic` and `Descriptions`; setup details use `Descriptions`; entry metadata uses its accessible region; namespace, entry, monitoring/settings, and shell scenarios select values through `AntSelect`.
 - Boundary pagination addresses the exact `Next page` button. Product journeys wait for loading indicators to clear before accessibility scans, verify modal focus containment/restoration, and wait for the modal root's rc-motion animation before running axe.
 - The accessibility gate uses exactly `axe-core 4.12.1`; the light/dark design tokens, default/primary buttons, drawer mask, and portal-rendered surfaces have explicit contrast-safe behavior. Axe failures now include URL, target HTML, and measured failure summaries rather than only selectors.
 
@@ -333,7 +335,7 @@ The uncommitted 5 September working tree adds the deterministic readiness/test-b
 ## 12. Remaining non-blocking risks
 
 - **Owning gates are complete.** The working-tree UI, browser/Failsafe, full-reactor, and PostgreSQL 15-18 gates are recorded in §7.4; U11 is complete.
-- **Scenario accounting.** The POM and executable coverage contract require 557 evidence scenarios; the completed Failsafe execution contains 560 tests because three infrastructure tests are outside that catalogue (§7.1).
+- **Scenario accounting.** The POM and executable coverage contract require 539 evidence scenarios (557 before 10 September 2026); a completed Failsafe execution contains 545 tests because six infrastructure tests are outside that catalogue (§7.1).
 - **Coverage margin.** `src/api` branch coverage is 87.01% against an 80% threshold; adding untested branches to a client without a loopback case can still trip the gate — that is intended.
 - **`components` folder coverage (77%)** is not thresholded; `ConnectionStatus`/`StatCard`/`SetupScopeBar`/`ValueSelect` are exercised through page tests only.
 - **Bundle size advisory.** Vite reports a single JavaScript chunk above 500 kB after minification. This is an optimization opportunity, not a correctness failure.
@@ -565,3 +567,49 @@ pinned Java Playwright version, installs its Chromium runtime after packaging, a
 that distribution for verification and PostgreSQL compatibility. Focused configuration tests pass
 7/7. Build #5 remains diagnostic RED evidence and a later full Jenkins run is required for
 acceptance.
+
+## 14. Capability gating removal (10 September 2026)
+
+Executed from [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md); its §9 holds the phase-by-phase execution record and every deviation. This section records what the next UI session needs to know.
+
+### 14.1 What changed in the console
+
+- **No capability negotiation.** `GET /api/v1/setups/{setupId}/capabilities`, the `SetupCapabilities` schema, the session `features` block (`setupRegistration`, `sensitiveReveal`), and the `Capabilities` RTK Query tag are gone. Every management section is reachable once a setup is selected; every write control is gated by `isOperator` alone. The server decides each request by role, as before.
+- **Effective limits come from setup details.** `SetupDetails` now carries `limits` (`pubSubChannelMaxBytes`, `pubSubPayloadMaxBytes`, `maximumValueBytes`), validated by `setupLimitsSchema` in `src/api/setup-schemas.ts`. `ManagementShell` reads them through `useGetSetupDetailsQuery` for the selected setup and passes them to `PubSubPage` (`maximumChannelBytes`, `maximumPayloadBytes`) and `SettingsPage` (`limits`, `migrationVersion`). The connection-test response keeps `limits` and lost `capabilities`.
+- **Scope is committed immediately.** `scope-store.select(setupId)` no longer takes a snapshot; `SetupScopeBar` commits on change without a fetch; the shell no longer clears the stored setup on a failed lookup.
+- **Props removed.** `canInspectExpired` (Entries), `canBatch`/`canScan`/`canMetrics`/`canOwnLocks` (Advanced), `capabilities` (Settings). `EntryDetailsPage`'s viewer message reads "Operator permission is required."; the Setups details dialog shows an "Effective limits" section instead of a capability list; `.capability-list` CSS is gone.
+- **Files touched.** `setup-schemas.ts`, `protocol-schemas.ts`, `setup-client.ts`, `operation-manifest.ts` (59 operations), `setupsApi.ts`, `managementApi.ts`, `scope-store.ts`, `SetupScopeBar.tsx`, `ManagementShell.tsx`, `SettingsPage.tsx`, `SetupsPage.tsx`, `EntryDetailsPage.tsx`, `EntriesPage.tsx`, `AdvancedOperationsPage.tsx`, `foundation.css`, and 22 test files (the session fixtures lost `features`; `scope-store`, `app`, `setup-client`, `setups-page`, `settings-page`, `advanced-operations-page`, `entries-page`, `counter-lock-pages` lost or renamed cases). The suite is 36 files / 168 tests.
+
+### 14.2 What changed in the Java browser layer
+
+- `ManagementCapabilityBrowserIT` and its 18 `PW-CAPABILITY-*` scenarios are deleted; `CURRENT_SCENARIO_COUNT` and `peegeeq.playwright.expectedScenarios` are both 539. The two values still change together.
+- The fixture's allowed background traffic (`FIXTURE_OPERATIONS`) lists `getSetup` instead of `getSetupCapabilities`, because the shell now fetches setup details on every selection. Scenario operation lists that declared `getSetupCapabilities` declare `getSetup`.
+- The `scope-and-capabilities` journey is `scope-restoration` and owns `getNamespace` only (`getSetup` belongs to `setup-lifecycle`; the coverage test allows one owner per operation). `PW-SETUP-054` asserts the runtime Pub/Sub row of the details dialog; `PW-SETUP-048` looks for the `Effective limits` heading.
+- The `UnaryOperator<SetupCapabilities.Source>` capability-source filter threaded through `ManagementConsolePostgresFixture` and `ManagementServerApplication` (the U11 merge item in §8) no longer exists.
+
+### 14.3 Verification and the Node finding
+
+- Per-phase gates and the complete browser gate are recorded in the plan's §9 with their logs under `logs/gating-removal-phase*.log`. The REST `mvn verify` passed Surefire 179 and Failsafe 545 (539 scenarios plus six infrastructure checks) on Docker PostgreSQL.
+- Running Vitest with the system Node 24 showed four deterministic failures in the SSE-stream cases of `monitoring-page`, `pubsub-live`, and `pubsub-page`, while the Maven-run suite under the pinned Node 22.22.2 passed 168 of 168. Root cause: undici 7 (Node 24's bundled `fetch`) requires `RequestInit.signal` to be the runtime's `AbortSignal`, and vitest's jsdom environment replaces the global `AbortController`/`AbortSignal` with jsdom's while `fetch` stays the runtime's, so `FetchSseTransport`'s requests failed before reaching the loopback server; undici 6 (Node 22) was lenient. Pinning Node is not a fix (any pinned release ages into deprecation or a CVE), so the environment now restores the runtime pair: `test/support/jsdom-runtime-fetch-environment.ts` wraps the built-in jsdom environment and `vitest.config.ts` uses it. The suite passes on Node 24 and Node 22. Also note `node\node.exe ...npm-cli.js run <script>` does not pin the toolchain, because npm resolves `vitest` through `PATH`; prepend `node\` to `PATH` when the pinned version matters.
+- The complete `mvn clean verify` of all eleven modules is logged at `logs/capability-gating-removal-verify-20260910.log`; see the last paragraph of this section for its result.
+
+### 14.4 Workflow documents added
+
+- `docs/guidelines/PEEGEEQ_CACHE_TEST_COMMANDS.md`: the exact Maven and npm commands for this reactor, `Tee-Object` into `logs\<description>-<YYYYMMDD>.log`, rebuild-before-verify, the REST evidence-check caveat (`-Dmaven.antrun.skip=true` on rebuilds without a browser run), Docker requirements, and how to report a run from the saved log.
+- `CLAUDE.md` at the repository root: the mandatory verification workflow (one phase at a time, rebuild before verification, targeted tests through `Tee-Object`, no overstated scope, Docker first, no mocking, no error swallowing).
+- Every affected design document carries a dated "Capability gating removed" note; historical acceptance figures (557 scenarios, 60 operations, 62 inventory methods) remain as history.
+
+Complete reactor verify result (`mvn --batch-mode --no-transfer-progress clean verify`, finished 2026-09-10T17:04:12+01:00 in 29:58, `logs/capability-gating-removal-verify-20260910.log`): all eleven modules `SUCCESS`, `BUILD SUCCESS`, zero failures, errors, or skips.
+
+| Module | Result |
+|---|---|
+| `peegee-cache-api` | 59 tests |
+| `peegee-cache-core` | 20 tests |
+| `peegee-cache-test-support` | 4 tests |
+| `peegee-cache-pg` | 243 tests on Docker PostgreSQL |
+| `peegee-cache-runtime` | 48 tests on Docker PostgreSQL |
+| `peegee-cache-observability` | 5 tests |
+| `peegee-cache-management-ui` | Vitest 36 files / 168 tests under the pinned Node 22.22.2, coverage thresholds and production build green |
+| `peegee-cache-rest` | Surefire 179; Failsafe 545 (539 browser scenarios plus six infrastructure checks); evidence check passed |
+| `peegee-cache-benchmarks` | 102 tests |
+| `peegee-cache-examples` | no tests |

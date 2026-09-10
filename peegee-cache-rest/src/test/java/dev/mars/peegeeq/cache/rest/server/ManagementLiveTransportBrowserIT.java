@@ -66,7 +66,7 @@ class ManagementLiveTransportBrowserIT {
 
     private static List<String> operations(int index) {
         if (index == 0) {
-            return List.of("getSetupCapabilities");
+            return List.of("getSetup");
         }
         if (index < 9 || index == 19) {
             return List.of("monitoringWebSocket");

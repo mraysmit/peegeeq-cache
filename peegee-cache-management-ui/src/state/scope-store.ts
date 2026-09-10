@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 
-import type { SetupCapabilities } from '../api/setup-schemas';
 import {
   clearSetupScopeStorage,
   readSetupScope,
@@ -10,8 +9,7 @@ import {
 interface SetupScopeState {
   readonly setupId?: string;
   readonly namespace?: string;
-  readonly capabilities?: SetupCapabilities;
-  readonly select: (setupId: string, capabilities: SetupCapabilities) => void;
+  readonly select: (setupId: string) => void;
   readonly selectNamespace: (namespace?: string) => void;
   readonly clear: () => void;
 }
@@ -21,11 +19,10 @@ const initialScope = readSetupScope();
 export const useSetupScopeStore = create<SetupScopeState>((set) => ({
   setupId: initialScope?.setupId,
   namespace: initialScope?.namespace,
-  capabilities: undefined,
-  select: (setupId, capabilities) => set((current) => {
+  select: (setupId) => set((current) => {
     const namespace = current.setupId === setupId ? current.namespace : undefined;
     writeSetupScope({ setupId, namespace });
-    return { setupId, namespace, capabilities };
+    return { setupId, namespace };
   }),
   selectNamespace: (namespace) => set((current) => {
     if (current.setupId === undefined) {
@@ -36,7 +33,7 @@ export const useSetupScopeStore = create<SetupScopeState>((set) => ({
   }),
   clear: () => {
     clearSetupScopeStorage();
-    set({ setupId: undefined, namespace: undefined, capabilities: undefined });
+    set({ setupId: undefined, namespace: undefined });
   },
 }));
 

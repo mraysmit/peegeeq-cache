@@ -1,6 +1,12 @@
 package dev.mars.peegeeq.cache.pg.management;
 
 import dev.mars.peegeeq.cache.api.management.ManagementTtl;
+import dev.mars.peegeeq.cache.api.management.ManagementAuditSink;
+import dev.mars.peegeeq.cache.api.management.ManagementAuditReservation;
+import dev.mars.peegeeq.cache.api.management.ManagementAuditIntent;
+import dev.mars.peegeeq.cache.api.management.ManagementAuditOutcome;
+import dev.mars.peegeeq.cache.api.management.ManagementAuditFingerprinter;
+import dev.mars.peegeeq.cache.api.management.ManagementSecretReference;
 import dev.mars.peegeeq.cache.api.management.ManagementCursorCodec;
 import dev.mars.peegeeq.cache.api.management.ManagementCursorException;
 import dev.mars.peegeeq.cache.api.management.ManagementNotFoundException;
@@ -56,11 +62,33 @@ class PgManagementReadRepositoryTest {
                     repository = new PgManagementReadRepository(pool, SCHEMA);
                     service = new PgManagementService(
                             repository,
+                            new PgManagementMutationRepository(pool, SCHEMA),
                             "setup-a",
                             new ManagementCursorCodec(
                                     "0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.UTF_8),
                                     Clock.systemUTC(),
-                                    Duration.ofMinutes(15)));
+                                    Duration.ofMinutes(15)),
+                            new ManagementAuditSink() {
+                                @Override
+                                public Future<ManagementAuditReservation> reserveIntent(ManagementAuditIntent intent) {
+                                    return Future.succeededFuture(new ManagementAuditReservation(
+                                            "reservation-" + intent.eventId(), intent.eventId(), "test-generation"));
+                                }
+
+                                @Override
+                                public Future<Void> complete(
+                                        ManagementAuditReservation reservation, ManagementAuditOutcome outcome) {
+                                    return Future.succeededFuture();
+                                }
+                            },
+                            new ManagementAuditFingerprinter(
+                                    new ManagementSecretReference("audit-test-key"),
+                                    ignoredKey -> "abcdef0123456789abcdef0123456789".getBytes(StandardCharsets.UTF_8),
+                                    "audit-v1",
+                                    128),
+                            Clock.systemUTC(),
+                            () -> "management-read-" + System.nanoTime(),
+                            null);
                     context.completeNow();
                 }))
                 .onFailure(context::failNow);

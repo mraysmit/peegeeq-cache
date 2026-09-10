@@ -18,7 +18,6 @@ public final class ManagementRouteTemplate {
             route("/api/v1/setups/{setupId}/test"),
             route("/api/v1/setups/{setupId}/detach"),
             route("/api/v1/setups/{setupId}/health"),
-            route("/api/v1/setups/{setupId}/capabilities"),
             route("/api/v1/setups/{setupId}/overview"),
             route("/api/v1/setups/{setupId}/namespaces"),
             route("/api/v1/setups/{setupId}/namespaces/export"),

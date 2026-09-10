@@ -301,7 +301,7 @@ public final class PubSubRoutes implements ManagementRequestRouter {
         try {
             ManagementWireRules.requireRequestSize(body.length, REQUEST_MAX_BYTES);
             SubscriptionRequest creation = parseSubscription(
-                    body, registry.capabilities(setupId).limits());
+                    body, registry.limits(setupId));
             ManagementAuditIntent intent = intent(
                     authenticated, correlationId, setupId,
                     ManagementAuditAction.CREATE_PUBSUB_SUBSCRIPTION,
@@ -390,7 +390,7 @@ public final class PubSubRoutes implements ManagementRequestRouter {
             byte[] body) {
         try {
             ManagementWireRules.requireRequestSize(body.length, REQUEST_MAX_BYTES);
-            PublishRequest publication = parse(body, registry.capabilities(setupId).limits());
+            PublishRequest publication = parse(body, registry.limits(setupId));
             ManagementAuditIntent intent = new ManagementAuditIntent(
                     UUID.randomUUID().toString(), clock.instant(),
                     authenticated.identity().actor(), authenticated.identity().roles(),
@@ -439,7 +439,7 @@ public final class PubSubRoutes implements ManagementRequestRouter {
         }
     }
 
-    private PublishRequest parse(byte[] body, SetupCapabilities.Limits limits) {
+    private PublishRequest parse(byte[] body, SetupLimits limits) {
         try {
             JsonNode root = json.readTree(body);
             if (root == null || !root.isObject()) {
@@ -480,7 +480,7 @@ public final class PubSubRoutes implements ManagementRequestRouter {
     }
 
     private SubscriptionRequest parseSubscription(
-            byte[] body, SetupCapabilities.Limits limits) {
+            byte[] body, SetupLimits limits) {
         try {
             JsonNode root = json.readTree(body);
             if (root == null || !root.isObject()) {

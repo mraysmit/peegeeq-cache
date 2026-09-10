@@ -15,13 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ManagementBrowserCoverageTest {
 
-    private static final int CURRENT_SCENARIO_COUNT = 557;
+    private static final int CURRENT_SCENARIO_COUNT = 539;
 
     private static final Set<String> REQUIRED_JOURNEYS = Set.of(
             "trusted-proxy-session",
             "local-token-session",
             "setup-lifecycle",
-            "scope-and-capabilities",
+            "scope-restoration",
             "overview-and-namespaces",
             "entry-lifecycle",
             "entry-bulk-delete",
@@ -40,7 +40,7 @@ class ManagementBrowserCoverageTest {
             "getSession", "exchangeLocalToken", "deleteLocalSession",
             "listSetups", "testUnregisteredSetup", "registerSetup", "getSetup",
             "connectSetup", "testRegisteredSetup", "detachSetup", "forgetSetup",
-            "getSetupHealth", "getSetupCapabilities", "getOverview", "listNamespaces",
+            "getSetupHealth", "getOverview", "listNamespaces",
             "exportNamespaces", "getNamespace", "listEntries", "getEntry",
             "revealEntryValue", "setEntry", "deleteEntry", "expireEntry", "persistEntry",
             "touchEntry", "previewEntryBulkDelete", "executeEntryBulkDelete", "listCounters",
@@ -96,7 +96,6 @@ class ManagementBrowserCoverageTest {
             ManagementPubSubBrowserIT.class,
             ManagementLiveTransportBrowserIT.class,
             ManagementMonitoringBrowserIT.class,
-            ManagementCapabilityBrowserIT.class,
             ManagementViewerBrowserIT.class,
             ManagementBoundaryBrowserIT.class,
             ManagementAccessibilityBrowserIT.class,
@@ -113,7 +112,6 @@ class ManagementBrowserCoverageTest {
             ManagementPubSubBrowserIT.scenarios(),
             ManagementLiveTransportBrowserIT.scenarios(),
             ManagementMonitoringBrowserIT.scenarios(),
-            ManagementCapabilityBrowserIT.scenarios(),
             ManagementAccessibilityBrowserIT.scenarios(),
             ManagementPrivacyBrowserIT.scenarios(),
             ManagementPackagingBrowserIT.scenarios(),

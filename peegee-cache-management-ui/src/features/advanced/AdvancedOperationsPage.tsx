@@ -20,10 +20,6 @@ const { Title, Text, Paragraph } = Typography;
 interface AdvancedOperationsPageProps {
   readonly canOperate: boolean;
   readonly canReveal: boolean;
-  readonly canBatch: boolean;
-  readonly canScan: boolean;
-  readonly canMetrics: boolean;
-  readonly canOwnLocks: boolean;
   readonly selectedSetupId?: string;
 }
 
@@ -33,7 +29,7 @@ interface AdvancedOperationsPageProps {
  * this page goes through RTK Query: the no-store backend-capability client is used directly and
  * every result lives only in component state, cleared on visibility loss and unmount (design §8.2).
  */
-export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canScan, canMetrics, canOwnLocks, selectedSetupId }: AdvancedOperationsPageProps) {
+export function AdvancedOperationsPage({ canOperate, canReveal, selectedSetupId }: AdvancedOperationsPageProps) {
   const { backendCapability: client } = useManagementClients();
   const [namespace, setNamespace] = useState('');
   const [key, setKey] = useState('');
@@ -174,7 +170,7 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
             </Row>
             <Space className="workspace__actions" wrap><Button disabled={busy || namespace.trim() === '' || key.trim() === ''} onClick={checkExists} type="primary">Check entry existence</Button></Space>
             {exists !== undefined && <p><strong>Exists:</strong> {exists ? 'Yes' : 'No'}</p>}
-            {canReveal && canScan && (
+            {canReveal && (
               <>
                 <Row gutter={16} style={{ marginTop: 16 }}>
                   <Col span={12}><Form.Item htmlFor="scan-prefix" label="Scan key prefix (optional)"><Input id="scan-prefix" maxLength={1024} onChange={(event) => setScanPrefix(event.target.value)} value={scanPrefix} /></Form.Item></Col>
@@ -194,7 +190,7 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
           </Form>
         </Panel>
 
-        {canReveal && canBatch && (
+        {canReveal && (
           <Panel title="Batch get">
             <Form layout="vertical">
               <Paragraph>One entry per line: <code>namespace[TAB]key</code>.</Paragraph>
@@ -206,7 +202,7 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
           </Panel>
         )}
 
-        {canOperate && canBatch && (
+        {canOperate && (
           <Panel title="Batch set">
             <Form layout="vertical">
               <Paragraph>Provide a JSON array. Every entry independently specifies namespace, key, typed value, TTL, set mode, expected version, and whether to return its previous value.</Paragraph>
@@ -217,7 +213,7 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
           </Panel>
         )}
 
-        {canOperate && canBatch && (
+        {canOperate && (
           <Panel title="Cross-namespace batch delete">
             <Form layout="vertical">
               <Paragraph>One entry per line: <code>namespace[TAB]key</code>. This invokes the core cache service’s exact multi-key delete operation.</Paragraph>
@@ -228,18 +224,16 @@ export function AdvancedOperationsPage({ canOperate, canReveal, canBatch, canSca
           </Panel>
         )}
 
-        {canMetrics && (
-          <Panel title="Exact core metrics">
-            <Space className="workspace__actions" wrap><Button disabled={busy} onClick={loadMetrics} type="primary">Refresh core metrics</Button></Space>
-            {metrics !== undefined && (
-              <Descriptions column={3} size="small" style={{ marginTop: 16 }}>
-                {Object.entries(metrics).map(([name, value]) => <Descriptions.Item key={name} label={words(name)}>{BigInt(value).toLocaleString('en-US')}</Descriptions.Item>)}
-              </Descriptions>
-            )}
-          </Panel>
-        )}
+        <Panel title="Exact core metrics">
+          <Space className="workspace__actions" wrap><Button disabled={busy} onClick={loadMetrics} type="primary">Refresh core metrics</Button></Space>
+          {metrics !== undefined && (
+            <Descriptions column={3} size="small" style={{ marginTop: 16 }}>
+              {Object.entries(metrics).map(([name, value]) => <Descriptions.Item key={name} label={words(name)}>{BigInt(value).toLocaleString('en-US')}</Descriptions.Item>)}
+            </Descriptions>
+          )}
+        </Panel>
 
-        {canOperate && canOwnLocks && (
+        {canOperate && (
           <Panel title="Owner lock lifecycle">
             <Form layout="vertical">
               <Row gutter={16}>

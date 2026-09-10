@@ -5,13 +5,11 @@ import type {
 import { ManagementClientError, SessionClient } from './session-client';
 import {
   setupConnectionTestSchema,
-  setupCapabilitiesSchema,
   setupDetailsSchema,
   setupHealthSchema,
   setupSummaryListSchema,
   setupSummarySchema,
   type SetupConnectionTest,
-  type SetupCapabilities,
   type SetupDetails,
   type SetupHealth,
   type SetupSummary,
@@ -41,13 +39,6 @@ export class SetupClient {
     return this.parse(
       setupHealthSchema,
       await this.sessionClient.requestJson(`${this.setupPath(setupId)}/health`),
-    );
-  }
-
-  async capabilities(setupId: string): Promise<SetupCapabilities> {
-    return this.parse(
-      setupCapabilitiesSchema,
-      await this.sessionClient.requestJson(`${this.setupPath(setupId)}/capabilities`),
     );
   }
 

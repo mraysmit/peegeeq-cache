@@ -7,7 +7,6 @@ import io.vertx.core.Future;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,46 +16,16 @@ import java.util.function.Supplier;
 /** PostgreSQL-backed management service, implemented incrementally by management phase. */
 public final class PgManagementService implements ManagementService {
 
-    private static final EnumSet<ManagementCapability> INSPECTION_CAPABILITIES = EnumSet.of(
-            ManagementCapability.NAMESPACE_INSPECTION,
-            ManagementCapability.ENTRY_INSPECTION,
-            ManagementCapability.COUNTER_INSPECTION,
-            ManagementCapability.LOCK_INSPECTION,
-            ManagementCapability.DATABASE_MONITORING,
-            ManagementCapability.EXPIRY_MONITORING);
-
-    private static final AdminCapabilities READ_ONLY_CAPABILITIES = new AdminCapabilities(
-            INSPECTION_CAPABILITIES,
-            ManagementLimits.defaults());
-
     private final PgManagementReadRepository repository;
     private final PgManagementMutationRepository mutationRepository;
     private final String setupId;
     private final ManagementCursorCodec cursors;
-    private final AdminCapabilities capabilities;
     private final ManagementAuditSink auditSink;
     private final ManagementAuditFingerprinter auditFingerprinter;
     private final Clock auditClock;
     private final Supplier<String> auditEventIdSupplier;
     private final Duration defaultEntryTtl;
     private final PgManagementBulkDeleteCoordinator bulkDeletes;
-
-    public PgManagementService(
-            PgManagementReadRepository repository,
-            String setupId,
-            ManagementCursorCodec cursors) {
-        this.repository = Objects.requireNonNull(repository, "repository");
-        this.mutationRepository = null;
-        this.setupId = Objects.requireNonNull(setupId, "setupId");
-        this.cursors = Objects.requireNonNull(cursors, "cursors");
-        this.capabilities = READ_ONLY_CAPABILITIES;
-        this.auditSink = null;
-        this.auditFingerprinter = null;
-        this.auditClock = null;
-        this.auditEventIdSupplier = null;
-        this.defaultEntryTtl = null;
-        this.bulkDeletes = null;
-    }
 
     public PgManagementService(
             PgManagementReadRepository repository,
@@ -82,20 +51,6 @@ public final class PgManagementService implements ManagementService {
         this.defaultEntryTtl = defaultEntryTtl;
         this.bulkDeletes = new PgManagementBulkDeleteCoordinator(
                 mutationRepository, setupId, auditClock);
-        EnumSet<ManagementCapability> supported = EnumSet.copyOf(INSPECTION_CAPABILITIES);
-        supported.add(ManagementCapability.ENTRY_REVEAL);
-        supported.add(ManagementCapability.ENTRY_MUTATION);
-        supported.add(ManagementCapability.COUNTER_MUTATION);
-        supported.add(ManagementCapability.LOCK_REVEAL);
-        supported.add(ManagementCapability.FORCE_LOCK_RELEASE);
-        supported.add(ManagementCapability.ENTRY_BULK_DELETE);
-        supported.add(ManagementCapability.COUNTER_BULK_DELETE);
-        this.capabilities = new AdminCapabilities(supported, ManagementLimits.defaults());
-    }
-
-    @Override
-    public AdminCapabilities capabilities() {
-        return capabilities;
     }
 
     @Override
@@ -208,9 +163,6 @@ public final class PgManagementService implements ManagementService {
     public Future<RevealedEntryValue> revealEntry(
             RevealEntryRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.ENTRY_REVEAL);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         ManagementAuditIntent intent = entryIntent(
@@ -253,9 +205,6 @@ public final class PgManagementService implements ManagementService {
     public Future<ManagementSetResult> setEntry(
             ManagementCacheSetRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.ENTRY_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         ManagementAuditIntent intent = entryIntent(
@@ -292,9 +241,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<ManagementEntryMetadata>> expireEntry(
             VersionedEntryTtlRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.ENTRY_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedEntryMutation(
@@ -309,9 +255,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<ManagementEntryMetadata>> persistEntry(
             VersionedCacheKeyRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.ENTRY_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedEntryMutation(
@@ -326,9 +269,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<ManagementEntryMetadata>> touchEntry(
             VersionedEntryTouchRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.ENTRY_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedEntryMutation(
@@ -343,9 +283,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<Void>> deleteEntry(
             VersionedEntryDeleteRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.ENTRY_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedEntryMutation(
@@ -383,9 +320,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<CounterEntry>> setCounter(
             ManagementCounterSetRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.COUNTER_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedCounterMutation(
@@ -400,9 +334,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<CounterEntry>> adjustCounter(
             ManagementCounterAdjustRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.COUNTER_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedCounterMutation(
@@ -417,9 +348,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<CounterEntry>> expireCounter(
             VersionedCounterTtlRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.COUNTER_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedCounterMutation(
@@ -432,9 +360,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<CounterEntry>> persistCounter(
             VersionedCacheKeyRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.COUNTER_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedCounterMutation(
@@ -447,9 +372,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<Void>> deleteCounter(
             VersionedCounterDeleteRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.COUNTER_MUTATION);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedCounterMutation(
@@ -484,9 +406,6 @@ public final class PgManagementService implements ManagementService {
     public Future<RevealedLockOwner> revealLockOwner(
             RevealLockOwnerRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.LOCK_REVEAL);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         ManagementAuditIntent intent = lockIntent(
@@ -518,9 +437,6 @@ public final class PgManagementService implements ManagementService {
     public Future<VersionedMutationResult<Void>> forceReleaseLock(
             ForceReleaseLockRequest request,
             ManagementActionContext context) {
-        if (mutationRepository == null) {
-            return unavailable(ManagementCapability.FORCE_LOCK_RELEASE);
-        }
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         ManagementAuditIntent intent = lockIntent(
@@ -555,7 +471,6 @@ public final class PgManagementService implements ManagementService {
     public Future<BulkDeletePreview> previewEntryDelete(
             EntryDeleteFilter filter,
             ManagementActionContext context) {
-        if (bulkDeletes == null) return unavailable(ManagementCapability.ENTRY_BULK_DELETE);
         Objects.requireNonNull(filter, "filter");
         Objects.requireNonNull(context, "context");
         return auditedBulk(
@@ -570,7 +485,6 @@ public final class PgManagementService implements ManagementService {
     public Future<BulkDeleteResult> executeEntryDelete(
             ConfirmedEntryDelete request,
             ManagementActionContext context) {
-        if (bulkDeletes == null) return unavailable(ManagementCapability.ENTRY_BULK_DELETE);
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedBulk(
@@ -585,7 +499,6 @@ public final class PgManagementService implements ManagementService {
     public Future<BulkDeletePreview> previewCounterDelete(
             CounterDeleteSelection selection,
             ManagementActionContext context) {
-        if (bulkDeletes == null) return unavailable(ManagementCapability.COUNTER_BULK_DELETE);
         Objects.requireNonNull(selection, "selection");
         Objects.requireNonNull(context, "context");
         return auditedBulk(
@@ -600,7 +513,6 @@ public final class PgManagementService implements ManagementService {
     public Future<BulkDeleteResult> executeCounterDelete(
             ConfirmedCounterDelete request,
             ManagementActionContext context) {
-        if (bulkDeletes == null) return unavailable(ManagementCapability.COUNTER_BULK_DELETE);
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(context, "context");
         return auditedBulk(
@@ -609,10 +521,6 @@ public final class PgManagementService implements ManagementService {
                 context,
                 "COUNTER_DELETE_EXECUTED",
                 () -> bulkDeletes.executeCounter(request, context));
-    }
-
-    private static <T> Future<T> unavailable(ManagementCapability capability) {
-        return Future.failedFuture(new ManagementCapabilityException(capability));
     }
 
     private ManagementAuditIntent entryIntent(

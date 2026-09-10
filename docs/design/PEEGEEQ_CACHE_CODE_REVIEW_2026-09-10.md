@@ -37,9 +37,7 @@ graph TD
 ### A. API & Model Contracts (`peegee-cache-api` & `peegee-cache-core`)
 
 * **Primary Interface**: [`PeeGeeCache.java`](file:///c:/Users/mraysmit/dev/idea-projects/peegeeq-cache/peegee-cache-api/src/main/java/dev/mars/peegeeq/cache/api/PeeGeeCache.java) exposes sub-services:
-  - `CacheService`, `CounterService`, `LockService`, `ScanService`, `PubSubService`, `AdminService`, and `ManagementService`.
-* **Capability Gating & Stubs**:
-  - Implements [`UnsupportedManagementService.java`](file:///c:/Users/mraysmit/dev/idea-projects/peegeeq-cache/peegee-cache-api/src/main/java/dev/mars/peegeeq/cache/api/management/UnsupportedManagementService.java) to safely return typed exceptions when administrative surfaces are disabled or unsupported by a backend.
+  - `CacheService`, `CounterService`, `LockService`, `ScanService`, `PubSubService`, and `AdminService`. The privileged `ManagementService` is owned by the management server's managed-setup runtime, not by the library facade.
 * **Write-Behind Engine**:
   - [`WriteBehindBuffer.java`](file:///c:/Users/mraysmit/dev/idea-projects/peegeeq-cache/peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/writebehind/WriteBehindBuffer.java): Thread-safe, bounded, last-write-wins buffer using `ConcurrentHashMap` and synchronized mutation locks for key-deduplication.
   - [`CompositeCacheTelemetry.java`](file:///c:/Users/mraysmit/dev/idea-projects/peegeeq-cache/peegee-cache-core/src/main/java/dev/mars/peegeeq/cache/core/telemetry/CompositeCacheTelemetry.java): Multiplexes telemetry events cleanly without imposing hard metrics vendor dependencies on core logic.

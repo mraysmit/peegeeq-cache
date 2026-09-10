@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 import type {
-  SetupCapabilitiesContract,
   SetupConnectionTestContract,
   SetupDetailsContract,
   SetupHealthContract,
+  SetupLimitsContract,
   SetupSummaryContract,
   SetupSummaryListContract,
 } from './openapi-contract';
@@ -36,38 +36,10 @@ export const setupSummaryListSchema: z.ZodType<SetupSummaryListContract> = z.str
   items: z.array(setupSummarySchema).max(1_000),
 });
 
-const capabilityFlagsSchema = z.strictObject({
-  namespaceInspection: z.boolean(),
-  entryInspection: z.boolean(),
-  expiredEntryInspection: z.boolean(),
-  entryMutation: z.boolean(),
-  counterInspection: z.boolean(),
-  counterMutation: z.boolean(),
-  lockInspection: z.boolean(),
-  forcedLockRelease: z.boolean(),
-  bulkEntryDelete: z.boolean(),
-  bulkCounterDelete: z.boolean(),
-  pubSub: z.boolean(),
-  databaseStatistics: z.boolean(),
-  entryValueReveal: z.boolean(),
-  lockOwnerReveal: z.boolean(),
-  pubSubPayloadReveal: z.boolean(),
-  batchEntryOperations: z.boolean(),
-  valueScan: z.boolean(),
-  cacheMetrics: z.boolean(),
-  ownerLockOperations: z.boolean(),
-});
-
-const capabilityLimitsSchema = z.strictObject({
+export const setupLimitsSchema: z.ZodType<SetupLimitsContract> = z.strictObject({
   pubSubChannelMaxBytes: z.number().int().min(1).max(63),
   pubSubPayloadMaxBytes: z.number().int().min(1),
   maximumValueBytes: z.number().int().min(1),
-});
-
-export const setupCapabilitiesSchema: z.ZodType<SetupCapabilitiesContract> = z.strictObject({
-  migrationVersion: nonNegativeDecimalSchema,
-  capabilities: capabilityFlagsSchema,
-  limits: capabilityLimitsSchema,
 });
 
 export const setupConnectionTestSchema: z.ZodType<SetupConnectionTestContract> = z.strictObject({
@@ -75,13 +47,13 @@ export const setupConnectionTestSchema: z.ZodType<SetupConnectionTestContract> =
   schemaState: z.enum(['READY', 'MISSING', 'OUTDATED', 'UNKNOWN']),
   migrationVersion: nonNegativeDecimalSchema,
   latencyMillis: z.number().int().nonnegative(),
-  capabilities: capabilityFlagsSchema,
-  limits: capabilityLimitsSchema,
+  limits: setupLimitsSchema,
 });
 
 export const setupDetailsSchema: z.ZodType<SetupDetailsContract> = z.strictObject({
   setup: setupSummarySchema,
   migrationVersion: nonNegativeDecimalSchema,
+  limits: setupLimitsSchema,
   runtime: z.strictObject({
     defaultTtlMillis: z.number().int().min(1).nullable(),
     expirySweeperEnabled: z.boolean(),
@@ -113,6 +85,6 @@ export const setupHealthSchema: z.ZodType<SetupHealthContract> = z.strictObject(
 
 export type SetupSummary = z.infer<typeof setupSummarySchema>;
 export type SetupDetails = z.infer<typeof setupDetailsSchema>;
+export type SetupLimits = z.infer<typeof setupLimitsSchema>;
 export type SetupConnectionTest = z.infer<typeof setupConnectionTestSchema>;
 export type SetupHealth = z.infer<typeof setupHealthSchema>;
-export type SetupCapabilities = z.infer<typeof setupCapabilitiesSchema>;

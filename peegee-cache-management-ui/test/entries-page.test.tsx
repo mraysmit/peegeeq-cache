@@ -19,19 +19,6 @@ describe('U4 metadata-only entry browser', () => {
   const renderBrowser = (props: Partial<Parameters<typeof EntriesPage>[0]> = {}) =>
     renderWithProviders(<EntriesPage selectedNamespace={entry.namespace} selectedSetupId="primary-cache" {...props} />, { store: fixture.store });
 
-  it('does not offer expired-entry inspection when the setup capability is absent', async () => {
-    const user = userEvent.setup();
-    renderBrowser({ canInspectExpired: false });
-
-    await screen.findByRole('link', { name: entry.key });
-    await user.click(screen.getByLabelText('TTL state'));
-    expect(await screen.findByRole('option', { name: 'All live' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Include expired' })).not.toBeInTheDocument();
-    await user.keyboard('{Escape}');
-    expect(listRequests()).toHaveLength(1);
-    expect(Object.fromEntries(listRequests()[0]!.query)).toEqual({ ttlState: 'ALL_LIVE', sort: 'key:asc', limit: '50' });
-  });
-
   it('requires both setup and namespace scope instead of issuing a broad query', async () => {
     const { rerender } = renderWithProviders(<EntriesPage />, { store: fixture.store });
     expect(await screen.findByRole('heading', { name: 'Select a connected setup' })).toBeVisible();

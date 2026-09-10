@@ -25,7 +25,9 @@ export default defineConfig({
         'src/state/**': { branches: 80 },
       },
     },
-    environment: 'jsdom',
+    // jsdom plus the runtime's AbortController/AbortSignal, so `fetch` accepts the product's
+    // streaming signals on every Node version (see test/support/jsdom-runtime-fetch-environment.ts).
+    environment: './test/support/jsdom-runtime-fetch-environment.ts',
     include: ['test/**/*.test.{ts,tsx}'],
     // Each component-test worker owns real loopback HTTP/SSE fixtures. Threads avoid Windows child-
     // process timer variability while this bound prevents unbounded loopback concurrency;

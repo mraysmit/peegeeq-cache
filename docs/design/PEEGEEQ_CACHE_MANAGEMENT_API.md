@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Management API
 
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+
 **Author:** Mark A Ray-Smith Cityline Ltd<br>
 **Date:** 17 August 2026<br>
 **Version:** 1.0 draft
@@ -252,7 +254,7 @@ TLS trust is selected by a server-configured `trustProfileId`; requests cannot s
 
 | Role | Permissions |
 |---|---|
-| `viewer` | Setup metadata, health, capabilities, namespace/entry/counter/lock metadata, database/runtime monitoring, activity, and pub/sub metadata subscription |
+| `viewer` | Setup metadata, health, effective limits, namespace/entry/counter/lock metadata, database/runtime monitoring, activity, and pub/sub metadata subscription |
 | `operator` | Viewer permissions plus setup session management, sensitive reveal, entry/counter mutations, forced lock release, bulk operations, and pub/sub publish |
 
 At least one recognized role is required. Missing identity returns `401`. An authenticated user without the required role returns `403`.
@@ -274,11 +276,7 @@ Response `200`:
   "authenticationMode": "TRUSTED_PROXY",
   "csrfToken": "session-scoped-random-token",
   "sessionIdleExpiresAt": "2026-08-16T11:12:18.000Z",
-  "sessionExpiresAt": "2026-08-16T18:42:18.000Z",
-  "features": {
-    "setupRegistration": true,
-    "sensitiveReveal": true
-  }
+  "sessionExpiresAt": "2026-08-16T18:42:18.000Z"
 }
 ```
 
@@ -311,7 +309,7 @@ Errors use `application/problem+json`:
 | `401` | `AUTHENTICATION_REQUIRED`, `UNTRUSTED_IDENTITY_SOURCE`, `INVALID_IDENTITY`, `INVALID_BOOTSTRAP_TOKEN`, `SESSION_EXPIRED` |
 | `403` | `ROLE_REQUIRED`, `SETUP_ACTION_FORBIDDEN`, `REVEAL_FORBIDDEN`, `CSRF_VALIDATION_FAILED`, `TARGET_FORBIDDEN` |
 | `404` | `SETUP_NOT_FOUND`, `ENTRY_NOT_FOUND`, `COUNTER_NOT_FOUND`, `LOCK_NOT_FOUND`, `SUBSCRIPTION_NOT_FOUND`, `MESSAGE_NOT_FOUND` |
-| `409` | `SETUP_ALREADY_EXISTS`, `SETUP_STATE_CONFLICT`, `CAPABILITY_UNAVAILABLE`, `SET_MODE_NOT_APPLIED`, `BULK_SCOPE_CONFLICT` |
+| `409` | `SETUP_ALREADY_EXISTS`, `SETUP_STATE_CONFLICT`, `SET_MODE_NOT_APPLIED`, `BULK_SCOPE_CONFLICT` |
 | `410` | `BULK_PREVIEW_EXPIRED`, `BULK_PREVIEW_USED`, `SUBSCRIPTION_EXPIRED`, `MESSAGE_EXPIRED` |
 | `412` | `VERSION_MISMATCH` |
 | `413` | `REQUEST_TOO_LARGE`, `PAYLOAD_TOO_LARGE` |
@@ -463,27 +461,6 @@ Response `200`:
   "schemaState": "READY",
   "migrationVersion": "1",
   "latencyMillis": 21,
-  "capabilities": {
-    "namespaceInspection": true,
-    "entryInspection": true,
-    "expiredEntryInspection": true,
-    "entryMutation": true,
-    "counterInspection": true,
-    "counterMutation": true,
-    "lockInspection": true,
-    "forcedLockRelease": true,
-    "bulkEntryDelete": true,
-    "bulkCounterDelete": true,
-    "pubSub": true,
-    "databaseStatistics": true,
-    "entryValueReveal": true,
-    "lockOwnerReveal": true,
-    "pubSubPayloadReveal": true,
-    "batchEntryOperations": true,
-    "valueScan": true,
-    "cacheMetrics": true,
-    "ownerLockOperations": true
-  },
   "limits": {
     "pubSubChannelMaxBytes": 49,
     "pubSubPayloadMaxBytes": 7500,
@@ -492,7 +469,7 @@ Response `200`:
 }
 ```
 
-The server closes the temporary connection after the response. Passwords are never included in logs or validation details. Capability flags come from the temporary connected runtime and its management service; no feature is advertised merely because a route exists.
+The server closes the temporary connection after the response. Passwords are never included in logs or validation details. The limits are derived from the candidate runtime configuration and the server's configured management limits.
 
 ### 7.3 Register and connect setup
 
@@ -586,11 +563,9 @@ Response `204`.
 
 The operation detaches and removes a `UI_SESSION` setup and clears its in-memory credentials. A `CONFIGURED` setup returns `403 SETUP_ACTION_FORBIDDEN`.
 
-### 7.9 Health and capabilities
+### 7.9 Health and effective limits
 
 `GET /api/v1/setups/{setupId}/health`
-
-`GET /api/v1/setups/{setupId}/capabilities`
 
 Role: viewer
 
@@ -606,7 +581,7 @@ Health response:
 }
 ```
 
-Capabilities are explicit booleans matching the test response and are accompanied by effective setup-specific limits. The UI hides unsupported destinations and disables unsupported actions, while the server still rejects direct calls with `409 CAPABILITY_UNAVAILABLE`.
+Effective setup-specific limits (`pubSubChannelMaxBytes`, `pubSubPayloadMaxBytes`, `maximumValueBytes`) are carried by the setup details response (`GET /api/v1/setups/{setupId}`) as its `limits` object; the same `SetupLimits` schema appears on the connection-test response. There is no per-setup capability advertisement: every management section is reachable, and the server decides each request by role.
 
 ## 8. Overview and namespace API
 
@@ -765,7 +740,7 @@ Role: viewer
 
 Response `200`: entry metadata and `ETag: "v14"`.
 
-Query `includeExpired=true` is operator-independent but requires the `expiredEntryInspection` capability. Default is live entries only.
+Query `includeExpired=true` is operator-independent. Default is live entries only.
 
 ### 9.3 Reveal value
 
@@ -1452,7 +1427,9 @@ The existing `CacheService`, `CounterService`, `LockService`, `ScanService`, `Pu
 A new typed `ManagementService` provides database inspection, sensitive reads, and concurrency-safe administrative mutations:
 
 ```java
-AdminCapabilities capabilities();
+Future<ManagementOverview> overview();
+
+Future<ManagementDatabaseMonitoring> databaseMonitoring();
 
 Future<AdminPage<NamespaceStats>> namespaces(NamespaceQuery query);
 
@@ -1532,13 +1509,13 @@ Future<BulkDeleteResult> executeCounterDelete(
 
 `ManagementActionContext` contains the authenticated actor, bounded effective roles, correlation identifier, and sanitized source address. Reveal request types also carry the optional bounded reason. REST authentication middleware constructs the context; callers cannot populate it from request JSON. Embedded non-REST callers must provide an authenticated system or user identity. Sensitive reveals, mutations, and actor-bound bulk operations cannot be invoked without this context.
 
-The `PeeGeeCache` interface gains a backward-compatible default `management()` accessor returning an unsupported service. A PostgreSQL facade may receive a supported management implementation. `capabilities()` reports support before invocation, and unsupported methods return a failed `Future` with a typed unsupported-capability exception.
+`ManagementService` is not part of the library `PeeGeeCache` facade. The management server constructs the PostgreSQL implementation for each managed setup and reaches it through its managed-setup runtime; library consumers never see an unsupported stub, and there is no capability advertisement to consult before invocation.
 
 The completed M3 inspection implementation exposes namespace, entry, counter, and lock metadata plus database and expiry monitoring. `ManagementTtlFilter` is the query vocabulary for `ALL_LIVE`, `PERSISTENT`, `EXPIRING`, and `INCLUDE_EXPIRED`; it is intentionally separate from the observed `ManagementTtl.State` returned in metadata. `NamespaceStats` carries the OpenAPI aggregate fields, while the repository-level `NamespaceDetails` combines those statistics with value-type and TTL-state distributions. Missing entry, counter, and lock detail reads fail with typed `ManagementNotFoundException` resource kinds. Missing or partially installed schemas fail with typed `ManagementReadinessException(SCHEMA_UNAVAILABLE)`.
 
 `PgManagementReadRepository` and `PgManagementReadSql` implement the current read model. Namespace ordering is deterministic for both `namespace:asc` and `entryCount:desc,namespace:asc`; entry pages use key ordering within a namespace; counter and lock pages use qualified namespace/key ordering. Prefixes are literal, expiry comparisons use database time, expired rows are hidden unless the query explicitly includes them, active-lock metadata excludes owner tokens, and entry metadata selects size but never payload content or the internal `last_accessed_at` column. The `EXPIRING_SOON` lock view is the active-lock subset whose lease ends within 60 seconds.
 
-Permission-sensitive database/schema sizes use availability-bearing fields: a PostgreSQL privilege failure is reported as `UNAVAILABLE` with a null value, never as a misleading zero. The original `PgManagementService` constructor creates query-bound cursor pages and advertises the M3 inspection capabilities only. The mutation-aware constructor additionally advertises entry reveal/mutation and delegates to `PgManagementMutationRepository`; reveal, set, expire, persist, touch, and delete are implemented, while counter, lock, and bulk mutation methods remain behind their typed capability boundaries. `PgPeeGeeCache` can receive either supported service through its management-aware constructor while retaining its existing constructor and unsupported fallback.
+Permission-sensitive database/schema sizes use availability-bearing fields: a PostgreSQL privilege failure is reported as `UNAVAILABLE` with a null value, never as a misleading zero. `PgManagementService` has one constructor: it creates query-bound cursor pages, delegates reveals and mutations to `PgManagementMutationRepository`, and requires the audit sink, fingerprinter, clock, and event-id supplier. The management server constructs it per managed setup; it is not reachable through `PgPeeGeeCache`.
 
 The mutation-aware PostgreSQL service receives a required `ManagementAuditSink` and enforces audit reservation before implemented entry, counter, and lock reveal/mutation work reaches PostgreSQL, including calls made without REST. Its bounded default intents fingerprint namespace/key identifiers and never carry entry values, counter payloads, or lock owner tokens. The REST/server boundary provides an fsync-backed bounded journal with idempotent completion, restart recovery to `UNKNOWN`, uncertain-outcome readiness blocking, clean shutdown, and failure-isolated optional telemetry:
 
@@ -1589,7 +1566,7 @@ interface ManagementEventService {
 | Register/test setup dialog | `POST /setups/actions/test`, `POST /setups` |
 | Connect detached setup | `POST /setups/{id}/connect` |
 | Detach/forget setup | `POST /setups/{id}/detach`, `DELETE /setups/{id}` |
-| Setup details/capabilities | `GET /setups/{id}`, `/health`, `/capabilities` |
+| Setup details/limits | `GET /setups/{id}`, `/health` |
 | Overview cards and namespace summary | `GET /setups/{id}/overview`, `/namespaces` |
 | Overview live updates | `GET /setups/{id}/sse/metrics`, `/ws/monitoring` |
 | Namespace table and export | `GET /namespaces`, `GET /namespaces/export` |
@@ -1604,7 +1581,7 @@ interface ManagementEventService {
 | Monitoring | database/runtime endpoints and metrics SSE |
 | Notification drawer | monitoring WebSocket |
 | Recent activity | `GET /activity` and `activity.created` events |
-| Settings connectivity | `/session`, setup health, capabilities, live connection state |
+| Settings connectivity | `/session`, setup health, setup-details limits, live connection state |
 | Display preferences | Browser-local; no server API |
 
 Every control in the approved mockups is covered. V1 intentionally has no API for database/schema drop, namespace-wide multi-resource purge, bulk lock release, lock acquisition/renewal, or persistent user preferences.
@@ -1658,7 +1635,7 @@ Status: **M0-M11 BACKEND AND U0-U11 PRODUCTION UI COMPLETE**. M0-M8 provide the 
 
 Ownership is:
 
-- `peegee-cache-api`: management service, immutable request/result models, query TTL vocabulary, shared cursor codec/scope/position types, typed not-found/readiness/mutation outcomes, action context, capabilities, and audit-sink contract;
+- `peegee-cache-api`: management service, immutable request/result models, query TTL vocabulary, shared cursor codec/scope/position types, typed not-found/readiness/mutation outcomes, action context, and audit-sink contract;
 - `peegee-cache-pg`: implemented parameterized inspection SQL/read service plus M4 entry/counter/lock reveal and atomic version-checked mutation behavior, with no REST dependency;
 - `peegee-cache-rest`: implemented OpenAPI/protocol rules, shared cursors, durable authoritative audit, security, setup/server lifecycle, all read/reveal/administration/pub-sub/live routes, mandatory telemetry, runnable composition, and final acceptance;
 - `peegee-cache-management-ui`: React client, generated/validated DTOs, local-only display preferences, sensitive-state isolation, and accessible operator workflows;
@@ -1697,7 +1674,7 @@ Before the first OpenAPI file is accepted, Phase M0 produces the reviewed [manag
 - authentication mode, minimum role, management-session, Origin, and CSRF requirements, including the sole local-bootstrap exception;
 - path, query, header, cookie, content-type, accept, and request-size rules;
 - complete request schema and every success response schema/status/header;
-- endpoint-specific problem codes, capability checks, rate/resource limits, audit requirement, and retry/idempotency behavior;
+- endpoint-specific problem codes, rate/resource limits, audit requirement, and retry/idempotency behavior;
 - whether the route can expose sensitive data and its required cache/redaction policy.
 
 The same closure pass replaces remaining prose-only aggregate models with component schemas, explicitly fixes touch at a stable version, and resolves wildcard-precondition outcomes. An OpenAPI completeness test compares this reviewed manifest with the document before route implementation; passing YAML syntax alone is insufficient.

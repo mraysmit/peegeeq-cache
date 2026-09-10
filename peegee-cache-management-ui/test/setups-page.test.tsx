@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentSessionSchema } from '@src/api/protocol-schemas';
 import { SessionClient, type BrowserSession } from '@src/api/session-client';
 import {
-  setupCapabilitiesSchema,
   setupConnectionTestSchema,
   setupDetailsSchema,
   setupHealthSchema,
@@ -21,7 +20,6 @@ const session = currentSessionSchema.parse({
   user: 'setup-operator', roles: ['viewer', 'operator'], serverVersion: '0.1.0-SNAPSHOT', apiVersion: 'v1',
   authenticationMode: 'LOCAL_TOKEN', csrfToken: 'setups-page-csrf-token-with-forty-five-characters',
   sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z',
-  features: { setupRegistration: true, sensitiveReveal: true },
 });
 // The shell receives the session without its CSRF token (BrowserSession); build it the same way.
 const { csrfToken: _csrfToken, ...operator }: typeof session = session;
@@ -33,18 +31,10 @@ const primary = setupSummarySchema.parse({
   lastHealth: { status: 'UP', latencyMillis: 7, checkedAt: '2099-01-01T00:00:00Z' },
 });
 
-const capabilityFlags = {
-  namespaceInspection: true, entryInspection: true, expiredEntryInspection: true, entryMutation: true,
-  counterInspection: true, counterMutation: true, lockInspection: true, forcedLockRelease: true,
-  bulkEntryDelete: true, bulkCounterDelete: true, pubSub: true, databaseStatistics: true,
-  entryValueReveal: true, lockOwnerReveal: true, pubSubPayloadReveal: true, batchEntryOperations: true,
-  valueScan: true, cacheMetrics: true, ownerLockOperations: true,
-};
 const limits = { pubSubChannelMaxBytes: 63, pubSubPayloadMaxBytes: 8_000, maximumValueBytes: 1_000_000 };
 const connectionTest = setupConnectionTestSchema.parse({
-  databaseReachable: true, schemaState: 'READY', migrationVersion: '1', latencyMillis: 8, capabilities: capabilityFlags, limits,
+  databaseReachable: true, schemaState: 'READY', migrationVersion: '1', latencyMillis: 8, limits,
 });
-const capabilities = setupCapabilitiesSchema.parse({ migrationVersion: '1', capabilities: capabilityFlags, limits });
 const health = setupHealthSchema.parse({
   status: 'UP', schemaReady: true, latencyMillis: 7, checkedAt: '2099-01-01T00:00:00Z', detail: 'PostgreSQL and cache schema are ready',
 });
@@ -56,6 +46,7 @@ const detailsOf = (setup: typeof primary) => setupDetailsSchema.parse({
     writeBehindMaxRetries: 3, writeBehindShutdownDrainTimeoutMillis: 5_000, pubSubChannelPrefix: 'peegee_cache', pubSubEnabled: true,
     schemaBootstrapMode: 'EXTERNAL', telemetryMode: 'NOOP', poolMaxSize: 3,
   },
+  limits,
   registeredAt: '2099-01-01T00:00:00Z', connectedAt: '2099-01-01T00:00:05Z',
 });
 
@@ -109,7 +100,6 @@ describe('functional setup management page', () => {
         const rest = setupMatch[2];
         if (request.method === 'GET' && rest === undefined) return respond.json(200, detailsOf(setup));
         if (request.method === 'GET' && rest === 'health') return respond.json(200, health);
-        if (request.method === 'GET' && rest === 'capabilities') return respond.json(200, capabilities);
         if (request.method === 'POST' && rest === 'test') return respond.json(200, connectionTest);
         if (request.method === 'POST' && rest === 'detach') {
           registry = registry.map((candidate) => (candidate.setupId === setupId ? setupSummarySchema.parse({ ...candidate, state: 'DETACHED' }) : candidate));
@@ -157,7 +147,7 @@ describe('functional setup management page', () => {
 
     await user.click(within(row as HTMLElement).getByRole('button', { name: 'Use setup' }));
     await vi.waitFor(() => expect(selected).toEqual(['primary-cache']));
-    expect(requestsTo((request) => request.path.endsWith('/capabilities'))).toHaveLength(1);
+    expect(requestsTo((request) => request.method !== 'GET')).toHaveLength(0);
 
     await user.click(within(row as HTMLElement).getByRole('button', { name: 'Details' }));
     const dialog = await screen.findByRole('dialog', { name: 'Setup details' });
@@ -165,7 +155,7 @@ describe('functional setup management page', () => {
     expect(within(dialog).getByText('db.example.test:5432')).toBeVisible();
   });
 
-  it('presents authoritative health, capabilities, and limits in setup details', async () => {
+  it('presents authoritative health and effective limits in setup details', async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Details' }));
@@ -173,8 +163,7 @@ describe('functional setup management page', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Setup details' });
     expect(await within(dialog).findByRole('heading', { name: 'Database health' })).toBeVisible();
     expect(within(dialog).getByText('PostgreSQL and cache schema are ready')).toBeVisible();
-    expect(within(dialog).getByRole('heading', { name: 'Capabilities' })).toBeVisible();
-    expect(within(dialog).getByText('Namespace inspection')).toBeVisible();
+    expect(within(dialog).getByRole('heading', { name: 'Effective limits' })).toBeVisible();
     expect(within(dialog).getByText('976 KiB')).toBeVisible();
   });
 

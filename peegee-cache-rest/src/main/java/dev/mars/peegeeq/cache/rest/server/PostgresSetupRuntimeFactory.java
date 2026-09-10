@@ -54,14 +54,6 @@ public final class PostgresSetupRuntimeFactory implements SetupRuntimeFactory {
             SetupTargetPolicy policy,
             TargetAddressResolver resolver,
             TrustProfileCertificateResolver trustProfiles,
-            Duration connectTimeout) {
-        this(policy, resolver, trustProfiles, connectTimeout, null, null, null, null);
-    }
-
-    public PostgresSetupRuntimeFactory(
-            SetupTargetPolicy policy,
-            TargetAddressResolver resolver,
-            TrustProfileCertificateResolver trustProfiles,
             Duration connectTimeout,
             ManagementAuditSink auditSink,
             ManagementAuditFingerprinter auditFingerprinter,
@@ -75,17 +67,10 @@ public final class PostgresSetupRuntimeFactory implements SetupRuntimeFactory {
                 || connectTimeout.toMillis() > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("connectTimeout must be positive and fit milliseconds");
         }
-        boolean administrationEnabled = auditSink != null || auditFingerprinter != null
-                || auditClock != null || auditEventIdSupplier != null;
-        if (administrationEnabled && (auditSink == null || auditFingerprinter == null
-                || auditClock == null || auditEventIdSupplier == null)) {
-            throw new IllegalArgumentException(
-                    "Administration audit dependencies must be configured together");
-        }
-        this.auditSink = auditSink;
-        this.auditFingerprinter = auditFingerprinter;
-        this.auditClock = auditClock;
-        this.auditEventIdSupplier = auditEventIdSupplier;
+        this.auditSink = Objects.requireNonNull(auditSink, "auditSink");
+        this.auditFingerprinter = Objects.requireNonNull(auditFingerprinter, "auditFingerprinter");
+        this.auditClock = Objects.requireNonNull(auditClock, "auditClock");
+        this.auditEventIdSupplier = Objects.requireNonNull(auditEventIdSupplier, "auditEventIdSupplier");
     }
 
     @Override
@@ -138,27 +123,18 @@ public final class PostgresSetupRuntimeFactory implements SetupRuntimeFactory {
                 runtimeConfiguration.schemaBootstrapMode());
 
         return PeeGeeCaches.create(runtime, pool, bootstrap)
-                .map(manager -> (ManagedSetupRuntime) (auditSink == null
-                        ? new PostgresManagedSetupRuntime(
-                                manager,
-                                pool,
-                                runtime,
-                                definition.schema(),
-                                runtimeConfiguration.schemaBootstrapMode(),
-                                definition.setupId(),
-                                cursorKey)
-                        : new PostgresManagedSetupRuntime(
-                                manager,
-                                pool,
-                                runtime,
-                                definition.schema(),
-                                runtimeConfiguration.schemaBootstrapMode(),
-                                definition.setupId(),
-                                cursorKey,
-                                auditSink,
-                                auditFingerprinter,
-                                auditClock,
-                                auditEventIdSupplier)))
+                .map(manager -> (ManagedSetupRuntime) new PostgresManagedSetupRuntime(
+                        manager,
+                        pool,
+                        runtime,
+                        definition.schema(),
+                        runtimeConfiguration.schemaBootstrapMode(),
+                        definition.setupId(),
+                        cursorKey,
+                        auditSink,
+                        auditFingerprinter,
+                        auditClock,
+                        auditEventIdSupplier))
                 .recover(failure -> pool.close()
                         .recover(ignored -> Future.succeededFuture())
                         .compose(ignored -> runtime.close().recover(closeFailure -> Future.succeededFuture()))

@@ -35,26 +35,18 @@ class SetupRegistryTest {
     }
 
     @Test
-    void connectionTestReportsCapabilitiesFromTheTemporaryRuntime() throws Exception {
+    void connectionTestReportsEffectiveLimitsForTheCandidateSetup() throws Exception {
         RecordingFactory factory = new RecordingFactory();
         SetupRegistry registry = new SetupRegistry(factory, reference -> bytes("configured-secret"));
 
         SetupConnectionTest result = await(registry.test(
                 definition("candidate"), SetupSecret.owned(bytes("ui-secret"))));
 
-        assertFalse(result.capabilities().namespaceInspection());
-        assertFalse(result.capabilities().entryInspection());
-        assertFalse(result.capabilities().entryMutation());
-        assertFalse(result.capabilities().counterMutation());
-        assertFalse(result.capabilities().entryValueReveal());
-        assertFalse(result.capabilities().lockOwnerReveal());
-        assertFalse(result.capabilities().pubSub());
-        assertFalse(result.capabilities().pubSubPayloadReveal());
-        assertFalse(result.capabilities().batchEntryOperations());
-        assertFalse(result.capabilities().valueScan());
-        assertFalse(result.capabilities().cacheMetrics());
-        assertFalse(result.capabilities().ownerLockOperations());
+        assertTrue(result.databaseReachable());
+        assertEquals(SetupSchemaState.READY, result.schemaState());
+        assertEquals(7_500, result.limits().pubSubPayloadMaxBytes());
         assertEquals(10_485_760, result.limits().maximumValueBytes());
+        assertTrue(result.limits().pubSubChannelMaxBytes() > 0);
     }
 
     @Test

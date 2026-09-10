@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Management API Implementation Plan
 
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+
 **Status:** Phases M0–M11 complete
 
 **Date:** 17 August 2026
@@ -87,7 +89,7 @@ No dependency points from the cache library modules into REST or UI code.
 
 | Module | New responsibility |
 |---|---|
-| `peegee-cache-api` | `ManagementService`, immutable queries/results, typed mutation outcomes, reveal DTOs, action context, capabilities, and audit-sink SPI |
+| `peegee-cache-api` | `ManagementService`, immutable queries/results, typed mutation outcomes, reveal DTOs, action context, and audit-sink SPI |
 | `peegee-cache-core` | Pure management validation or safe transformation helpers only when shared below the PostgreSQL/REST boundary |
 | `peegee-cache-pg` | Parameterized inspection SQL, atomic outcome-producing mutations, row mapping, and PostgreSQL management service |
 | `peegee-cache-runtime` | Later lifecycle/configuration wiring of the PostgreSQL management service; no HTTP/security ownership |
@@ -183,7 +185,7 @@ Fixtures remain in the lowest reusable module that does not create a production 
 | M4 | COMPLETE | Atomic PostgreSQL mutation and reveal model |
 | M5 | COMPLETE | Audit, authentication, CSRF/origin, target policy, and rate-limit primitives |
 | M6 | COMPLETE | Setup registry and REST server lifecycle |
-| M7 | COMPLETE | Session, setup, health, capability, and read-only REST endpoints |
+| M7 | COMPLETE | Session, setup, health, and read-only REST endpoints (capability route removed 10 September 2026) |
 | M8 | COMPLETE | Reveal, mutation, and bulk REST endpoints |
 | M9 | COMPLETE | Pub/sub, SSE, and WebSocket transports |
 | M10 | COMPLETE | Monitoring, observability, packaging, compatibility, and final acceptance |
@@ -197,7 +199,7 @@ Objective: remove contradictory inputs before code or OpenAPI generation.
 Evidence artifacts:
 
 - [PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md](PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md) records the accepted sibling-module Maven topology and REST configuration/secret-reference invariants.
-- [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) closes all 60 exact V1 operations and their security, schema, status, header, error, capability, limit, audit, and retry contracts.
+- [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) closes all 59 exact V1 operations and their security, schema, status, header, error, limit, audit, and retry contracts.
 
 Tasks:
 
@@ -206,7 +208,7 @@ Tasks:
 3. add `peegee-cache-rest` and `peegee-cache-management-ui` module/build decisions to the parent architecture without implementing behavior;
 4. decide whether the UI is a Maven child module or a frontend build invoked by `peegee-cache-rest`, while preserving one reproducible root build;
 5. document REST runtime configuration records and secret-reference shapes without embedding environment defaults in library code;
-6. produce a complete reviewed operation manifest containing the exact method/path, security rules, schemas, statuses, headers, errors, capabilities, limits, audit behavior, and retry semantics for every route;
+6. produce a complete reviewed operation manifest containing the exact method/path, security rules, schemas, statuses, headers, errors, limits, audit behavior, and retry semantics for every route;
 7. replace prose-only aggregate models and ambiguous mutation behavior, including touch version stability and wildcard-precondition outcomes, before OpenAPI generation;
 8. verify that the authoritative project plan continues to track backend Phase 8.2 separately from browser-console Phase 8.3; the backend closed before Phase 8.3 was independently authorized.
 
@@ -315,7 +317,7 @@ M1.1 completion evidence:
 
 Objective: add a complete API surface capable of representing the HTTP concurrency and audit contract without follow-up inference.
 
-Status: **COMPLETE** — immutable management models, capability-aware service/fallback contracts, and the keyed audit SPI are implemented in `peegee-cache-api` without changing existing consumer requirements.
+Status: **COMPLETE** — immutable management models, the service contract, and the keyed audit SPI are implemented (the capability advertisement and the unsupported fallback were removed on 10 September 2026) in `peegee-cache-api` without changing existing consumer requirements.
 
 ### M2.1 Immutable model validation
 
@@ -330,15 +332,12 @@ Write failing unit tests before each model family:
 - counter set/adjust and exact-version requirements;
 - bulk preview/confirmation and force-release request invariants;
 - permission-aware monitoring result sections;
-- capabilities and effective setup limits.
+- effective setup limits.
 
 ### M2.2 Service and fallback
 
 First red tests:
 
-- `PeeGeeCache.management()` remains binary/source compatible through a default method;
-- the default service reports unsupported capabilities;
-- unsupported operations return failed Vert.x futures with the typed capability exception;
 - every sensitive or mutation method requires `ManagementActionContext`;
 - no metadata DTO can hold cache values, payloads, owner tokens, credentials, or raw secret material.
 
@@ -363,8 +362,8 @@ Phase gate:
 
 M2 completion evidence:
 
-- The management model families validate pagination/query bounds, mutation/version combinations, TTL modes, reveal snapshots, bulk confirmations, monitoring availability, capabilities, and effective limits.
-- `PeeGeeCache.management()` is a compatible default method. Its fallback reports unsupported capabilities and returns failed Vert.x futures with `ManagementCapabilityException`; privileged and sensitive operations require `ManagementActionContext`.
+- The management model families validate pagination/query bounds, mutation/version combinations, TTL modes, reveal snapshots, bulk confirmations, monitoring availability, and effective limits.
+- Privileged and sensitive operations require `ManagementActionContext`. (`PeeGeeCache.management()` and the unsupported fallback were removed on 10 September 2026; the management server owns the service instance.)
 - The audit SPI accepts externally resolved rotation-key references, produces versioned HMAC-SHA-256 fingerprints truncated to a configured 128–256 bits, prevents raw sensitive identifiers from entering the default intent DTO, and distinguishes audit failures from optional telemetry failures.
 - Terminal audit completion is idempotent for the same outcome and rejects a conflicting second terminal outcome.
 - The `peegee-cache-api` suite passes 58 tests across 9 suites, including 24 focused M2 tests, with zero failures/errors/skips.
@@ -445,7 +444,7 @@ Test order:
 2. unavailable privileged statistics return `UNAVAILABLE`, never zero;
 3. expiry backlog and oldest lag use database time;
 4. custom schema identifiers are safely rendered through existing schema validation;
-5. partial/missing schema produces typed capability/readiness failures.
+5. partial/missing schema produces typed readiness failures.
 
 Implemented behavior:
 
@@ -458,12 +457,11 @@ Implemented behavior:
 
 Implemented behavior:
 
-- `PgManagementService` advertises namespace, entry, counter, lock, database-monitoring, and expiry-monitoring capabilities and turns repository rows into bounded `AdminPage` results.
+- `PgManagementService` turns repository rows into bounded `AdminPage` results.
 - Cursor scope binds endpoint, setup, namespace, normalized filters, and sort. The versioned binary HMAC-SHA-256 payload also carries issue time and a typed keyset position; authentication keys are at least 256 bits, the payload is bounded/canonical, and decoded values remain prepared-query data rather than SQL.
 - The REST `ManagementCursorCodec` delegates to the shared API codec and maps its typed failures to `INVALID_CURSOR` or `CURSOR_SCOPE_MISMATCH`.
 - `peegee-cache-rest` now declares the API dependency required by that adapter and excludes the API's transitive `vertx-core`; the REST module's existing aligned Vert.x/Jackson dependency set remains authoritative for dependency-convergence checks.
-- `PgPeeGeeCache` retains its existing constructor and adds management-service injection. Without an injected service it preserves the compatible unsupported fallback.
-- Reveals, mutations, and bulk operations remain capability failures. M4 is not started, and no route, handler, authentication, or setup lifecycle was introduced by M3.
+- M4 is not started, and no route, handler, authentication, or setup lifecycle was introduced by M3. (The management-service injection into `PgPeeGeeCache` was later removed; see the 10 September 2026 note.)
 
 M3 change-set inventory:
 
@@ -519,7 +517,7 @@ Implemented behavior:
 - All four set modes produce `APPLIED`, `CONDITION_NOT_MET`, `NOT_FOUND`, or `VERSION_MISMATCH` from the mutation statement that observes/applies the condition. Applied statements return creation state, committed version, timestamps, size, and TTL metadata without a diagnostic follow-up read.
 - `PRESERVE_EXISTING`, `USE_DEFAULT`, `REPLACE`, and `REMOVE` are applied atomically with the value. `ONLY_IF_ABSENT` can reclaim an expired physical row and resets it to a newly created version-1 entry.
 - Exact-version statements lock the live row before deciding the outcome. A real concurrent PostgreSQL test proves one version-2 winner, one stale mismatch, and agreement between returned metadata and the committed value/version.
-- The mutation-aware `PgManagementService` requires a successful audit reservation before reveal or set work reaches PostgreSQL, completes safe fingerprint-only outcomes, and retains the existing read-only constructor/capability behavior. This is the M4.1 service integration boundary; the durable sink lifecycle, recovery, and readiness work remains in M4.5.
+- The mutation-aware `PgManagementService` requires a successful audit reservation before reveal or set work reaches PostgreSQL, completes safe fingerprint-only outcomes, This is the M4.1 service integration boundary; the durable sink lifecycle, recovery, and readiness work remains in M4.5.
 
 Evidence:
 
@@ -752,11 +750,11 @@ Phase gate:
 - test logs contain no credentials or tokens;
 - REST module suite and full reactor green.
 
-## 15. Phase M7 — Session, setup lifecycle, health, capability, and read routes
+## 15. Phase M7 — Session, setup lifecycle, health, and read routes
 
 Objective: implement safe reads and the separately guarded setup-lifecycle mutations as vertical HTTP slices using the running server.
 
-Completion evidence (23 August 2026): real-socket tests cover local-token and trusted-proxy sessions, per-request trusted identity revalidation, setup reads, health/capabilities, and every setup lifecycle action. Real TLS PostgreSQL coverage exercises an accurate bounded database overview, database and runtime monitoring, namespace list/detail/export, entry/counter/lock metadata list/detail, ETags, decimal-string wire values, exact TTL buckets, canonical identifiers, filtering/sorting, and owner/value/credential exclusion. Database monitoring combines exact live/expired/backlog counts with permission-aware physical and PostgreSQL activity statistics, and counts setup connections by the setup-specific `application_name`; unavailable observations never become zero. Runtime monitoring uses bounded OpenAPI operation names, idempotent request completion, cumulative error/latency aggregates, explicit unavailable pool counters, configured pool capacity, durable-audit readiness input, and runtime-owned sweeper state. Activity uses a bounded, thread-safe, newest-first process-local store with setup scoping, exclusive event-ID pagination, exact namespace/action/outcome filters, detached-setup reads, and lifecycle events emitted only after a durable terminal audit outcome. Audit-outcome failure returns `AUDIT_OUTCOME_UNAVAILABLE` and blocks later privileged setup work until readiness recovers. The reviewed 26-operation M7 inventory exactly matches OpenAPI. Protocol and real-socket tests cover fixed-path precedence, canonical/NUL/size identifier rejection, media negotiation and request-size failures, decimal-string 64-bit fields, metadata redaction, and explicit monitoring unavailability. Central HTTP completion logging and telemetry expose only method, bounded surface, status, and latency, are idempotent, and isolate exporter failure. The complete API/PostgreSQL/REST gate passes 379 tests (62 API, 236 PostgreSQL, 81 REST) with zero failures, errors, or skips under OpenJDK 26.0.2.
+Completion evidence (23 August 2026): real-socket tests cover local-token and trusted-proxy sessions, per-request trusted identity revalidation, setup reads, health, and every setup lifecycle action. Real TLS PostgreSQL coverage exercises an accurate bounded database overview, database and runtime monitoring, namespace list/detail/export, entry/counter/lock metadata list/detail, ETags, decimal-string wire values, exact TTL buckets, canonical identifiers, filtering/sorting, and owner/value/credential exclusion. Database monitoring combines exact live/expired/backlog counts with permission-aware physical and PostgreSQL activity statistics, and counts setup connections by the setup-specific `application_name`; unavailable observations never become zero. Runtime monitoring uses bounded OpenAPI operation names, idempotent request completion, cumulative error/latency aggregates, explicit unavailable pool counters, configured pool capacity, durable-audit readiness input, and runtime-owned sweeper state. Activity uses a bounded, thread-safe, newest-first process-local store with setup scoping, exclusive event-ID pagination, exact namespace/action/outcome filters, detached-setup reads, and lifecycle events emitted only after a durable terminal audit outcome. Audit-outcome failure returns `AUDIT_OUTCOME_UNAVAILABLE` and blocks later privileged setup work until readiness recovers. The reviewed 26-operation M7 inventory exactly matches OpenAPI. Protocol and real-socket tests cover fixed-path precedence, canonical/NUL/size identifier rejection, media negotiation and request-size failures, decimal-string 64-bit fields, metadata redaction, and explicit monitoring unavailability. Central HTTP completion logging and telemetry expose only method, bounded surface, status, and latency, are idempotent, and isolate exporter failure. The complete API/PostgreSQL/REST gate passes 379 tests (62 API, 236 PostgreSQL, 81 REST) with zero failures, errors, or skips under OpenJDK 26.0.2.
 
 For each route, follow this order:
 
@@ -765,7 +763,7 @@ For each route, follow this order:
 3. management-session and Origin validation;
 4. CSRF validation for every state-changing route other than the explicit local-bootstrap exception;
 5. path/query/header/body/content-negotiation/size validation;
-6. rate/resource-limit and capability behavior;
+6. rate/resource-limit behavior;
 7. audit reservation/outcome behavior when the route is a mutation;
 8. successful response and headers;
 9. typed service failure mapping and resource cleanup;
@@ -776,7 +774,7 @@ Read/session route slices:
 
 - local session bootstrap/logout and `GET /session`, with the bootstrap exception tested independently;
 - setup list and details;
-- health and capabilities with effective limits and migration version `1`;
+- health, and setup details with effective limits and migration version `1`;
 - overview and namespace list/detail/export;
 - entry metadata list/detail;
 - counter and lock list/detail;
@@ -939,7 +937,7 @@ Phase gate:
 
 Objective: finish the backend as an operable product component rather than a collection of routes.
 
-Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chromium verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, static-route isolation, backend facade parity, and 18 independently degraded runtime capability paths. The merged Playwright catalogue declares 557 desktop-only scenarios and passed 557/557 plus all three runnable-artifact/evidence checks across the complete PostgreSQL 15-18 matrix on 5 September 2026.
+Status: **COMPLETE** — mandatory Micrometer/Prometheus observability covers bounded HTTP, security, audit, resource, lifecycle, and PostgreSQL signals, while one shared sampler per setup prevents metrics clients from multiplying database work. The Java 21 shaded artifact starts with one SLF4J provider, packaged OpenAPI/static resources, readiness, and a Prometheus scrape. Environment configuration supports fail-closed `LOCAL_TOKEN` and explicit `TRUSTED_PROXY` modes. Real Chromium verifies local and trusted-proxy sessions, storage exclusion, no-store responses, server authorization, session expiry, cross-site rejection, static-route isolation, backend facade parity. The merged Playwright catalogue declares 557 desktop-only scenarios and passed 557/557 plus all three runnable-artifact/evidence checks across the complete PostgreSQL 15-18 matrix on 5 September 2026.
 
 ### M10.1 Mandatory observability
 

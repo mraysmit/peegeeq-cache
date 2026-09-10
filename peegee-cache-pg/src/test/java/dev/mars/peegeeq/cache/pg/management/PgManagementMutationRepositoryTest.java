@@ -19,7 +19,6 @@ import dev.mars.peegeeq.cache.api.management.ManagementAuditTerminalOutcome;
 import dev.mars.peegeeq.cache.api.management.ManagementBulkDeleteException;
 import dev.mars.peegeeq.cache.api.management.ManagementCursorCodec;
 import dev.mars.peegeeq.cache.api.management.ManagementCacheSetRequest;
-import dev.mars.peegeeq.cache.api.management.ManagementCapability;
 import dev.mars.peegeeq.cache.api.management.ManagementCounterSetRequest;
 import dev.mars.peegeeq.cache.api.management.ManagementCounterAdjustRequest;
 import dev.mars.peegeeq.cache.api.management.ManagementCounterException;
@@ -1039,8 +1038,7 @@ class PgManagementMutationRepositoryTest {
     }
 
     @Test
-    void counterCapabilityIsAdvertisedAndAuditFailureBlocksEveryMutation(VertxTestContext context) {
-        assertTrue(service.capabilities().supports(ManagementCapability.COUNTER_MUTATION));
+    void auditFailureBlocksEveryCounterMutation(VertxTestContext context) {
         ManagementAuditSink unavailableAudit = new ManagementAuditSink() {
             @Override
             public Future<ManagementAuditReservation> reserveIntent(ManagementAuditIntent intent) {
@@ -1173,8 +1171,6 @@ class PgManagementMutationRepositoryTest {
                 })
                 .onSuccess(missing -> context.verify(() -> {
                     assertEquals(ManagementMutationOutcome.NOT_FOUND, missing.outcome());
-                    assertTrue(service.capabilities().supports(
-                            ManagementCapability.FORCE_LOCK_RELEASE));
                     context.completeNow();
                 }))
                 .onFailure(context::failNow);

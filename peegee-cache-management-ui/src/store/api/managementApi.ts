@@ -14,7 +14,7 @@ import { managementBaseQuery } from './apiBase';
 export const managementApi = createApi({
   reducerPath: 'managementApi',
   baseQuery: managementBaseQuery,
-  tagTypes: ['Setup', 'Capabilities', 'Overview', 'Monitoring', 'Activity', 'Namespace', 'Entry', 'Counter', 'Lock', 'Subscription'],
+  tagTypes: ['Setup', 'Overview', 'Monitoring', 'Activity', 'Namespace', 'Entry', 'Counter', 'Lock', 'Subscription'],
   refetchOnReconnect: true,
   endpoints: () => ({}),
 });

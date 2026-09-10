@@ -13,37 +13,39 @@ class ManagementBrowserSelectionTest {
 
     @Test
     void retainsTheCompleteCatalogueWhenNoScenarioSelectionIsConfigured() {
-        List<ManagementBrowserCase> catalogue = ManagementCapabilityBrowserIT.scenarios();
+        List<ManagementBrowserCase> catalogue = ManagementCounterBrowserIT.scenarios();
 
         assertEquals(catalogue, ManagementBrowserSelection.select(catalogue, ""));
     }
 
     @Test
     void selectsOnlyExplicitCommaSeparatedScenarioIdsInCatalogueOrder() {
-        String configured = "PW-CAPABILITY-010, PW-CAPABILITY-008";
+        List<ManagementBrowserCase> catalogue = ManagementCounterBrowserIT.scenarios();
+        String first = catalogue.get(0).id();
+        String second = catalogue.get(1).id();
+        String configured = second + ", " + first;
 
-        assertEquals(List.of("PW-CAPABILITY-008", "PW-CAPABILITY-010"),
-                ManagementBrowserSelection.select(
-                                ManagementCapabilityBrowserIT.scenarios(), configured).stream()
+        assertEquals(List.of(first, second),
+                ManagementBrowserSelection.select(catalogue, configured).stream()
                         .map(ManagementBrowserCase::id)
                         .toList());
         assertEquals(List.of(),
                 ManagementBrowserSelection.select(
-                        ManagementCounterBrowserIT.scenarios(), configured));
+                        ManagementLockBrowserIT.scenarios(), configured));
         assertFalse(ManagementBrowserSelection.classHasRequestedScenario(
-                ManagementCounterBrowserIT.class, configured));
+                ManagementLockBrowserIT.class, configured));
         assertTrue(ManagementBrowserSelection.classHasRequestedScenario(
-                ManagementCapabilityBrowserIT.class, configured));
+                ManagementCounterBrowserIT.class, configured));
     }
 
     @Test
     void rejectsBlankUnknownAndMalformedScenarioSelections() {
-        assertThrows(IllegalArgumentException.class,
-                () -> ManagementBrowserSelection.select(
-                        ManagementCapabilityBrowserIT.scenarios(), "PW-CAPABILITY-999"));
+        List<ManagementBrowserCase> catalogue = ManagementCounterBrowserIT.scenarios();
 
         assertThrows(IllegalArgumentException.class,
-                () -> ManagementBrowserSelection.select(
-                        ManagementCapabilityBrowserIT.scenarios(), "capability-8"));
+                () -> ManagementBrowserSelection.select(catalogue, "PW-COUNTER-999"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> ManagementBrowserSelection.select(catalogue, "counter-8"));
     }
 }

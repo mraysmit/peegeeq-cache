@@ -5,6 +5,5 @@ public record SetupConnectionTest(
         SetupSchemaState schemaState,
         String migrationVersion,
         long latencyMillis,
-        SetupCapabilities.Features capabilities,
-        SetupCapabilities.Limits limits) {
+        SetupLimits limits) {
 }

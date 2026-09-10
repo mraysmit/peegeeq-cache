@@ -275,7 +275,7 @@ function ValuePanel({ canReveal, copy, copyStatus, reason, reveal, revealed, rev
                 <Form.Item htmlFor="reveal-reason" label="Reveal reason (optional)"><Input id="reveal-reason" maxLength={240} minLength={3} onChange={(event) => setReason(event.target.value)} style={{ width: 260 }} value={reason} /></Form.Item>
                 <Form.Item><Button disabled={revealing} htmlType="submit" type="primary">{revealing ? 'Revealing…' : 'Reveal value'}</Button></Form.Item>
               </Form>
-            ) : <Text>Operator permission and sensitive-reveal capability are required.</Text>}
+            ) : <Text>Operator permission is required.</Text>}
           </div>
         ) : (
           <>

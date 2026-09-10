@@ -268,7 +268,7 @@ audit evidence that exactly one setup registration occurred. A source-policy gat
 
 An isolated management application, session, or setup is allowed only when the behavior under test changes
 global lifecycle state: empty-registry and setup registration, connect/detach/forget, authentication
-session deletion or expiry, advertised-capability variants, trusted-proxy identity variants, or
+session deletion or expiry, trusted-proxy identity variants, or
 deterministic server shutdown. These tests still use the suite Chromium process with fresh browser
 contexts. They must select the isolated server fixture explicitly; ordinary
 read, mutation, accessibility, privacy, navigation, and monitoring scenarios must use the shared

@@ -2,37 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { SETUP_SCOPE_STORAGE_KEY } from '@src/state/scope-storage';
 import { useSetupScopeStore } from '@src/state/scope-store';
-import type { SetupCapabilities } from '@src/api/setup-schemas';
-
-const capabilities: SetupCapabilities = {
-  migrationVersion: '1',
-  capabilities: {
-    namespaceInspection: true,
-    entryInspection: true,
-    expiredEntryInspection: true,
-    entryMutation: true,
-    counterInspection: true,
-    counterMutation: true,
-    lockInspection: true,
-    forcedLockRelease: true,
-    bulkEntryDelete: true,
-    bulkCounterDelete: true,
-    pubSub: true,
-    databaseStatistics: true,
-    entryValueReveal: true,
-    lockOwnerReveal: true,
-    pubSubPayloadReveal: true,
-    batchEntryOperations: true,
-    valueScan: true,
-    cacheMetrics: true,
-    ownerLockOperations: true,
-  },
-  limits: {
-    pubSubChannelMaxBytes: 63,
-    pubSubPayloadMaxBytes: 7_500,
-    maximumValueBytes: 1_048_576,
-  },
-};
 
 describe('setup and namespace scope transitions', () => {
   beforeEach(() => {
@@ -42,7 +11,7 @@ describe('setup and namespace scope transitions', () => {
 
   it('persists a selected namespace only underneath its setup', () => {
     const scope = useSetupScopeStore.getState();
-    scope.select('primary-cache', capabilities);
+    scope.select('primary-cache');
     useSetupScopeStore.getState().selectNamespace('orders/eu');
 
     expect(useSetupScopeStore.getState()).toMatchObject({
@@ -54,24 +23,23 @@ describe('setup and namespace scope transitions', () => {
     );
   });
 
-  it('retains namespace during same-setup capability revalidation', () => {
-    useSetupScopeStore.getState().select('primary-cache', capabilities);
+  it('retains namespace when the same setup is selected again', () => {
+    useSetupScopeStore.getState().select('primary-cache');
     useSetupScopeStore.getState().selectNamespace('orders');
 
-    useSetupScopeStore.getState().select('primary-cache', {
-      ...capabilities,
-      migrationVersion: '2',
-    });
+    useSetupScopeStore.getState().select('primary-cache');
 
     expect(useSetupScopeStore.getState().namespace).toBe('orders');
-    expect(useSetupScopeStore.getState().capabilities?.migrationVersion).toBe('2');
+    expect(sessionStorage.getItem(SETUP_SCOPE_STORAGE_KEY)).toBe(
+      '{"setupId":"primary-cache","namespace":"orders"}',
+    );
   });
 
   it('invalidates namespace when setup changes or is removed', () => {
-    useSetupScopeStore.getState().select('primary-cache', capabilities);
+    useSetupScopeStore.getState().select('primary-cache');
     useSetupScopeStore.getState().selectNamespace('orders');
 
-    useSetupScopeStore.getState().select('analytics-cache', capabilities);
+    useSetupScopeStore.getState().select('analytics-cache');
     expect(useSetupScopeStore.getState()).toMatchObject({
       setupId: 'analytics-cache',
       namespace: undefined,

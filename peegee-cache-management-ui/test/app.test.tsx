@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { currentSessionSchema } from '@src/api/protocol-schemas';
 import { SessionClient } from '@src/api/session-client';
-import { setupCapabilitiesSchema, setupSummaryListSchema } from '@src/api/setup-schemas';
+import { setupSummaryListSchema } from '@src/api/setup-schemas';
 import { App } from '@src/app/App';
 import { ManagementShell } from '@src/app/ManagementShell';
 import { useSetupScopeStore } from '@src/state/scope-store';
@@ -15,17 +15,7 @@ import { route, startLoopbackServer, type LoopbackServer } from './support/loopb
 const CSRF = 'shell-csrf-token-with-at-least-thirty-two-characters';
 const session = currentSessionSchema.parse({
   user: 'alex', roles: ['viewer', 'operator'], serverVersion: '0.1.0-SNAPSHOT', apiVersion: 'v1', authenticationMode: 'LOCAL_TOKEN', csrfToken: CSRF,
-  sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z', features: { setupRegistration: true, sensitiveReveal: true },
-});
-
-const capabilities = setupCapabilitiesSchema.parse({
-  migrationVersion: '1',
-  capabilities: {
-    namespaceInspection: true, entryInspection: true, expiredEntryInspection: true, entryMutation: true, counterInspection: false, counterMutation: false,
-    lockInspection: false, forcedLockRelease: false, bulkEntryDelete: true, bulkCounterDelete: false, pubSub: false, databaseStatistics: true,
-    entryValueReveal: false, lockOwnerReveal: false, pubSubPayloadReveal: false, batchEntryOperations: true, valueScan: true, cacheMetrics: true, ownerLockOperations: true,
-  },
-  limits: { maximumValueBytes: 1024, pubSubChannelMaxBytes: 49, pubSubPayloadMaxBytes: 7500 },
+  sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z',
 });
 
 describe('U1 authenticated management shell', () => {
@@ -55,7 +45,6 @@ describe('U1 authenticated management shell', () => {
         return respond.noContent();
       }
       if (route('GET', '/api/v1/setups', request)) return respond.json(200, setupSummaryListSchema.parse({ items: [] }));
-      if (route('GET', '/api/v1/setups/primary-cache/capabilities', request)) return respond.json(200, capabilities);
       return respond.problem(404, 'NOT_FOUND', `no fixture for ${request.method} ${request.path}`);
     });
     sessionClient = new SessionClient(server.baseUrl);
@@ -98,25 +87,16 @@ describe('U1 authenticated management shell', () => {
     expect(localStorage.getItem('peegeeq.management.preferences')).not.toContain(CSRF);
   });
 
-  it('blocks direct routes for capabilities the active setup does not provide', async () => {
-    useSetupScopeStore.getState().select('primary-cache', capabilities);
+  it('keeps every section reachable once a setup is selected and reads its limits from setup details', async () => {
+    useSetupScopeStore.getState().select('primary-cache');
     shell(['/counters']);
 
-    expect(await screen.findByRole('heading', { name: 'Counters unavailable' })).toBeVisible();
-    expect(screen.getByText(/does not provide counter inspection/u)).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'Counters' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create counter' })).not.toBeInTheDocument();
-    expect(server.requests.filter((request) => request.path.includes('/counters'))).toHaveLength(0);
-  });
-
-  it('restores a remembered setup scope by re-reading its capabilities from the server', async () => {
-    useSetupScopeStore.getState().select('primary-cache', capabilities);
-    useSetupScopeStore.setState({ capabilities: undefined });
-    shell(['/counters']);
-
-    expect(await screen.findByRole('heading', { name: 'Counters unavailable' })).toBeVisible();
-    expect(server.requests.filter((request) => request.path === '/api/v1/setups/primary-cache/capabilities')).toHaveLength(1);
-    expect(useSetupScopeStore.getState().capabilities).toEqual(capabilities);
+    expect(await screen.findByRole('heading', { name: 'Counters' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Counters' })).toHaveAttribute('href', '/counters');
+    expect(screen.getByRole('link', { name: 'Pub/Sub' })).toHaveAttribute('href', '/pubsub');
+    expect(screen.getByRole('link', { name: 'Advanced' })).toHaveAttribute('href', '/advanced');
+    await waitFor(() => expect(server.requests.filter((request) => request.path === '/api/v1/setups/primary-cache')).toHaveLength(1));
+    expect(useSetupScopeStore.getState().setupId).toBe('primary-cache');
   });
 
   it('gates the console behind the local bootstrap token and ends the session with CSRF proof', async () => {

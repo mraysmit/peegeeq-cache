@@ -46,28 +46,6 @@ final class PostgresManagedSetupRuntime implements ManagedSetupRuntime {
             String schema,
             SchemaBootstrapMode schemaBootstrapMode,
             String setupId,
-            byte[] cursorKey) {
-        this.manager = Objects.requireNonNull(manager, "manager");
-        this.pool = Objects.requireNonNull(pool, "pool");
-        this.vertx = Objects.requireNonNull(vertx, "vertx");
-        this.schema = Objects.requireNonNull(schema, "schema");
-        this.schemaBootstrapMode = Objects.requireNonNull(schemaBootstrapMode, "schemaBootstrapMode");
-        this.management = new PgManagementService(
-                new PgManagementReadRepository(pool, schema, "peegeeq-management-" + setupId),
-                Objects.requireNonNull(setupId, "setupId"),
-                new ManagementCursorCodec(
-                        Objects.requireNonNull(cursorKey, "cursorKey"),
-                        Clock.systemUTC(),
-                        Duration.ofMinutes(15)));
-    }
-
-    PostgresManagedSetupRuntime(
-            PeeGeeCacheManager manager,
-            Pool pool,
-            Vertx vertx,
-            String schema,
-            SchemaBootstrapMode schemaBootstrapMode,
-            String setupId,
             byte[] cursorKey,
             ManagementAuditSink auditSink,
             ManagementAuditFingerprinter auditFingerprinter,
@@ -158,36 +136,6 @@ final class PostgresManagedSetupRuntime implements ManagedSetupRuntime {
     @Override
     public PeeGeeCache cache() {
         return manager.cache();
-    }
-
-    @Override
-    public boolean supportsPubSub() {
-        return true;
-    }
-
-    @Override
-    public boolean supportsPubSubPayloadReveal() {
-        return true;
-    }
-
-    @Override
-    public boolean supportsBatchEntryOperations() {
-        return true;
-    }
-
-    @Override
-    public boolean supportsValueScan() {
-        return true;
-    }
-
-    @Override
-    public boolean supportsCacheMetrics() {
-        return true;
-    }
-
-    @Override
-    public boolean supportsOwnerLockOperations() {
-        return true;
     }
 
     @Override

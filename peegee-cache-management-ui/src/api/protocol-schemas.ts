@@ -23,10 +23,6 @@ export const currentSessionSchema: z.ZodType<CurrentSessionContract> = z.strictO
   csrfToken: z.string().min(32).max(512),
   sessionIdleExpiresAt: utcInstantSchema,
   sessionExpiresAt: utcInstantSchema,
-  features: z.strictObject({
-    setupRegistration: z.boolean(),
-    sensitiveReveal: z.boolean(),
-  }),
 });
 
 export const managementProblemSchema: z.ZodType<ManagementProblemContract> = z.strictObject({

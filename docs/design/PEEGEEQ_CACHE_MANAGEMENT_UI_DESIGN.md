@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Management UI
 
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+
 **Author:** Mark A Ray-Smith Cityline Ltd  
 **Status:** Approved and implemented through Phase 8.3 U11; final browser, reactor, leakage, and PostgreSQL 15-18 acceptance green on 5 September 2026
 **Date:** August 2026  
@@ -23,7 +25,7 @@ The corresponding interactive screen designs are available in [the management UI
 
 Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
-The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The Playwright catalogue declares 557 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys, 18 independently degraded capability paths, and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. On 5 September 2026 the merged U11 working tree passed all 557 scenarios plus three runnable-artifact/evidence checks and the complete 11-module reactor on PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The Playwright catalogue declares 539 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. On 5 September 2026 the merged U11 working tree passed all 557 scenarios plus three runnable-artifact/evidence checks and the complete 11-module reactor on PostgreSQL 15.17, 16.13, 17.11, and 18.3.
 
 ## 2. Fixed decisions
 
@@ -441,7 +443,7 @@ Settings displays:
 - date/time and byte-display preferences;
 - masked-value auto-hide duration;
 - application and API versions;
-- links to health and capability data.
+- links to health data and the effective setup limits.
 
 Security-critical policy is server-configured and read-only in the browser.
 
@@ -477,7 +479,7 @@ Every item above is mandatory, not aspirational: a declared dependency that `src
 | Revealed sensitive value | Detail component memory only |
 | Form input | Form/component state |
 
-There are no direct page-level Axios calls. The API layer defines tags for `Setup`, `Overview`, `Namespace`, `Entry`, `Counter`, `Lock`, `Monitoring`, and `Capabilities`.
+There are no direct page-level Axios calls. The API layer defines tags for `Setup`, `Overview`, `Namespace`, `Entry`, `Counter`, `Lock`, and `Monitoring`.
 
 ### 8.3 Error behavior
 
@@ -517,7 +519,6 @@ flowchart LR
 - authentication/authorization middleware;
 - JSON request/response handlers;
 - SSE and WebSocket lifecycle management;
-- capability discovery;
 - bulk-confirmation token storage;
 - structured audit events;
 - exact packaged asset serving and constrained SPA fallback with MIME, cache, traversal, and security-header policy.
@@ -564,7 +565,7 @@ Concurrent connect/detach operations for one setup are serialized. Disconnecting
 - Responses containing revealed data use `Cache-Control: no-store`.
 - Passwords, values, and owner tokens are removed before logging.
 
-### 10.2 Setup and capability endpoints
+### 10.2 Setup endpoints
 
 | Method | Path | Role | Purpose |
 |---|---|---|---|
@@ -574,37 +575,20 @@ Concurrent connect/detach operations for one setup are serialized. Disconnecting
 | `GET` | `/api/v1/setups` | viewer | List secret-free setup summaries |
 | `POST` | `/api/v1/setups/actions/test` | operator | Test an unregistered connection without saving it |
 | `POST` | `/api/v1/setups` | operator | Register and connect an in-memory setup |
-| `GET` | `/api/v1/setups/:setupId` | viewer | Setup details |
+| `GET` | `/api/v1/setups/:setupId` | viewer | Setup details, including effective byte limits |
 | `POST` | `/api/v1/setups/:setupId/test` | operator | Test registered connection and schema readiness |
 | `POST` | `/api/v1/setups/:setupId/connect` | operator | Reconnect a detached setup |
 | `POST` | `/api/v1/setups/:setupId/detach` | operator | Close without changing data |
 | `DELETE` | `/api/v1/setups/:setupId` | operator | Forget a UI-session setup |
 | `GET` | `/api/v1/setups/:setupId/health` | viewer | Setup health |
-| `GET` | `/api/v1/setups/:setupId/capabilities` | viewer | Feature availability |
 
-Capability response:
+Setup details `limits` object:
 
 ```json
 {
-  "namespaceInspection": true,
-  "entryInspection": true,
-  "expiredEntryInspection": true,
-  "entryMutation": true,
-  "counterInspection": true,
-  "counterMutation": true,
-  "lockInspection": true,
-  "forcedLockRelease": true,
-  "bulkEntryDelete": true,
-  "bulkCounterDelete": true,
-  "pubSub": true,
-  "databaseStatistics": true,
-  "entryValueReveal": true,
-  "lockOwnerReveal": true,
-  "pubSubPayloadReveal": true,
-  "batchEntryOperations": true,
-  "valueScan": true,
-  "cacheMetrics": true,
-  "ownerLockOperations": true
+  "pubSubChannelMaxBytes": 49,
+  "pubSubPayloadMaxBytes": 7500,
+  "maximumValueBytes": 10485760
 }
 ```
 
@@ -686,9 +670,9 @@ Every stream sends a typed initial snapshot or `ready` event, periodic heartbeat
 
 Management inspection and mutation must remain typed and testable without making REST handlers depend on PostgreSQL implementation classes.
 
-A new `ManagementService`, exposed through a backward-compatible default `PeeGeeCache.management()` accessor, provides the exact typed signatures in [the authoritative Java API contract](PEEGEEQ_CACHE_MANAGEMENT_API.md#16-java-api-contract). Sensitive, mutation, and actor-bound bulk methods require a `ManagementActionContext`; reveals return versioned snapshot DTOs; mutations return `ManagementSetResult` or `VersionedMutationResult<T>` with `APPLIED`, `NOT_FOUND`, `VERSION_MISMATCH`, or `CONDITION_NOT_MET`.
+A new `ManagementService`, constructed by the management server for each managed setup, provides the exact typed signatures in [the authoritative Java API contract](PEEGEEQ_CACHE_MANAGEMENT_API.md#16-java-api-contract). Sensitive, mutation, and actor-bound bulk methods require a `ManagementActionContext`; reveals return versioned snapshot DTOs; mutations return `ManagementSetResult` or `VersionedMutationResult<T>` with `APPLIED`, `NOT_FOUND`, `VERSION_MISMATCH`, or `CONDITION_NOT_MET`.
 
-The default accessor reports unsupported capability and its service methods return a failed `Future`. The PostgreSQL implementation supports the complete V1 contract. REST always checks capabilities before invoking an optional operation. Existing application-facing cache, counter, lock, scan, pub/sub, and admin contracts remain unchanged.
+The PostgreSQL implementation supports the complete V1 contract. REST decides every request by role; there is no capability negotiation. Existing application-facing cache, counter, lock, scan, pub/sub, and admin contracts remain unchanged.
 
 New immutable models include:
 
@@ -706,8 +690,7 @@ New immutable models include:
 - `RevealedEntryValue` and `RevealedLockOwner`, each carrying value/owner and version from one database snapshot;
 - `ManagementActionContext` containing authenticated actor, bounded roles, correlation identifier, and sanitized source address;
 - `VersionedMutationResult<T>`, `ManagementMutationOutcome`, and `ManagementSetResult`;
-- `ForceReleaseLockRequest` containing key, expected version, confirmation key, and optional bounded reason;
-- `AdminCapabilities`.
+- `ForceReleaseLockRequest` containing key, expected version, confirmation key, and optional bounded reason.
 
 Existing `MetricsSnapshot`, `CacheService`, `CounterService`, `LockService`, `PubSubService`, `ScanService`, and `AdminService` contracts remain unchanged.
 
@@ -782,7 +765,6 @@ Vitest and Testing Library cover:
 - scope transitions;
 - loading, empty, stale, error, and reconnect states;
 - role-based action visibility;
-- capability-based page/action visibility;
 - value masking, reveal, auto-hide, and state clearing;
 - formatter correctness;
 - conflict and validation presentation;
@@ -835,10 +817,10 @@ The four product phases below remain the design-level grouping. The authoritativ
 
 - Add the REST and UI modules and parent build wiring.
 - Reproduce the PeeGeeQ shell, theme, routing, header, scope, connection status, and notification drawer.
-- Implement configuration, setup registry, proxy security, capability discovery, health, static serving, and cleanup.
+- Implement configuration, setup registry, proxy security, health, static serving, and cleanup.
 - Establish Testcontainers, Vitest, and Playwright harnesses.
 
-Exit criteria: an authenticated viewer can connect to a real cache setup, see accurate health/capabilities, and disconnect without leaked resources.
+Exit criteria: an authenticated viewer can connect to a real cache setup, see accurate health and effective limits, and disconnect without leaked resources.
 
 ### Phase 2: Database overview and entries
 

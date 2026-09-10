@@ -16,7 +16,6 @@ x-m7-operation-ids:
   - detachSetup
   - forgetSetup
   - getSetupHealth
-  - getSetupCapabilities
   - getOverview
   - listNamespaces
   - exportNamespaces
@@ -236,19 +235,6 @@ paths:
         default:
           $ref: '#/components/responses/ManagementProblem'
       operationId: getSetupHealth
-  /api/v1/setups/{setupId}/capabilities:
-    parameters:
-      - $ref: '#/components/parameters/SetupId'
-    get:
-      x-security-profile: VIEW
-      security:
-        - managementSession: []
-      responses:
-        '200':
-          $ref: '#/components/responses/SetupCapabilities'
-        default:
-          $ref: '#/components/responses/ManagementProblem'
-      operationId: getSetupCapabilities
   /api/v1/setups/{setupId}/overview:
     parameters:
       - $ref: '#/components/parameters/SetupId'
@@ -1697,15 +1683,6 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/SetupHealth'
-    SetupCapabilities:
-      description: Effective setup capabilities and limits.
-      headers:
-        X-Correlation-ID:
-          $ref: '#/components/headers/XCorrelationID'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/SetupCapabilities'
     Overview:
       description: Setup overview snapshot.
       headers:
@@ -2016,7 +1993,7 @@ components:
     CurrentSession:
       type: object
       additionalProperties: false
-      required: [user, roles, serverVersion, apiVersion, authenticationMode, csrfToken, sessionIdleExpiresAt, sessionExpiresAt, features]
+      required: [user, roles, serverVersion, apiVersion, authenticationMode, csrfToken, sessionIdleExpiresAt, sessionExpiresAt]
       properties:
         user: {type: string, minLength: 1, maxLength: 256}
         roles:
@@ -2030,13 +2007,6 @@ components:
         csrfToken: {type: string, minLength: 32, maxLength: 512}
         sessionIdleExpiresAt: {$ref: '#/components/schemas/UtcInstant'}
         sessionExpiresAt: {$ref: '#/components/schemas/UtcInstant'}
-        features:
-          type: object
-          additionalProperties: false
-          required: [setupRegistration, sensitiveReveal]
-          properties:
-            setupRegistration: {type: boolean}
-            sensitiveReveal: {type: boolean}
     LocalTokenExchangeRequest:
       type: object
       additionalProperties: false
@@ -2130,62 +2100,32 @@ components:
           type: array
           maxItems: 1000
           items: {$ref: '#/components/schemas/SetupSummary'}
-    SetupCapabilities:
+    SetupLimits:
       type: object
       additionalProperties: false
-      required: [migrationVersion, capabilities, limits]
+      required: [pubSubChannelMaxBytes, pubSubPayloadMaxBytes, maximumValueBytes]
       properties:
-        migrationVersion: {$ref: '#/components/schemas/NonNegativeDecimalString'}
-        capabilities:
-          type: object
-          additionalProperties: false
-          required: [namespaceInspection, entryInspection, expiredEntryInspection, entryMutation, counterInspection, counterMutation, lockInspection, forcedLockRelease, bulkEntryDelete, bulkCounterDelete, pubSub, databaseStatistics, entryValueReveal, lockOwnerReveal, pubSubPayloadReveal, batchEntryOperations, valueScan, cacheMetrics, ownerLockOperations]
-          properties:
-            namespaceInspection: {type: boolean}
-            entryInspection: {type: boolean}
-            expiredEntryInspection: {type: boolean}
-            entryMutation: {type: boolean}
-            counterInspection: {type: boolean}
-            counterMutation: {type: boolean}
-            lockInspection: {type: boolean}
-            forcedLockRelease: {type: boolean}
-            bulkEntryDelete: {type: boolean}
-            bulkCounterDelete: {type: boolean}
-            pubSub: {type: boolean}
-            databaseStatistics: {type: boolean}
-            entryValueReveal: {type: boolean}
-            lockOwnerReveal: {type: boolean}
-            pubSubPayloadReveal: {type: boolean}
-            batchEntryOperations: {type: boolean}
-            valueScan: {type: boolean}
-            cacheMetrics: {type: boolean}
-            ownerLockOperations: {type: boolean}
-        limits:
-          type: object
-          additionalProperties: false
-          required: [pubSubChannelMaxBytes, pubSubPayloadMaxBytes, maximumValueBytes]
-          properties:
-            pubSubChannelMaxBytes: {type: integer, minimum: 1, maximum: 63}
-            pubSubPayloadMaxBytes: {type: integer, minimum: 1}
-            maximumValueBytes: {type: integer, minimum: 1}
+        pubSubChannelMaxBytes: {type: integer, minimum: 1, maximum: 63}
+        pubSubPayloadMaxBytes: {type: integer, minimum: 1}
+        maximumValueBytes: {type: integer, minimum: 1}
     SetupConnectionTest:
       type: object
       additionalProperties: false
-      required: [databaseReachable, schemaState, migrationVersion, latencyMillis, capabilities, limits]
+      required: [databaseReachable, schemaState, migrationVersion, latencyMillis, limits]
       properties:
         databaseReachable: {type: boolean}
         schemaState: {type: string, enum: [READY, MISSING, OUTDATED, UNKNOWN]}
         migrationVersion: {$ref: '#/components/schemas/NonNegativeDecimalString'}
         latencyMillis: {type: integer, minimum: 0}
-        capabilities: {$ref: '#/components/schemas/SetupCapabilities/properties/capabilities'}
-        limits: {$ref: '#/components/schemas/SetupCapabilities/properties/limits'}
+        limits: {$ref: '#/components/schemas/SetupLimits'}
     SetupDetails:
       type: object
       additionalProperties: false
-      required: [setup, migrationVersion, runtime, registeredAt, connectedAt]
+      required: [setup, migrationVersion, limits, runtime, registeredAt, connectedAt]
       properties:
         setup: {$ref: '#/components/schemas/SetupSummary'}
         migrationVersion: {$ref: '#/components/schemas/NonNegativeDecimalString'}
+        limits: {$ref: '#/components/schemas/SetupLimits'}
         runtime:
           type: object
           additionalProperties: false

@@ -11,10 +11,6 @@ const validSession = {
   csrfToken: 'c'.repeat(43),
   sessionIdleExpiresAt: '2026-08-24T09:00:00Z',
   sessionExpiresAt: '2026-08-24T16:00:00Z',
-  features: {
-    setupRegistration: true,
-    sensitiveReveal: true,
-  },
 };
 
 describe('management protocol schemas', () => {

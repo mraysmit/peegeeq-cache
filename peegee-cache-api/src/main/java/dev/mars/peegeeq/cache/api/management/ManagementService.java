@@ -6,26 +6,17 @@ import io.vertx.core.Future;
 
 /**
  * Privileged metadata inspection, sensitive reveal, and atomic administration API.
- * Callers must check {@link #capabilities()} and supply an authenticated
- * {@link ManagementActionContext} to every reveal, mutation, or actor-bound bulk call.
- * Asynchronous capability, audit, validation, storage, and lifecycle failures are
- * reported through failed Vert.x {@link Future Futures}; they are never converted to success.
+ * Callers must supply an authenticated {@link ManagementActionContext} to every reveal,
+ * mutation, or actor-bound bulk call. Authorization is decided by the caller's role checks;
+ * this interface advertises no per-operation availability.
+ * Asynchronous audit, validation, storage, and lifecycle failures are reported through
+ * failed Vert.x {@link Future Futures}; they are never converted to success.
  */
 public interface ManagementService {
-    AdminCapabilities capabilities();
-    default Future<ManagementOverview> overview() {
-        return Future.failedFuture(new ManagementCapabilityException(
-                ManagementCapability.DATABASE_MONITORING));
-    }
-    default Future<ManagementDatabaseMonitoring> databaseMonitoring() {
-        return Future.failedFuture(new ManagementCapabilityException(
-                ManagementCapability.DATABASE_MONITORING));
-    }
+    Future<ManagementOverview> overview();
+    Future<ManagementDatabaseMonitoring> databaseMonitoring();
     Future<AdminPage<NamespaceStats>> namespaces(NamespaceQuery query);
-    default Future<NamespaceDetails> namespace(String namespace) {
-        return Future.failedFuture(new ManagementCapabilityException(
-                ManagementCapability.NAMESPACE_INSPECTION));
-    }
+    Future<NamespaceDetails> namespace(String namespace);
     Future<AdminPage<ManagementEntryMetadata>> entries(EntryQuery query);
     Future<ManagementEntryMetadata> entry(CacheKey key, boolean includeExpired);
     Future<RevealedEntryValue> revealEntry(RevealEntryRequest request, ManagementActionContext context);

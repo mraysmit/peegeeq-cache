@@ -20,7 +20,7 @@ import { invalidBody, route, startLoopbackServer, type LoopbackServer } from './
 
 const session = currentSessionSchema.parse({
   user: 'operator', roles: ['viewer', 'operator'], serverVersion: '1', apiVersion: 'v1', authenticationMode: 'LOCAL_TOKEN', csrfToken: 'c'.repeat(43),
-  sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z', features: { setupRegistration: true, sensitiveReveal: true },
+  sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z',
 });
 const entry = cacheEntrySnapshotSchema.parse({
   namespace: 'orders', key: 'one', version: '2', createdAt: '2026-09-02T00:00:00Z', updatedAt: '2026-09-02T00:01:00Z', expiresAt: null, hitCount: '3', lastAccessedAt: null, value: { type: 'STRING', text: 'value' },

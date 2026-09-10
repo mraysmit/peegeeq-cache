@@ -115,7 +115,7 @@ The exact Java package and serialization adapter are M6 implementation choices; 
 
 Secret reference objects:
 
-- are excluded from setup summaries, health, capabilities, events, errors, telemetry, and ordinary logs;
+- are excluded from setup summaries, health, setup details, events, errors, telemetry, and ordinary logs;
 - are resolved only by the owning server component at point of use;
 - never expose a `toString()` containing resolved material;
 - are cleared or closed with the setup/server lifecycle where the provider returns mutable secret material;

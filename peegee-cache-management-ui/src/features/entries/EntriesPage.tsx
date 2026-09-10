@@ -32,7 +32,6 @@ const { Title, Text } = Typography;
 
 interface EntriesPageProps {
   readonly canBulkDelete?: boolean;
-  readonly canInspectExpired?: boolean;
   readonly canOperate?: boolean;
   readonly selectedNamespace?: string;
   readonly selectedSetupId?: string;
@@ -43,7 +42,7 @@ interface EntriesPageProps {
  * metadata is an RTK Query read keyed by setup, namespace, filters, and cursor; create and bulk
  * delete are mutations whose tag invalidations refresh the page from PostgreSQL truth.
  */
-export function EntriesPage({ canOperate = false, canBulkDelete = canOperate, canInspectExpired = true, selectedNamespace, selectedSetupId }: EntriesPageProps) {
+export function EntriesPage({ canOperate = false, canBulkDelete = canOperate, selectedNamespace, selectedSetupId }: EntriesPageProps) {
   const [draftPrefix, setDraftPrefix] = useState('');
   const [draftValueType, setDraftValueType] = useState<EntryValueTypeFilter>('ALL');
   const [draftTtlState, setDraftTtlState] = useState<EntryTtlState>('ALL_LIVE');
@@ -223,7 +222,7 @@ export function EntriesPage({ canOperate = false, canBulkDelete = canOperate, ca
             <ValueSelect<EntryTtlState>
               id="entry-ttl-state"
               onChange={setDraftTtlState}
-              options={ENTRY_TTL_STATE_OPTIONS.filter((option) => canInspectExpired || option.value !== 'INCLUDE_EXPIRED')}
+              options={ENTRY_TTL_STATE_OPTIONS}
               style={{ width: 170 }}
               value={draftTtlState}
             />

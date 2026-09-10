@@ -23,7 +23,7 @@
         <peegeeq.playwright.slowMo>0</peegeeq.playwright.slowMo>
         <peegeeq.playwright.pauseBetweenScenarios>0</peegeeq.playwright.pauseBetweenScenarios>
         <peegeeq.playwright.scenarios></peegeeq.playwright.scenarios>
-        <peegeeq.playwright.expectedScenarios>557</peegeeq.playwright.expectedScenarios>
+        <peegeeq.playwright.expectedScenarios>539</peegeeq.playwright.expectedScenarios>
     </properties>
 
     <dependencies>

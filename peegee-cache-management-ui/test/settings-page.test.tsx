@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { currentSessionSchema } from '@src/api/protocol-schemas';
 import { SessionClient } from '@src/api/session-client';
-import { setupCapabilitiesSchema, setupSummaryListSchema } from '@src/api/setup-schemas';
+import { setupLimitsSchema, setupSummaryListSchema } from '@src/api/setup-schemas';
 import { SettingsPage } from '@src/features/settings/SettingsPage';
 import { loadPreferences, PREFERENCES_CHANGED_EVENT } from '@src/state/preferences';
 import { createManagementClients, createManagementStore, type ManagementStore } from '@src/store';
@@ -14,18 +14,10 @@ import { route, startLoopbackServer, type LoopbackServer } from './support/loopb
 const session = currentSessionSchema.parse({
   user: 'operator', roles: ['viewer', 'operator'], serverVersion: '1.0', apiVersion: 'v1', authenticationMode: 'LOCAL_TOKEN',
   csrfToken: 'settings-page-csrf-token-with-forty-five-characters',
-  sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z', features: { setupRegistration: true, sensitiveReveal: true },
+  sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z',
 });
 
-const capabilities = setupCapabilitiesSchema.parse({
-  migrationVersion: '7',
-  capabilities: {
-    namespaceInspection: true, entryInspection: true, expiredEntryInspection: true, entryMutation: true, counterInspection: true, counterMutation: true,
-    lockInspection: true, forcedLockRelease: true, bulkEntryDelete: true, bulkCounterDelete: true, pubSub: true, databaseStatistics: true,
-    entryValueReveal: true, lockOwnerReveal: true, pubSubPayloadReveal: true, batchEntryOperations: true, valueScan: true, cacheMetrics: true, ownerLockOperations: true,
-  },
-  limits: { pubSubChannelMaxBytes: 48, pubSubPayloadMaxBytes: 7_500, maximumValueBytes: 10_485_760 },
-});
+const limits = setupLimitsSchema.parse({ pubSubChannelMaxBytes: 48, pubSubPayloadMaxBytes: 7_500, maximumValueBytes: 10_485_760 });
 
 describe('U8 Settings preferences', () => {
   let server: LoopbackServer;
@@ -53,7 +45,7 @@ describe('U8 Settings preferences', () => {
     const user = userEvent.setup();
     const changes: string[] = [];
     window.addEventListener(PREFERENCES_CHANGED_EVENT, () => changes.push('changed'));
-    renderWithProviders(<SettingsPage capabilities={capabilities} selectedSetupId="primary" session={session} />, { store });
+    renderWithProviders(<SettingsPage limits={limits} migrationVersion="7" selectedSetupId="primary" session={session} />, { store });
 
     expect(screen.getByRole('heading', { name: 'Connection' })).toBeVisible();
     expect(screen.getByText('LOCAL_TOKEN')).toBeVisible();
@@ -78,7 +70,7 @@ describe('U8 Settings preferences', () => {
     expect(server.requests.filter((request) => request.method !== 'GET')).toHaveLength(0);
   });
 
-  it('renders without a selected setup and without capability limits', () => {
+  it('renders without a selected setup and without effective limits', () => {
     renderWithProviders(<SettingsPage session={session} />, { store });
     expect(screen.getByText('None')).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Effective limits' })).not.toBeInTheDocument();

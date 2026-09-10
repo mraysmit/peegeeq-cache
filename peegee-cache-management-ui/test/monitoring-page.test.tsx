@@ -14,7 +14,6 @@ const session = currentSessionSchema.parse({
   user: 'monitoring-operator', roles: ['viewer', 'operator'], serverVersion: '0.1.0-SNAPSHOT', apiVersion: 'v1',
   authenticationMode: 'LOCAL_TOKEN', csrfToken: 'monitoring-test-csrf-token-with-forty-seven-chars',
   sessionIdleExpiresAt: '2099-01-01T00:00:00Z', sessionExpiresAt: '2099-01-01T01:00:00Z',
-  features: { setupRegistration: true, sensitiveReveal: true },
 });
 const health = { status: 'UP', schemaReady: true, latencyMillis: 2, checkedAt: '2026-08-29T10:00:00Z', detail: 'Ready' };
 const database = databaseMonitoringSchema.parse({
