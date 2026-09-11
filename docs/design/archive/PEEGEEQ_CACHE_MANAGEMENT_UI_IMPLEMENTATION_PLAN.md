@@ -1,6 +1,8 @@
 # PeeGeeQ Cache Management UI Implementation Plan
 
-> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+> **Archived 11 September 2026.** Phases U0-U11 are complete; this document is retained as historical execution evidence.
+
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
 
 **Status:** Phase 8.3 U0-U11 COMPLETE — the U11 acceptance baseline passed the managed UI gate (36 files / 170 tests), the complete 557-scenario packaged Chromium catalogue (560 Failsafe tests including three infrastructure checks), and full 11-module reactors on PostgreSQL 15.17, 16.13, 17.11, and 18.3 on 5 September 2026. The subsequent P7 screenshot addition also passed a full PostgreSQL 18.3 reactor: 563 Failsafe tests, all 557 scenarios with paired captures, and 1,122 embedded PNGs. Exact evidence is in §18 of [the Playwright plan](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md).
 **Date:** 3 September 2026
@@ -19,9 +21,9 @@ The management backend is already complete. This plan does not reopen backend ph
 
 The following documents are authoritative, in order:
 
-1. [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md) for REST, SSE, WebSocket, security, error, and DTO behavior;
+1. [PEEGEEQ_CACHE_MANAGEMENT_API.md](../PEEGEEQ_CACHE_MANAGEMENT_API.md) for REST, SSE, WebSocket, security, error, and DTO behavior;
 2. `peegee-cache-rest/src/main/openapi/peegeeq-cache-management-v1.yaml` for the machine-readable HTTP contract;
-3. [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) for product behavior, information architecture, security, and visual design;
+3. [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](../PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) for product behavior, information architecture, security, and visual design;
 4. [PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md](PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md) for module ownership and the single Maven release entry point;
 5. this plan for implementation order and evidence gates;
 6. [PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md) for project-wide status.

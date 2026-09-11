@@ -1,6 +1,8 @@
 # PeeGeeQ Cache Management V1 Operation Manifest
 
-> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+> **Archived 11 September 2026.** The OpenAPI document and executable inventory tests are the current operation authorities.
+
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
 
 **Status:** Reviewed 59-operation contract
 
@@ -8,9 +10,9 @@
 
 **Base path:** `/api/v1` except the monitoring WebSocket, which is rooted at `/ws`
 
-This is the closed operation inventory used by the M1 OpenAPI completeness test. The authoritative behavioral detail remains [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md). Every row below names an exact method/path, operation identifier, security profile, request and success schema, statuses/headers, capability/limit rules, audit behavior, retry policy, and endpoint-specific problem codes. No abbreviated path is normative.
+This is the closed operation inventory used by the M1 OpenAPI completeness test. The authoritative behavioral detail remains [PEEGEEQ_CACHE_MANAGEMENT_API.md](../PEEGEEQ_CACHE_MANAGEMENT_API.md). Every row below names an exact method/path, operation identifier, security profile, request and success schema, statuses/headers, capability/limit rules, audit behavior, retry policy, and endpoint-specific problem codes. No abbreviated path is normative.
 
-This manifest proves completeness against the declared management REST boundary. Independent backend-to-REST-to-UI traceability is owned by [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md), and `BackendFunctionalityInventoryTest` ensures all 32 public data-service methods and all 29 `ManagementService` methods map into this inventory.
+This manifest proves completeness against the declared management REST boundary. Independent backend-to-REST-to-UI traceability is owned by [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](../PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md), and `BackendFunctionalityInventoryTest` ensures all 32 public data-service methods and all 29 `ManagementService` methods map into this inventory.
 
 ## Shared rules referenced by every row
 

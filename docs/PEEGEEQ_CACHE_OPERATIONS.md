@@ -40,7 +40,7 @@ Suggested initial alerts, to be tuned from benchmark and production baselines:
 
 `SchemaBootstrapMode.APPLY` is an opt-in embedded policy. Runtime startup takes a schema-scoped advisory lock and applies only missing migrations, in order and in individual transactions, before starting the sweeper or pub/sub listener. It requires DDL permission and is unsuitable where schema changes require a separate approval window.
 
-Applied versions are recorded in `<schema>.schema_migrations`. Rollback is operationally manual: stop writers, preserve or export required data, and use the release-specific recovery procedure. The library never automatically drops schema objects. The supported SQL surface and compatibility rules are documented in [PEEGEEQ_CACHE_NATIVE_SQL_API.md](PEEGEEQ_CACHE_NATIVE_SQL_API.md).
+Applied versions are recorded in `<schema>.schema_migrations`. Rollback is operationally manual: stop writers, preserve or export required data, and use the release-specific recovery procedure. The library never automatically drops schema objects. The supported SQL surface and compatibility rules are documented in [PEEGEEQ_CACHE_NATIVE_SQL_API.md](design/PEEGEEQ_CACHE_NATIVE_SQL_API.md).
 
 ## PostgreSQL operations
 

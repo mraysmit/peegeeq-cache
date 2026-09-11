@@ -1,5 +1,7 @@
 # peegee-cache Implementation Plan
 
+> **Archived 11 September 2026.** The implementation phases are complete. Active performance work is tracked in `PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md`.
+
 ## 1. Purpose
 
 This document turns the design in `docs/design/PEEGEEQ_CACHE_DESIGN.md` into an implementation sequence.
@@ -603,11 +605,11 @@ Prerequisites:
 
 ### Phase 8.3: Management browser console
 
-**Reference designs:** [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) and [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md)
+**Reference designs:** [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](../PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) and [PEEGEEQ_CACHE_MANAGEMENT_API.md](../PEEGEEQ_CACHE_MANAGEMENT_API.md)
 
 **Detailed plan:** [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md)
 
-**Backend-functionality coverage authority:** [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The matrix maps all 32 public data-service methods and all 29 `ManagementService` methods to the 59 declared management operations and their production desktop workflows, with no open functionality gaps.
+**Backend-functionality coverage authority:** [PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md](../PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The matrix maps all 32 public data-service methods and all 29 `ManagementService` methods to the 59 declared management operations and their production desktop workflows, with no open functionality gaps.
 
 **Status:** **U0-U11 COMPLETE** — the desktop-only production console implements setup and complete runtime configuration, overview, namespace, entry inspection/administration, counters, locks, Pub/Sub, monitoring, activity, settings, privacy, and the Advanced operations facade-parity surface using the mandated Ant Design, Recharts, RTK Query, Zustand, and Zod boundaries. Mobile and tablet behavior is outside the product boundary. Java Playwright owns 17 independent packaged-application journeys; a separate executable accountability contract covers all 60 management operations, and runtime tracing verifies declared operations from observed browser requests and WebSocket openings. The 5 September 2026 acceptance passed 557/557 browser scenarios plus three infrastructure checks and complete 11-module PostgreSQL 15-18 reactors.
 
@@ -1078,7 +1080,7 @@ The following external actions are intentionally deferred until the project is r
 Review trigger: revisit both items before declaring the first release candidate production-ready. Use `docs/PEEGEEQ_CACHE_BENCHMARKS.md` and `docs/PEEGEEQ_CACHE_RELEASE_PACKAGING.md` as the execution runbooks.
 
 This action is detailed in the [parameterised performance and degradation analysis
-plan](PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md). The revised B0–B6 sequence starts with experiment
+plan](../PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md). The revised B0–B6 sequence starts with experiment
 and interval contracts, time-series recording and controlled load scheduling; production target
 selection does not block framework implementation. External access is required only for the
 corresponding deployment campaigns. B0/B1 are in progress: planning/accounting and JSON contracts

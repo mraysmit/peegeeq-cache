@@ -71,7 +71,7 @@ P7 screenshot acceptance on 5 September adds visual evidence without changing th
 catalogue: all scenarios have viewport/focused captures, with 1,122 PNGs embedded in the portable
 report. The fresh PostgreSQL 18.3 reactor passed 563 Failsafe tests (557 scenarios plus six
 infrastructure checks). The preceding PostgreSQL 15–18 matrix is the pre-P7 baseline; see §18 of
-[the Playwright implementation plan](PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md).
+[the Playwright implementation plan](archive/PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md).
 
 The matrix is derived from these implementation sources:
 

@@ -1,6 +1,8 @@
 # PeeGeeQ Cache Management API Implementation Plan
 
-> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+> **Archived 11 September 2026.** Phases M0-M11 are complete; this document is retained as historical execution evidence.
+
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
 
 **Status:** Phases M0–M11 complete
 
@@ -12,7 +14,7 @@
 
 ## 1. Purpose
 
-This document turns the reviewed contract in [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md) into an executable implementation sequence for the management backend.
+This document turns the reviewed contract in [PEEGEEQ_CACHE_MANAGEMENT_API.md](../PEEGEEQ_CACHE_MANAGEMENT_API.md) into an executable implementation sequence for the management backend.
 
 It covers:
 
@@ -28,11 +30,11 @@ Status changes require the evidence defined in this plan. M0–M11 are complete.
 
 Implementation uses these sources in descending order of authority:
 
-1. [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md) for HTTP, security, streaming, error, concurrency, Java service, and compatibility contracts;
+1. [PEEGEEQ_CACHE_MANAGEMENT_API.md](../PEEGEEQ_CACHE_MANAGEMENT_API.md) for HTTP, security, streaming, error, concurrency, Java service, and compatibility contracts;
 2. this document for implementation order, tests, and exit gates;
-3. [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) for product behavior and screen requirements;
+3. [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](../PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) for product behavior and screen requirements;
 4. [PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md) for whole-project status and release sequencing;
-5. [PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md](../guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md) and the repository engineering rules for test discipline.
+5. [PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md](../../guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md) and the repository engineering rules for test discipline.
 
 The management UI design predates the latest API review. Phase M0 must synchronize its authentication, audit, Java signature, pub/sub, and link text before implementation uses it. When documents disagree before that synchronization, the management API contract wins.
 

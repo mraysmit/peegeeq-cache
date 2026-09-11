@@ -1,6 +1,8 @@
 # PeeGeeQ Cache Playwright Implementation Plan
 
-> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+> **Archived 11 September 2026.** Phases P0-P7 are complete; current browser coverage is enforced by the executable test catalogue.
+
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
 
 Status: **P0-P7 COMPLETE — 539-SCENARIO DESKTOP-ONLY IMPLEMENTATION (557 BEFORE THE 10 SEPTEMBER 2026 CAPABILITY-GATING REMOVAL), POSTGRESQL 15-18 BASELINE, AND PER-SCENARIO SCREENSHOT ACCEPTANCE VERIFIED**
 
@@ -62,8 +64,8 @@ The management UI remains implemented and releasable at the current U0-U10 bound
 
 Implementation must remain consistent with:
 
-1. [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md), the authoritative management contract;
-2. [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md), the authoritative UI behavior and security design;
+1. [PEEGEEQ_CACHE_MANAGEMENT_API.md](../PEEGEEQ_CACHE_MANAGEMENT_API.md), the authoritative management contract;
+2. [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](../PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md), the authoritative UI behavior and security design;
 3. [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md), the completed U0-U10 implementation record;
 4. [PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md), the backend implementation and evidence record; and
 5. the repository-wide prohibition on Mockito and substitute mocking frameworks.
@@ -674,7 +676,7 @@ organization. The actual sibling documentation conventions are flat, descriptive
 `src/tests/e2e/specs/screenshots.spec.ts` publishes names such as `09-detach-setup-confirm.png` to
 `docs/screenshots/`. Paired attachments alone did not satisfy that convention.
 
-The corrected user-facing output is [the UI screenshot gallery](../../peegee-cache-management-ui/docs/screenshots/index.html)
+The corrected user-facing output is [the UI screenshot gallery](../../../peegee-cache-management-ui/docs/screenshots/index.html)
 and its flat `peegee-cache-management-ui/docs/screenshots/` directory. It contains all **1,122 PNGs**
 from the verified **557-scenario** run, with descriptive feature/behavior names, visible previews,
 feature navigation, and search. Raw scenario-ID files remain internal traceability only. PNG bytes and

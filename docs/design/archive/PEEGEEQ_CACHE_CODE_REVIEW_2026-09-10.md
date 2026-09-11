@@ -1,5 +1,7 @@
 # Comprehensive Code Review Report: PeeGeeQ Cache (`peegee-cache`)
 
+> **Archived 11 September 2026.** This point-in-time review is retained as historical assessment evidence.
+
 **Target Repository**: `peegee-cache` (PostgreSQL-Backed Cache & Coordination Library)  
 **Date**: September 10, 2026  
 **Scope**: Full Codebase Review across all 11 reactor modules  

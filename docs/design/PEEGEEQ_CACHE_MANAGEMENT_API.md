@@ -21,9 +21,9 @@ It is the implementation contract for:
 
 Phase 8.2 backend phases M0-M11 and Phase 8.3 production-console phases U0-U11 are complete. The implementation includes the synchronized OpenAPI/typed contract, PostgreSQL inspection and atomic administration, durable fail-closed audit, both authentication modes, setup lifecycle, the complete REST/SSE/WebSocket surface, mandatory observability, runnable packaging, operational guidance, the reference-parity React stack, independent Java Playwright journeys against the packaged application and real transports, packaged Chromium/PostgreSQL acceptance, and complete-reactor PostgreSQL 15-18 evidence. Section 19 records the implementation boundary and evidence.
 
-The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The interactive screen designs are in [UI mockups/peegeeq-cache-management-ui-mockups.html](UI%20mockups/peegeeq-cache-management-ui-mockups.html).
+The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The interactive screen designs are in [UI mockups/peegeeq-cache-management-ui-mockups.html](archive/UI%20mockups/peegeeq-cache-management-ui-mockups.html).
 
-The reviewed exact route inventory is [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md). The accepted reactor topology and server configuration/secret-reference shapes are in [PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md](PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md).
+The reviewed exact route inventory is [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](archive/PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md). The accepted reactor topology and server configuration/secret-reference shapes are in [PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md](archive/PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md).
 
 ## 2. Contract principles
 
@@ -1627,7 +1627,7 @@ Tests cover:
 
 The backend plan owns a minimal non-production browser harness served only from test resources. Playwright runs that harness against the real REST server to prove the local bootstrap/session flow, cookie attributes, CSRF/Fetch-Metadata rejection, no-store behavior, browser storage exclusion, and static-route isolation. Trusted-proxy identity/session behavior is verified through running-server protocol tests; end-to-end browser-to-proxy TLS termination belongs to production deployment acceptance. The harness is not packaged in the runnable artifact and is not presented as the production console.
 
-Phase 8.3 owns the production React console and its full-browser journeys for setup lifecycle and target policy, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, quotas, accessibility, and cleanup. Its authoritative execution sequence is [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md). Both suites inspect browser storage, URLs, responses, structured audit output, and ordinary logs for forbidden sensitive data and raw user-controlled identifiers.
+Phase 8.3 owns the production React console and its full-browser journeys for setup lifecycle and target policy, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, quotas, accessibility, and cleanup. Its authoritative execution sequence is [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md). Both suites inspect browser storage, URLs, responses, structured audit output, and ordinary logs for forbidden sensitive data and raw user-controlled identifiers.
 
 ## 19. Implementation state and module ownership
 
@@ -1667,7 +1667,7 @@ SSE and WebSocket message schemas belong in OpenAPI component schemas with descr
 
 ### 20.1 Contract-closure gate
 
-Before the first OpenAPI file is accepted, Phase M0 produces the reviewed [management operation manifest](PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) for every REST route. Each manifest row contains:
+Before the first OpenAPI file is accepted, Phase M0 produces the reviewed [management operation manifest](archive/PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) for every REST route. Each manifest row contains:
 
 - exact method and complete path, with no abbreviated `...` form;
 - unique operation identifier and owning service method;

@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Management Build and Configuration Decision
 
+> **Archived 11 September 2026.** This accepted and implemented decision is retained as an architectural decision record.
+
 **Status:** Accepted and implemented; Phase 8.3 U0-U11 complete as of 5 September 2026
 
 **Date:** 20 August 2026

@@ -30,7 +30,7 @@ without those external decisions. Maven publication and unrelated product featur
 
 ## 2. Governing rules and source-level gap assessment
 
-Follow the [main implementation plan](PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md),
+Follow the [main implementation plan](archive/PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md),
 [benchmark runbook](../PEEGEEQ_CACHE_BENCHMARKS.md),
 [TDD standard](../guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md), and applicable coding,
 configuration, isolation and Vert.x rules in the
