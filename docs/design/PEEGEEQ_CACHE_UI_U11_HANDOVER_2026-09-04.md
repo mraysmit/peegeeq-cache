@@ -1,6 +1,6 @@
 # PeeGeeQ Cache Management UI — U11 Reference-Parity Migration Handover (4 September 2026)
 
-> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
 
 **Author:** Claude (Cowork session), on behalf of Mark A Ray-Smith; updated by Codex after the Windows verification and evidence review
 **Evidence review:** 5 September 2026
@@ -570,7 +570,7 @@ acceptance.
 
 ## 14. Capability gating removal (10 September 2026)
 
-Executed from [the capability gating removal plan](PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md); its §9 holds the phase-by-phase execution record and every deviation. This section records what the next UI session needs to know.
+Executed from [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md); its §9 holds the phase-by-phase execution record and every deviation. This section records what the next UI session needs to know.
 
 ### 14.1 What changed in the console
 

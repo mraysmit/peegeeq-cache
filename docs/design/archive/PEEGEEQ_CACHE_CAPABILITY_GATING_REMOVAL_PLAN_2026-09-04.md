@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Capability Gating Removal Plan (2026-09-04)
 
+> **Archived 11 September 2026.** Implementation and verification completed on 10 September 2026. This document is retained as the historical decision and execution record; it is not an active plan.
+
 Revised 2026-09-10 after a line-by-line verification against the working tree. The revision adds the library runtime module, the Maven scenario property, `SetupRegistryTest`, the strict-schema phase ordering, and corrects file names, line numbers, and counts. The decision in section 1 is unchanged except for the last sentence.
 
 ## 1. Decision
