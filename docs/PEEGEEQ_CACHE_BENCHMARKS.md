@@ -5,19 +5,17 @@
 For planned parameterised workload/timeframe experiments, interval statistics, performance trends
 and degradation-onset/recovery analysis, see the
 [performance characterisation plan](design/PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md).
-The timeframe, accounting, typed load-matrix, bounded interval/latency recorder and bounded incremental
-checkpoint pipeline are implemented, with real-PostgreSQL recorder-to-pipeline-to-JSON verification.
-The pull-driven closed-loop/rate-controlled scheduling engine is now implemented; managed execution
-and phase/checkpoint coupling are not yet wired. The commands below still run the unchanged local Testcontainers
-regression harness and produce per-scenario summaries, not time-series degradation profiles.
+The parameterised characterisation framework is implemented end to end: immutable finite
+specification, closed-loop/rate-controlled scheduling, phase/workload transitions, managed retries,
+real cache/counter/lock/scan adapters, bounded interval recording, atomic checkpoints, versioned
+trend analysis, explicit target/lifecycle orchestration and campaign review. The legacy regression
+profiles remain separate and unchanged in meaning.
 
-The characterisation result format is one comprehensive versioned JSON file per actual execution;
-the future HTML view will be derived from it. The JSON checkpoint API currently retains configuration,
-observed counters/rates, scalar metrics and diagnostics, including incomplete/failed status. Supplied
-latency distributions include explicit bucket bounds, counts, overflow and bucket-upper-bound
-percentiles; absent distributions remain marked unavailable. Analysis is still not connected. This
-adds the separate recorder/checkpoint calibration command below; parameterised database workload
-execution and degradation analysis are not wired yet.
+Each characterisation execution has one authoritative versioned JSON file. A self-contained HTML
+view is derived from the final JSON and records its SHA-256. The JSON retains resolved configuration,
+counters/rates, scalar metrics, diagnostics and six bounded latency distributions. Analysis reports
+persistent latency/reliability/pressure findings, isolated spikes, recovery and inconclusive evidence.
+Capabilities and unavailable diagnostics are explicit; absent observations are never fabricated as zero.
 
 The incremental `BenchmarkCheckpointWriter` accepts only **new** measurements and diagnostics in
 each batch; do not pass cumulative history as with the older full-snapshot `BenchmarkRunJsonWriter`.
@@ -59,16 +57,18 @@ execution with a fresh identity. Automated restart/resume is not implemented.
 A local single-thread recorder-cost probe is recorded in performance-plan §16. The repeatable
 concurrent/fork calibration runner is now implemented separately (§18); the earlier probe is not
 promoted to production evidence. Cadence/recovery evidence is in §17. Managed scheduler integration,
-deployment campaigns and JSON-derived HTML remain pending; long-soak write amplification remains
-an explicit measured limitation.
+campaign orchestration and JSON-derived HTML are now connected. Growing-copy write amplification
+remains a measured limitation, so version-1 preflight rejects a run whose final size, cumulative
+rewrite work or two-copy peak disk estimate exceeds its declared budget.
 
 ### Controlled workload engine (B2 first slice)
 
 `BenchmarkWorkloadScheduler` accepts typed parameters, demand duration, a rate-controlled catch-up
 cap, latency bounds and an injected monotonic clock. On each `advance()`, dispatch every returned
 launch exactly once and report its eventual physical result with `complete(id, succeeded)`. Report
-dispatch failures too. Do not block the driver on completion or JSON publication. The engine does
-not own timers, pools, cancellation or a shutdown deadline; the managed execution adapter is next.
+dispatch failures too. Do not block the driver on completion or JSON publication.
+`BenchmarkManagedExecution` owns arrival/sampling timers, independent deadline observation, phase
+transitions, bounded retry timers and stop/drain; pools and target resources remain caller-owned.
 
 Closed-loop mode refills available physical clients after completion. Rate-controlled mode keeps an
 absolute schedule independent of responses and explicitly counts excess delayed arrivals as generator
@@ -82,9 +82,9 @@ maximum arrival-detection/deadline-detection lag, and current physical/queue pop
 these even when logical outstanding work is zero. Record demand duration, driver cadence and the
 catch-up cap in the run manifest. See performance-plan §19 for precise accounting and limitations.
 
-The scheduler integration tests use a bounded test-owned Vert.x driver and real PostgreSQL; they do
-not add a production benchmark command or establish deployment capacity. Phase transitions, managed
-stop/drain, automatic workload rollover and asynchronous checkpoint-pressure handling remain pending.
+The scheduler and managed-execution integration tests use real PostgreSQL and verify phase changes,
+stop/drain, interval rollover and checkpoint-pressure handling. They do not establish deployment
+capacity.
 
 The first B2 slice is verified. The focused gate has 21 passing checks, including three real PostgreSQL
 scheduler invocations; the selected-reactor acceptance gate has 484 tests in 76 fresh Surefire reports,
@@ -92,6 +92,54 @@ zero failures/errors/skips, including 102 benchmark tests. A Docker runtime-sock
 automatic Docker Desktop update interrupted earlier attempts; those logs are retained as diagnostics,
 not acceptance. Docker Desktop 4.89.0 / engine 29.7.2 was healthy for the final gate. See performance-plan
 §19 for exact logs, recovery actions and the remaining managed-execution boundary.
+
+## Parameterised characterisation campaign
+
+Run the complete disposable local campaign from the repository root:
+
+```shell
+mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-characterisation -DskipTests
+```
+
+Defaults are three repetitions at each of 50 and 100 offered cache requests/second, with one-second
+baseline/load/recovery phases, a two-second drain, 100 ms intervals, concurrency/pool size four,
+100 deterministic entries and 256-byte payloads. Override the following Maven properties; quote
+comma-separated/dotted `-D` arguments in PowerShell:
+
+| Property prefix `peegeeq.campaign.` | Default | Meaning |
+|---|---:|---|
+| `outputDirectory` | `benchmark-results/characterisation-local` | Repository-relative or absolute ignored evidence directory |
+| `repetitions` | `3` | Repetitions per rate, bounded to 1–100 |
+| `rates` | `50,100` | Finite positive offered-rate list |
+| `concurrency` | `4` | Maximum physical concurrency |
+| `poolSize` | `4` | PostgreSQL pool size; pressure experiments may intentionally set this below concurrency |
+| `phaseMillis` | `1000` | Each baseline/load/recovery duration; drain is twice this value |
+| `sampleMillis` | `100` | Interval and checkpoint trigger; must not exceed a phase |
+| `datasetCardinality` | `100` | Prepared deterministic hit dataset |
+| `payloadBytes` | `256` | Deterministic binary payload size |
+
+The profile resolves and preflights the complete experiment before PostgreSQL starts measured work.
+It writes `resolved-experiment.json`, an atomically updated `campaign-manifest.json`, one UUID JSON
+and one derived UUID HTML per actual run, then `characterisation-review.json`. JSON is authoritative;
+HTML is self-contained and records the final JSON SHA-256. Run resources are unique namespaces and
+cleanup SQL is scoped to those namespaces. The supplied pool and database are never stopped by the
+adapter; the local entry point alone owns and stops its disposable Testcontainers fixture.
+
+The review reports matrix completeness, per-run curves, onset brackets, repeat min/max p95,
+limitations and follow-ups. `NO_ONSET_OBSERVED` is limited to the declared rates and durations.
+`INCONCLUSIVE` is a valid review outcome when samples or required observations are insufficient.
+These local results are framework/regression evidence, not production capacity.
+
+The accepted implementation campaign is retained under
+`benchmark-results/characterisation-framework-final-20260913/`: six of six VALID runs were accounted
+for at 100 and 200 requests/second with three repetitions, and the review reports
+`COMPLETE_NO_ONSET_OBSERVED`. See performance-plan §§31–36 for scope and verification.
+
+External targets are represented explicitly by host, port, database, isolated schema prefix and TLS
+policy, without credentials. `BenchmarkPostgresTargetVerifier` verifies the actual database,
+server version and session TLS through a caller-supplied pool. External credentials and pool/server
+lifecycle remain caller-owned. Do not run an external campaign until its target, access, resource
+ownership, budget, stop conditions and disruption authority are explicitly approved.
 
 ## Repeatable captured runs
 

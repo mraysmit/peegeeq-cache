@@ -201,5 +201,53 @@
                 </plugins>
             </build>
         </profile>
+        <profile>
+            <id>benchmark-characterisation</id>
+            <properties>
+                <peegeeq.benchmark.mainClass>dev.mars.peegeeq.cache.benchmark.BenchmarkLocalCampaignMain</peegeeq.benchmark.mainClass>
+                <peegeeq.campaign.outputDirectory>benchmark-results/characterisation-local</peegeeq.campaign.outputDirectory>
+                <peegeeq.campaign.repetitions>3</peegeeq.campaign.repetitions>
+                <peegeeq.campaign.rates>50,100</peegeeq.campaign.rates>
+                <peegeeq.campaign.concurrency>4</peegeeq.campaign.concurrency>
+                <peegeeq.campaign.poolSize>4</peegeeq.campaign.poolSize>
+                <peegeeq.campaign.phaseMillis>1000</peegeeq.campaign.phaseMillis>
+                <peegeeq.campaign.sampleMillis>100</peegeeq.campaign.sampleMillis>
+                <peegeeq.campaign.datasetCardinality>100</peegeeq.campaign.datasetCardinality>
+                <peegeeq.campaign.payloadBytes>256</peegeeq.campaign.payloadBytes>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <configuration>
+                            <arguments combine.self="override">
+                                <argument>-Dcampaign.outputDirectory=${peegeeq.campaign.outputDirectory}</argument>
+                                <argument>-Dcampaign.repositoryRoot=${maven.multiModuleProjectDirectory}</argument>
+                                <argument>-Dcampaign.repetitions=${peegeeq.campaign.repetitions}</argument>
+                                <argument>-Dcampaign.rates=${peegeeq.campaign.rates}</argument>
+                                <argument>-Dcampaign.concurrency=${peegeeq.campaign.concurrency}</argument>
+                                <argument>-Dcampaign.poolSize=${peegeeq.campaign.poolSize}</argument>
+                                <argument>-Dcampaign.phaseMillis=${peegeeq.campaign.phaseMillis}</argument>
+                                <argument>-Dcampaign.sampleMillis=${peegeeq.campaign.sampleMillis}</argument>
+                                <argument>-Dcampaign.datasetCardinality=${peegeeq.campaign.datasetCardinality}</argument>
+                                <argument>-Dcampaign.payloadBytes=${peegeeq.campaign.payloadBytes}</argument>
+                                <argument>-Dpeegeeq.test.postgres.image=${peegeeq.test.postgres.image}</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>${peegeeq.benchmark.mainClass}</argument>
+                            </arguments>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>run-characterisation-campaign</id>
+                                <phase>integration-test</phase>
+                                <goals><goal>exec</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

@@ -52,13 +52,13 @@ public final class BenchmarkWorkloadScheduler {
 
     private static final BigInteger BILLION = BigInteger.valueOf(1_000_000_000);
     private final BenchmarkParameters parameters;
+    private final List<LoadWindow> loadWindows;
+    private final List<RateWindow> rateWindows;
     private final long durationNanos;
     private final long timeoutNanos;
     private final int maximumArrivalsPerAdvance;
     private final LongSupplier clock;
     private final long origin;
-    private final BigInteger numerator;
-    private final BigInteger denominator;
     private final long plannedArrivals;
     private final BenchmarkIntervalRecorder recorder;
     private final ArrayDeque<Long> queue = new ArrayDeque<>();
@@ -74,6 +74,10 @@ public final class BenchmarkWorkloadScheduler {
     private long maximumScheduleLag;
     private long maximumDeadlineLag;
 
+    private record LoadWindow(long startNanos, long endNanos, int concurrency, double offeredPerSecond) { }
+    private record RateWindow(long startNanos, long endNanos, long firstArrival, long arrivalCount,
+                              BigInteger numerator, BigInteger denominator) { }
+
     private static final class Active {
         final Launch launch;
         final long deadline;
@@ -88,11 +92,26 @@ public final class BenchmarkWorkloadScheduler {
     public BenchmarkWorkloadScheduler(BenchmarkParameters parameters, Duration duration,
                                       int maximumArrivalsPerAdvance, List<Long> latencyBoundsNanos,
                                       LongSupplier monotonicNanos) {
+        this(parameters, fixedWindow(parameters, duration), maximumArrivalsPerAdvance,
+                latencyBoundsNanos, monotonicNanos);
+    }
+
+    public BenchmarkWorkloadScheduler(BenchmarkParameters parameters, BenchmarkPhaseWorkloadPlan phasePlan,
+                                      int maximumArrivalsPerAdvance, List<Long> latencyBoundsNanos,
+                                      LongSupplier monotonicNanos) {
+        this(parameters, scheduledWindows(parameters, phasePlan), maximumArrivalsPerAdvance,
+                latencyBoundsNanos, monotonicNanos);
+    }
+
+    private BenchmarkWorkloadScheduler(BenchmarkParameters parameters, List<LoadWindow> loadWindows,
+                                       int maximumArrivalsPerAdvance, List<Long> latencyBoundsNanos,
+                                       LongSupplier monotonicNanos) {
         this.parameters = Objects.requireNonNull(parameters, "parameters");
-        Objects.requireNonNull(duration, "duration");
+        this.loadWindows = List.copyOf(loadWindows);
+        if (this.loadWindows.isEmpty()) throw new IllegalArgumentException("At least one load window is required");
         timeoutNanos = parameters.operationTimeout().toNanos();
         try {
-            durationNanos = duration.toNanos();
+            durationNanos = this.loadWindows.getLast().endNanos();
             if (durationNanos <= 0) throw new IllegalArgumentException("Duration must be positive");
             Math.addExact(durationNanos, timeoutNanos);
         } catch (ArithmeticException overflow) {
@@ -103,21 +122,54 @@ public final class BenchmarkWorkloadScheduler {
         clock = Objects.requireNonNull(monotonicNanos, "monotonicNanos");
         origin = clock.getAsLong();
         if (parameters.loadModel() == BenchmarkParameters.LoadModel.RATE_CONTROLLED) {
-            // Preserve the configured decimal rate, rather than rounding a period and changing demand.
-            var rate = BigDecimal.valueOf(parameters.offeredPerSecond());
-            numerator = rate.unscaledValue().multiply(BigInteger.TEN.pow(Math.max(0, -rate.scale())));
-            denominator = BILLION.multiply(BigInteger.TEN.pow(Math.max(0, rate.scale())));
-            try {
-                plannedArrivals = ceil(BigInteger.valueOf(durationNanos).multiply(numerator), denominator).longValueExact();
-            } catch (ArithmeticException overflow) {
-                throw new IllegalArgumentException("Planned arrivals exceed the counter range", overflow);
-            }
+            rateWindows = rateWindows(this.loadWindows);
+            plannedArrivals = rateWindows.getLast().firstArrival() + rateWindows.getLast().arrivalCount();
         } else {
-            numerator = BigInteger.ZERO;
-            denominator = BigInteger.ONE;
+            rateWindows = List.of();
             plannedArrivals = 0;
         }
         recorder = new BenchmarkIntervalRecorder(latencyBoundsNanos, () -> eventNanos);
+    }
+
+    private static List<LoadWindow> fixedWindow(BenchmarkParameters parameters, Duration duration) {
+        Objects.requireNonNull(parameters, "parameters");
+        Objects.requireNonNull(duration, "duration");
+        long nanos;
+        try { nanos = duration.toNanos(); }
+        catch (ArithmeticException overflow) { throw new IllegalArgumentException("Duration exceeds nanosecond range", overflow); }
+        return List.of(new LoadWindow(0, nanos, parameters.concurrency(), parameters.offeredPerSecond()));
+    }
+
+    private static List<LoadWindow> scheduledWindows(BenchmarkParameters parameters,
+                                                     BenchmarkPhaseWorkloadPlan phasePlan) {
+        Objects.requireNonNull(parameters, "parameters");
+        Objects.requireNonNull(phasePlan, "phasePlan");
+        if (!parameters.equals(phasePlan.ceiling())) {
+            throw new IllegalArgumentException("Phase workload plan must use the scheduler run parameters");
+        }
+        return phasePlan.windows().stream().map(window -> new LoadWindow(window.startNanos(), window.endNanos(),
+                window.profile().concurrency(), window.profile().offeredPerSecond())).toList();
+    }
+
+    private static List<RateWindow> rateWindows(List<LoadWindow> windows) {
+        var rates = new ArrayList<RateWindow>(windows.size());
+        long first = 0;
+        try {
+            for (var window : windows) {
+                // Preserve each configured decimal rate rather than rounding periods.
+                var rate = BigDecimal.valueOf(window.offeredPerSecond());
+                var numerator = rate.unscaledValue().multiply(BigInteger.TEN.pow(Math.max(0, -rate.scale())));
+                var denominator = BILLION.multiply(BigInteger.TEN.pow(Math.max(0, rate.scale())));
+                long count = ceil(BigInteger.valueOf(window.endNanos() - window.startNanos())
+                        .multiply(numerator), denominator).longValueExact();
+                rates.add(new RateWindow(window.startNanos(), window.endNanos(), first, count,
+                        numerator, denominator));
+                first = Math.addExact(first, count);
+            }
+        } catch (ArithmeticException overflow) {
+            throw new IllegalArgumentException("Planned arrivals exceed the counter range", overflow);
+        }
+        return List.copyOf(rates);
     }
 
     /** Advances deadlines and demand; the returned list is bounded by configured physical concurrency. */
@@ -125,12 +177,13 @@ public final class BenchmarkWorkloadScheduler {
         long now = now();
         expire(now);
         var launches = new ArrayList<Launch>();
-        while (!queue.isEmpty() && active.size() < parameters.concurrency()) {
+        int targetConcurrency = concurrencyAt(now);
+        while (!queue.isEmpty() && active.size() < targetConcurrency) {
             launch(queue.removeFirst(), now, launches);
         }
         if (parameters.loadModel() == BenchmarkParameters.LoadModel.CLOSED_LOOP) {
             if (now < durationNanos) {
-                int available = parameters.concurrency() - active.size();
+                int available = targetConcurrency - active.size();
                 for (int index = 0; index < available; index++) {
                     recorder.schedule();
                     recorder.admit();
@@ -143,10 +196,13 @@ public final class BenchmarkWorkloadScheduler {
         return List.copyOf(launches);
     }
 
+    /** Advances logical deadlines without generating demand or launching queued work. */
+    public synchronized void observe() {
+        expire(now());
+    }
+
     private void arrive(long now, List<Launch> launches) {
-        long due = now >= durationNanos ? plannedArrivals
-                : BigInteger.valueOf(now).multiply(numerator).divide(denominator).add(BigInteger.ONE)
-                        .min(BigInteger.valueOf(plannedArrivals)).longValueExact();
+        long due = dueAt(now);
         long pending = due - arrivals;
         if (pending == 0) return;
         maximumScheduleLag = Math.max(maximumScheduleLag, now - scheduledAt(arrivals));
@@ -163,7 +219,7 @@ public final class BenchmarkWorkloadScheduler {
                 recorder.admit();
                 recorder.expireBeforeStart();
                 maximumDeadlineLag = Math.max(maximumDeadlineLag, now - scheduled - timeoutNanos);
-            } else if (active.size() < parameters.concurrency()) {
+            } else if (active.size() < concurrencyAt(now)) {
                 recorder.admit();
                 launch(scheduled, now, launches);
             } else if (queue.size() < parameters.queueCapacity()) {
@@ -177,7 +233,33 @@ public final class BenchmarkWorkloadScheduler {
     }
 
     private long scheduledAt(long index) {
-        return ceil(BigInteger.valueOf(index).multiply(denominator), numerator).longValueExact();
+        for (var window : rateWindows) {
+            if (index < window.firstArrival() + window.arrivalCount()) {
+                long within = index - window.firstArrival();
+                return Math.addExact(window.startNanos(), ceil(BigInteger.valueOf(within)
+                        .multiply(window.denominator()), window.numerator()).longValueExact());
+            }
+        }
+        throw new IllegalArgumentException("Arrival index exceeds the planned schedule");
+    }
+
+    private long dueAt(long now) {
+        if (now >= durationNanos) return plannedArrivals;
+        for (var window : rateWindows) {
+            if (now < window.endNanos()) {
+                long elapsed = Math.max(0, now - window.startNanos());
+                long within = BigInteger.valueOf(elapsed).multiply(window.numerator())
+                        .divide(window.denominator()).add(BigInteger.ONE)
+                        .min(BigInteger.valueOf(window.arrivalCount())).longValueExact();
+                return Math.addExact(window.firstArrival(), within);
+            }
+        }
+        throw new IllegalStateException("Rate window did not contain an in-range time");
+    }
+
+    private int concurrencyAt(long now) {
+        for (var window : loadWindows) if (now < window.endNanos()) return window.concurrency();
+        return loadWindows.getLast().concurrency();
     }
 
     private static BigInteger ceil(BigInteger value, BigInteger divisor) {
@@ -214,6 +296,14 @@ public final class BenchmarkWorkloadScheduler {
                     now - request.launch.startedNanos(), now - request.launch.scheduledNanos());
         }
         return true;
+    }
+
+    /** True while an issued logical request still owns a live execution slot. */
+    public synchronized boolean retryable(long id) {
+        if (id < 0 || id >= nextId) throw new IllegalArgumentException("Unknown launch ID");
+        expire(now());
+        var request = active.get(id);
+        return request != null && !request.timedOut;
     }
 
     private void expire(long now) {

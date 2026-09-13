@@ -201,4 +201,70 @@ class BenchmarkWorkloadSchedulerTest {
         var scheduler = scheduler(BenchmarkParameters.LoadModel.CLOSED_LOOP, 0, 3, 0, 10, 20, 1);
         assertEquals(3, scheduler.advance().size());
     }
+
+    @Test
+    void deadlineObservationExpiresActiveWorkWithoutGeneratingDemand() {
+        var scheduler = scheduler(BenchmarkParameters.LoadModel.RATE_CONTROLLED, 100_000_000, 1, 1, 10, 40, 4);
+        var first = scheduler.advance().getFirst();
+        clock.set(20);
+        scheduler.observe();
+        assertEquals(1, scheduler.statistics().physicalInFlight());
+        assertEquals(0, scheduler.statistics().queued());
+        clock.set(21);
+        var sample = scheduler.checkpoint();
+        assertEquals(1, sample.interval().scheduled());
+        assertEquals(1, sample.interval().timedOut());
+        assertTrue(scheduler.complete(first.id(), true));
+    }
+
+    @Test
+    void phaseScheduleChangesClosedLoopConcurrencyAtThePlannedBoundary() {
+        var parameters = new BenchmarkParameters(BenchmarkParameters.LoadModel.CLOSED_LOOP,
+                3, 1, 0, 0, Duration.ofNanos(100));
+        var timeline = new BenchmarkTimeline(List.of(
+                new BenchmarkTimeline.Phase("low", BenchmarkTimeline.PhaseKind.BASELINE, Duration.ofNanos(10)),
+                new BenchmarkTimeline.Phase("high", BenchmarkTimeline.PhaseKind.LOAD, Duration.ofNanos(10)),
+                new BenchmarkTimeline.Phase("drain", BenchmarkTimeline.PhaseKind.DRAIN, Duration.ofNanos(10))),
+                Duration.ofNanos(5));
+        var plan = new BenchmarkPhaseWorkloadPlan(timeline, parameters, List.of(
+                new BenchmarkPhaseWorkloadPlan.Profile("low", 1, 0, BenchmarkProductWorkloads.setGet()),
+                new BenchmarkPhaseWorkloadPlan.Profile("high", 3, 0, BenchmarkProductWorkloads.setGet())));
+        var scheduler = new BenchmarkWorkloadScheduler(parameters, plan, 3, List.of(5L, 10L), clock::get);
+
+        var low = scheduler.advance();
+        assertEquals(1, low.size());
+        clock.set(9); scheduler.complete(low.getFirst().id(), true);
+        assertEquals(1, scheduler.advance().size());
+        clock.set(10);
+        assertEquals(2, scheduler.advance().size());
+    }
+
+    @Test
+    void phaseScheduleUsesPiecewiseAbsoluteRatesWithoutBoundaryLoss() {
+        var parameters = new BenchmarkParameters(BenchmarkParameters.LoadModel.RATE_CONTROLLED,
+                3, 1, 100_000_000, 3, Duration.ofNanos(100));
+        var timeline = new BenchmarkTimeline(List.of(
+                new BenchmarkTimeline.Phase("low", BenchmarkTimeline.PhaseKind.BASELINE, Duration.ofNanos(20)),
+                new BenchmarkTimeline.Phase("high", BenchmarkTimeline.PhaseKind.LOAD, Duration.ofNanos(20)),
+                new BenchmarkTimeline.Phase("drain", BenchmarkTimeline.PhaseKind.DRAIN, Duration.ofNanos(10))),
+                Duration.ofNanos(10));
+        var plan = new BenchmarkPhaseWorkloadPlan(timeline, parameters, List.of(
+                new BenchmarkPhaseWorkloadPlan.Profile("low", 3, 50_000_000,
+                        BenchmarkProductWorkloads.setGet()),
+                new BenchmarkPhaseWorkloadPlan.Profile("high", 3, 100_000_000,
+                        BenchmarkProductWorkloads.setGet())));
+        var scheduler = new BenchmarkWorkloadScheduler(parameters, plan, 4, List.of(5L, 10L), clock::get);
+
+        var first = scheduler.advance().getFirst();
+        scheduler.complete(first.id(), true);
+        clock.set(19); assertTrue(scheduler.advance().isEmpty());
+        clock.set(20); var second = scheduler.advance().getFirst();
+        scheduler.complete(second.id(), true);
+        clock.set(30); var third = scheduler.advance().getFirst();
+        scheduler.complete(third.id(), true);
+        clock.set(40); assertTrue(scheduler.advance().isEmpty());
+        clock.incrementAndGet();
+        assertEquals(3, scheduler.checkpoint().interval().scheduled());
+        assertTrue(scheduler.drained());
+    }
 }

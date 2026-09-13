@@ -1,8 +1,8 @@
 # Parameterised performance and degradation analysis plan
 
-**Revised:** 6 September 2026
-**Status:** B0/B1 IN PROGRESS — bounded recording/checkpoints, publication cadence, recovery inspection and repeatable concurrent/fork calibration implemented; campaign scheduler not yet wired
-**Source baseline reviewed:** `300f3f5` (`docs(evidence): record R6 final acceptance`)
+**Revised:** 13 September 2026
+**Status:** B0–B5 COMPLETE; B6 COMPLETE FOR THE DECLARED LOCAL FRAMEWORK-ACCEPTANCE CAMPAIGN — external/production campaigns remain owner-authorised future work and no production capacity claim is made
+**Source baseline reviewed:** `2de7be1` (`Refactor code structure for improved readability and maintainability`)
 **Scope:** parameterised benchmarking across workloads, runtime configurations, timeframes and deployments
 
 ## 1. Purpose and correction to the original plan
@@ -247,13 +247,13 @@ This sequence supersedes the earlier B0–B6 plan. Production target selection i
 
 | Phase | Implementation and exit evidence | Status |
 |---|---|---|
-| B0 — Experiment/interval contracts | Immutable factors/timeframes, finite matrix expansion, interval/outcome schema; RED/GREEN validation, boundaries and accounting | IN PROGRESS — timeframe/accounting and typed load-matrix/experiment slices implemented |
-| B1 — Time-series recorder | Bounded distributions, rollover, partial streaming evidence; precision/concurrency/overflow tests and recorder-cost measurements | IN PROGRESS — recorder/checkpoints, cadence, recovery inspection and repeatable concurrent/fork calibration implemented; long-soak strategy and scheduler coupling remain |
-| B2 — Scheduled workloads | Closed-loop/rate-controlled execution, independent deadlines, bounded queues, phase schedule and complete outcomes; real PostgreSQL and generator-pressure tests | IN PROGRESS — pull-driven scheduling/accounting engine implemented; managed execution, phase transitions and live checkpoint coupling remain |
-| B3 — Scenario/diagnostic parameters | Dataset/mix/contention/TTL/runtime controls, capability inventory; correctness, repeatability and diagnostic-availability tests | NOT STARTED |
-| B4 — Analysis/reporting | Versioned policies, onset/progression/recovery output and linked time-series report; known-trace tests and controlled repeated live experiments | NOT STARTED |
-| B5 — Deployment/campaign execution | Explicit targets, isolated ownership, matrix/repetition/reset orchestration and manifests; local/external-path integration tests before external campaigns | NOT STARTED |
-| B6 — Characterisation review | Retained curves, boundary brackets, repeat-run variation, limitations, follow-ups and completeness review for the executed matrix | NOT STARTED |
+| B0 — Experiment/interval contracts | Immutable factors/timeframes, finite matrix expansion, interval/outcome schema; RED/GREEN validation, boundaries and accounting | COMPLETE — complete specification resolves phases, configurations, scenario/runtime controls, persistence estimates, capabilities, run count and evidence destination before launch |
+| B1 — Time-series recorder | Bounded distributions, rollover, partial streaming evidence; precision/concurrency/overflow tests and recorder-cost measurements | COMPLETE — bounded recorder/checkpoints and calibration retained; the selected finite single-JSON strategy now preflights final bytes, cumulative rewrite work and two-copy peak disk, rejecting unsupported soaks before launch |
+| B2 — Scheduled workloads | Closed-loop/rate-controlled execution, independent deadlines, bounded queues, phase schedule and complete outcomes; real PostgreSQL and generator-pressure tests | COMPLETE — scheduling/accounting, managed Vert.x execution, piecewise phase rates/concurrency, deterministic workload mixes, stable retry/attempt identity, bounded generator sweeps, finite resolved-run execution, stop/drain policy and live checkpoints implemented and verified |
+| B3 — Scenario/diagnostic parameters | Dataset/mix/contention/TTL/runtime controls, capability inventory; correctness, repeatability and diagnostic-availability tests | COMPLETE — deterministic cache/counter/lock/scan adapters, cursor completeness checks, runtime safety evaluation and versioned availability inventory are verified; unsupported capabilities remain explicit |
+| B4 — Analysis/reporting | Versioned policies, onset/progression/recovery output and linked time-series report; known-trace tests and controlled repeated live experiments | COMPLETE — version-1 persistent latency/reliability/pressure analysis, isolated-spike handling, recovery, inconclusive results and self-contained hash-linked HTML are implemented and exercised by a repeated local campaign |
+| B5 — Deployment/campaign execution | Explicit targets, isolated ownership, matrix/repetition/reset orchestration and manifests; local/external-path integration tests before external campaigns | COMPLETE — explicit target verification, deterministic order, run-owned reset/cleanup, failure preservation, live manifest, per-run analysis and local/external-supplied PostgreSQL path tests are implemented |
+| B6 — Characterisation review | Retained curves, boundary brackets, repeat-run variation, limitations, follow-ups and completeness review for the executed matrix | COMPLETE FOR DECLARED LOCAL SCOPE — six of six finite local runs reviewed with retained curves/variation and tested-range limitations; no external or release-readiness claim |
 
 B0–B4 can be implemented and verified using local disposable PostgreSQL. External availability does
 not block them. Bring resource isolation forward wherever concurrent local experiments require it.
@@ -322,13 +322,11 @@ a failed benchmark or a reason to weaken thresholds.
 
 ## 11. Immediate implementation step
 
-The first B2 scheduler slice is accepted (§19). Next connect managed workload execution and product-workload
-recorder rollover, retaining the bounded-memory/checkpoint-cost findings (§18). The repeatable calibration command is
-implemented; it must not be mistaken for a parameterised database workload runner. Publication cadence,
-explicit finalisation and recovery inspection are implemented (§17); automatic restart/resume and
-the final long-soak persistence strategy remain open. Use local Testcontainers as the initial measurement
-target. Do not wait for production latency targets or an external deployment choice, and do not
-substitute remote connectivity work for the missing measurement/analysis capabilities.
+The implementation sequence is complete for the declared local framework scope; see §§31–36.
+The next work is not an unimplemented framework phase: it is an owner-declared external campaign or
+a separately versioned detector/scenario extension. Before either, choose the target, authority,
+finite matrix, persistence budgets and required diagnostics. Automatic in-place restart/resume is
+deliberately unsupported; begin a new execution identity after independent owner/liveness review.
 
 ## 12. Implementation evidence — first B0 slice (6 September 2026)
 
@@ -941,11 +939,10 @@ this slice: SET/GET workflows in both modes, slow PostgreSQL queries crossing lo
 and incremental publication/recovery inspection of one JSON file. The test driver owns its Vert.x
 tick/watchdog and waits for physical drain; it is not the production execution adapter.
 
-B2 is **not complete**. Next implement the managed Vert.x execution adapter with independently owned
-arrival/deadline/observation timers, explicit stop and bounded physical-drain policy, partial/failure
-evidence, phase transitions, and bounded checkpoint-pressure coupling without awaiting publication
-on the arrival path. Retries/attempt identities, broader workload mixes, generator calibration and
-campaign execution also remain open. The growing JSON copy/hash cost recorded in §18 still applies.
+B2 was **not complete at this checkpoint**. The managed Vert.x execution adapter described here is
+implemented and verified in §22. Retries/attempt identities, explicit per-phase workload transitions,
+broader workload mixes, generator calibration and campaign execution remain open. The growing JSON
+copy/hash cost recorded in §18 still applies.
 
 ### Verification record and environment recovery
 
@@ -1009,3 +1006,454 @@ gates, so Jenkins can collect observations without implying that the unfinished 
 campaign runner exists. The stage must be migrated to per-execution JSON after the managed Vert.x
 adapter and campaign entry point are accepted. No Jenkins result may be cited until the reviewed
 Jenkinsfile is committed, pushed, selected by the separate `PeeGeeQ-Cache` job and actually executed.
+
+## 21. Status re-verification (2026-09-11)
+
+This pre-implementation snapshot is superseded by the managed-execution evidence in §22.
+
+The implementation was re-checked against source baseline `2de7be1`. The phase table in §8 remains
+authoritative: B0, B1 and B2 are **IN PROGRESS**, while B3 through B6 are **NOT STARTED**. No phase is
+complete. In particular, `BenchmarkExperiment` resolves bounded run descriptors but does not execute
+them, and `BenchmarkWorkloadScheduler` supplies the bounded pull-driven scheduling/accounting state
+machine but intentionally owns no threads, timers, transport cancellation or campaign lifecycle.
+There is no production connection yet between the experiment/timeline, managed cache operations,
+phase transitions, checkpoint session and bounded physical-drain handling.
+
+A fresh benchmark-module gate completed successfully on 11 September 2026:
+
+```text
+mvn --batch-mode --no-transfer-progress test -pl peegee-cache-benchmarks
+Tests run: 102, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+The 102 checks include real PostgreSQL Testcontainers coverage for pool headroom, recorder publication
+and recovery, and both scheduler load models. This verifies the implemented foundation; it is not a
+parameterised campaign result or evidence that the plan is complete. Jenkins continues to expose
+recorder calibration separately while `benchmark-characterisation` invokes the legacy
+`benchmark-capture` profile. The next accepted implementation target therefore remains the B2 managed
+execution adapter and its phase, cancellation, drain and live-checkpoint integration described in §19.
+
+## 22. B2 managed Vert.x execution and live checkpoint coupling (2026-09-11)
+
+`BenchmarkManagedExecution` now owns the timers and lifecycle for one resolved run while leaving
+Vert.x, the checkpoint worker and the cache/transport operation under caller ownership. It connects
+`BenchmarkExperiment.Run`, `BenchmarkTimeline`, `BenchmarkWorkloadScheduler` and
+`BenchmarkCheckpointSession`. Separate Vert.x timers drive arrivals, logical-deadline observation,
+interval rollover/publication and the bounded physical-drain deadline. Deadline observation does not
+generate demand. Each launch is attributed to its active named phase and each actual recorder interval
+is published with scheduler diagnostics and all six bounded latency distributions.
+
+The adapter treats operation failures as measured outcomes rather than infrastructure failures. It
+supports an explicit idempotent stop request, stops generating new work, waits for admitted physical
+operations, and publishes `STOPPED` evidence after they finish. Natural completion publishes
+`COMPLETED` evidence only after demand ends and the scheduler physically drains. Exceeding the final
+`DRAIN` phase publishes `FAILED`/`INVALID` evidence with the remaining physical population; the
+adapter does not pretend a logical timeout cancelled transport work. Timer and checkpoint failures
+fail-stop the execution. Final checkpoint admission is checked before terminal metadata is published,
+so checkpoint pressure cannot silently discard the last interval.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-managed-execution-red.log` records the expected missing-type compilation failure before
+  `BenchmarkManagedExecution` existed.
+- `benchmark-managed-execution-green.log` records the first three managed lifecycle tests passing.
+- `benchmark-managed-execution-integration.log` records four scheduler integration checks passing,
+  including managed phase execution of real PostgreSQL-backed cache SET/GET operations and final JSON.
+- `benchmark-managed-execution-verify.log` records the complete benchmark-module gate: **108 tests**,
+  zero failures/errors/skips, including PostgreSQL 18.3 Testcontainers coverage.
+- `benchmark-managed-execution-reactor-verify.log` records the selected eight-module reactor gate:
+  **487 tests**, zero failures/errors/skips, with all eight modules successful in 1:41. No
+  Testcontainers workload remained running after the gate.
+
+B2 remained **IN PROGRESS at this checkpoint**. Per-phase workload/load transitions and reusable
+product-workload definitions are implemented in §23. Retry/attempt identity, generator-cost
+calibration and connection of resolved experiment runs to a finite campaign executor remain open.
+
+## 23. B2 per-phase load and workload transitions (2026-09-13)
+
+`BenchmarkPhaseWorkloadPlan` now treats the resolved run's `BenchmarkParameters` as safety ceilings
+and requires exactly one ordered profile for every non-drain timeline phase. Each profile declares
+target concurrency, target offered rate and an immutable weighted operation mix. Profile names/order
+must match the timeline; concurrency and rate cannot exceed the run ceiling; closed-loop phases must
+retain zero offered rate; and the timeline must finish with exactly one `DRAIN` phase.
+
+`BenchmarkWorkloadScheduler` accepts the phase plan as an alternative to its backward-compatible
+uniform constructor. Closed-loop concurrency changes at planned boundaries without cancelling work
+already in flight. Rate-controlled demand uses a piecewise absolute rational schedule: every phase
+preserves its declared decimal rate, phase-boundary arrivals are neither lost nor duplicated, and a
+delayed driver still applies the existing bounded catch-up/generator-miss policy across transitions.
+Deadline observation remains independent and never generates demand.
+
+`BenchmarkWorkloadMix` selects a named operation deterministically from the run seed and logical
+request ID, independent of completion order. `BenchmarkProductWorkloads` supplies stable identifiers
+for cache SET, GET, SET/GET, DELETE, counter increment, lock acquire/release and scan-page operations,
+plus reusable SET/GET and weighted read/write mixes. The managed driver resolves the scheduled phase
+and operation before invoking the caller-owned product adapter. It records the complete planned phase
+schedule in evidence environment fields and adds active target concurrency/rate, operation weights
+and a mixed-transition-window marker to every interval. A request queued across a boundary retains
+the phase and workload selected at its scheduled time.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-phase-workloads-red.log` records the expected missing contracts, constructor and
+  operation-callback compilation failures.
+- `benchmark-phase-workloads-green.log` records 22 focused phase-plan, managed-driver and scheduler
+  tests passing after the initial implementation.
+- `benchmark-phase-workloads-integration.log` records all four scheduler integration checks passing,
+  including a real PostgreSQL-backed transition from low-rate SET/GET work to higher-rate GET work.
+- `benchmark-phase-workloads-verify.log` records the complete benchmark-module gate: **114 tests**,
+  zero failures/errors/skips, including PostgreSQL 18.3 Testcontainers coverage.
+- `benchmark-phase-workloads-reactor-verify.log` records the selected eight-module reactor gate:
+  **493 tests**, zero failures/errors/skips, with all eight modules successful in 2:03. PostgreSQL
+  workload containers and the Testcontainers cleanup helper exited after the gate.
+
+B2 remains **IN PROGRESS**. Logical-operation/physical-attempt identity and bounded retry policy are
+implemented in §24. Generator-cost calibration and finite campaign execution remain subsequent B2
+work. B3 scenario/diagnostic parameters, B4 analysis, B5 deployment/campaign orchestration and B6
+executed characterisation remain unimplemented.
+
+## 24. B2 stable attempt identity and bounded retry policy (2026-09-13)
+
+`BenchmarkRetryPolicy` now defines an explicit positive maximum-attempt budget and a non-negative
+whole-millisecond fixed delay. `none()` is the one-attempt policy, so disabled retries remain explicit
+in every managed execution configuration. Invalid or sub-millisecond policies fail before a run is
+opened.
+
+The managed operation boundary now receives an immutable `Attempt`. Its logical request ID is the
+scheduler launch ID; its zero-based attempt index identifies the physical invocation. The original
+launch, scheduled phase and deterministically selected product operation are retained across every
+retry. A failed physical attempt does not complete or refill the logical scheduler slot while retry
+budget and deadline remain. Retries are sequential, timer-owned by the driver and bounded by the
+existing concurrency slot, attempt budget and logical deadline. A retry that reaches the deadline is
+suppressed and the scheduler records the final physical failure against the already timed-out logical
+request. Stop continues draining already admitted retry chains; the final drain deadline cancels
+remaining retry timers through the existing fail-stop path.
+
+Evidence records the configured attempt budget/delay and cumulative attempt starts, successes,
+failures, scheduled retries, exhausted chains, deadline-suppressed retries and current pending retry
+timers. Logical outcome and latency accounting remains in `BenchmarkWorkloadScheduler`; physical
+attempt telemetry is additive and does not turn a first-attempt failure followed by success into a
+logical failure.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-retry-identity-red.log` records the expected missing policy/attempt contracts and
+  callback-signature compilation failures before production implementation.
+- `benchmark-retry-identity-green.log` records 22 focused policy, managed-driver and scheduler tests
+  passing after implementation.
+- `benchmark-retry-identity-integration.log` records all four scheduler integration checks passing
+  against PostgreSQL 18.3 Testcontainers.
+- `benchmark-retry-identity-verify.log` records the complete benchmark-module gate: **116 tests**,
+  zero failures/errors/skips.
+- `benchmark-retry-identity-reactor-verify.log` records the selected eight-module reactor gate:
+  **495 tests**, zero failures/errors/skips, with all eight modules successful. PostgreSQL workload
+  containers and the Testcontainers cleanup helper exited after the gate.
+
+B2 remains **IN PROGRESS**. Managed-driver generator calibration is implemented in §25. The next
+strict-TDD slice connects resolved runs to a finite campaign executor.
+
+## 25. B2 bounded managed-driver generator calibration (2026-09-13)
+
+`BenchmarkGeneratorCalibration` now executes a finite, strictly increasing list of offered rates
+through `BenchmarkManagedExecution`. Its configuration bounds the sweep to 64 rates, caps concurrency
+and arrivals considered per advance, and requires positive whole-millisecond measurement, drain,
+sampling and arrival intervals with cadence contained by the measurement window. Every rate runs as
+its own resolved rate-controlled experiment and produces a separate terminal evidence file.
+
+The calibration adapter completes a synthetic `generator.noop` operation immediately. Evidence is
+labelled `GENERATOR_CALIBRATION` and states that it contains no cache or PostgreSQL capacity
+measurement. Each returned observation records offered rate, first-attempt dispatch count, generator
+misses, admission rejections, maximum schedule-detection lag, terminal status and evidence path. The
+ordered raw observations expose the first rate at which this driver/JVM/host combination produces
+misses without inventing a universal pass threshold.
+
+Managed evidence now also records cumulative and maximum synchronous phase-selection,
+workload-selection and operation-dispatch time, plus its sample count. Together with the existing
+absolute schedule-lag and generator-miss metrics, this separates measured generator pressure from
+product-operation completion latency. Checkpoint publication remains active during the sweep so its
+real interference is visible rather than silently removed.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-generator-calibration-red.log` records the expected missing calibration contract before
+  production implementation.
+- `benchmark-generator-calibration-green.log` records eight focused calibration and managed-driver
+  tests passing.
+- `benchmark-generator-calibration-verify.log` records the complete benchmark-module gate:
+  **118 tests**, zero failures/errors/skips, including PostgreSQL 18.3 Testcontainers coverage.
+- `benchmark-generator-calibration-reactor-verify.log` records the selected eight-module reactor
+  gate: **497 tests**, zero failures/errors/skips, with every module successful in 1:45. PostgreSQL
+  containers and the Testcontainers cleanup helper exited after the gate.
+
+B2 is completed by the finite resolved-run executor in §26. B3 scenario/diagnostic parameters, B4
+analysis, B5 deployment orchestration and B6 executed characterisation remain unimplemented.
+
+## 26. B2 finite resolved-run campaign execution (2026-09-13)
+
+`BenchmarkCampaignExecutor` now bridges a budget-checked `BenchmarkExperiment` to
+`BenchmarkManagedExecution` without materialising or silently expanding the matrix. It resolves runs
+in the experiment's declared configuration/fork/repetition order and executes exactly one at a time.
+An additional campaign execution budget is checked before the first preparation callback.
+
+The caller-owned asynchronous `Preparer` is the reset/provisioning boundary for each resolved run. It
+returns the empty RUNNING manifest, managed options and operation adapter. The executor verifies that
+the prepared manifest contains the exact resolved run before opening evidence. Preparation or
+infrastructure failure fails the campaign future while already finalised files remain intact;
+terminal managed outcomes, including measured FAILED results, are retained as ordered run results.
+The executor does not own PostgreSQL, Vert.x or the shared checkpoint worker.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-campaign-executor-red.log` records the expected missing executor contract.
+- `benchmark-campaign-executor-green.log` records 11 focused experiment, managed-driver and campaign
+  tests passing.
+- `benchmark-campaign-executor-verify.log` records the complete benchmark-module gate: **120 tests**,
+  zero failures/errors/skips, including PostgreSQL 18.3 Testcontainers coverage.
+- `benchmark-campaign-executor-reactor-verify.log` records the selected eight-module reactor gate:
+  **499 tests**, zero failures/errors/skips, with every module successful in 1:48. PostgreSQL
+  containers and the Testcontainers cleanup helper exited after the gate.
+
+B2 is **COMPLETE**. B3's first immutable scenario contract and real product adapter are implemented in
+§27. B0/B1 remain in progress for their broader contracts and long-soak persistence decision; B4
+through B6 have not started.
+
+## 27. B3 deterministic data scenario and real SET/GET adapter (2026-09-13)
+
+`BenchmarkScenarioParameters` introduces bounded immutable controls for dataset cardinality, exact
+binary payload bytes, uniform or hot-set key selection, hot-set size/request fraction, entry TTL and
+telemetry mode. Dataset cardinality and payload size have explicit safety ceilings. TTL is disabled by
+zero or otherwise requires positive whole milliseconds. Uniform distributions cannot smuggle in hot
+parameters; hot sets must be a proper dataset subset with a finite fraction in `(0,1]`.
+
+Key selection is a pure function of recorded seed and logical request ID, so physical retries retain
+the same key. Payload generation is a pure function of seed and key index and returns the exact
+declared byte count. The scenario exports all controls as stable `scenario.*` environment fields for
+merging into the initial run manifest before evidence is opened.
+
+`BenchmarkCacheSetGetOperation` is the first real product adapter. It implements the managed operation
+boundary using the public `CacheService`, performs UPSERT followed by GET, applies the configured TTL,
+and verifies that PostgreSQL returns the expected bytes. Unsupported workload identifiers fail
+explicitly. The adapter does not mock transport, serialization or persistence.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-scenario-contract-red.log` records the expected missing scenario and adapter contracts.
+- `benchmark-scenario-evidence-red.log` records the later missing evidence-environment contract.
+- `benchmark-scenario-contract-green.log` records seven focused unit/integration checks, including
+  five PostgreSQL scheduler cases and exact bounded-key, 129-byte payload and TTL verification.
+- `benchmark-scenario-contract-verify.log` records the complete benchmark-module gate: **123 tests**,
+  zero failures/errors/skips.
+- `benchmark-scenario-contract-reactor-verify.log` records the selected eight-module reactor gate:
+  **502 tests**, zero failures/errors/skips, with every module successful in 1:50. PostgreSQL
+  containers and the Testcontainers cleanup helper exited after the gate.
+
+B3 remains **IN PROGRESS**. Explicit hit/miss semantics and the complete cache adapter family are
+implemented in §28. Counter/lock/scan controls and capability diagnostics remain next.
+
+## 28. B3 prepared cache operation family and hit/miss semantics (2026-09-13)
+
+`BenchmarkScenarioParameters` now includes an explicit finite target hit ratio in `[0,1]`. The hit or
+miss decision is deterministic from the recorded seed and logical request ID, so retries cannot
+change the intended outcome. The ratio is retained as `scenario.targetHitRatio`; zero and one are
+handled exactly without probabilistic edge behavior.
+
+`BenchmarkCacheOperation` binds the stable cache GET, SET, DELETE and SET/GET identifiers to the public
+`CacheService`. `prepareDataset()` populates the declared hit working set before measurement in
+bounded batches of 256 requests rather than materialising the full cardinality. GET selects either a
+prepared key or a disjoint miss key and verifies the observed presence/absence; hit and SET/GET paths
+also verify exact deterministic bytes. SET applies the configured TTL and DELETE is measured through
+the actual service. Unknown non-cache identifiers fail explicitly. The earlier focused SET/GET class
+now delegates to this common adapter so the semantics cannot drift.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-cache-operation-family-red.log` records missing hit-ratio and adapter-family contracts.
+- `benchmark-cache-operation-family-green.log` records eight focused checks, including six real
+  PostgreSQL integration cases covering preparation, intended hit/miss, SET and verified DELETE.
+- `benchmark-cache-operation-family-verify.log` records the complete benchmark-module gate:
+  **124 tests**, zero failures/errors/skips.
+- `benchmark-cache-operation-family-reactor-verify.log` records the selected eight-module reactor
+  gate: **503 tests**, zero failures/errors/skips, with every module successful in 1:46. PostgreSQL
+  containers and the Testcontainers cleanup helper exited after the gate.
+
+B3 remains **IN PROGRESS**. Counter contention and correctness are implemented in §29. Lock and scan
+workload families plus capability diagnostics remain.
+
+## 29. B3 counter contention and exact correctness (2026-09-13)
+
+`BenchmarkCounterParameters` defines bounded counter cardinality, a proper hot-counter subset, the
+fraction of requests directed to that subset, a positive increment delta and an initial value. Key
+selection is deterministic from the recorded seed and logical request ID, and every parameter is
+exported as a stable `scenario.*` environment field. Construction rejects invalid fractions and
+configurations whose initial aggregate or first increment cannot be represented exactly as `long`.
+
+`BenchmarkCounterOperation` binds `counter.increment` to the public `CounterService`. It initializes
+the declared working set before measurement in bounded batches of 256, applies real atomic
+`incrementBy` operations, and provides an overflow-safe post-run aggregate check across every counter.
+The final check requires all prepared counters to remain present and compares the observed sum with
+`initialValue * cardinality + delta * successfulAttempts`; unsupported operations fail explicitly.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-counter-contention-red.log` records the expected missing parameter and adapter contracts.
+- `benchmark-counter-contention-green.log` records nine focused checks, including seven PostgreSQL
+  cases and a 40-operation hot-key contention run with exact final aggregate verification.
+- `benchmark-counter-contention-verify.log` records the complete benchmark-module gate: **127 tests**,
+  zero failures/errors/skips.
+- `benchmark-counter-contention-reactor-verify.log` records the selected eight-module reactor gate:
+  **506 tests**, zero failures/errors/skips, with every module successful in 1:49. PostgreSQL
+  containers and the Testcontainers cleanup helper exited after the gate.
+
+B3 remains **IN PROGRESS**. Lock contention and fencing are implemented in §30. Scan workload
+parameters and capability diagnostics remain.
+
+## 30. B3 lock contention, fencing and cleanup (2026-09-13)
+
+`BenchmarkLockParameters` defines bounded lock cardinality, a proper hot-lock subset, deterministic
+hot-request fraction, positive whole-millisecond lease duration and explicit fencing mode. Selection
+is stable from the run seed and logical request ID, and all controls are exported as `scenario.*`
+evidence fields.
+
+`BenchmarkLockOperation` binds `lock.acquire-release` to the public `LockService`. Each physical
+attempt receives a distinct owner token derived from logical request ID and attempt index. A denied
+acquisition is counted as observed contention rather than a transport failure. Successful acquisitions
+validate returned key/owner identity and fencing presence, reject non-increasing tokens for the same
+key, and release using the exact owner. Thread-safe counters retain acquisitions, contention,
+releases and fencing tokens. A bounded post-run scan proves no benchmark-owned lease remains.
+
+Strict TDD evidence is retained under the ignored root `target/` directory:
+
+- `benchmark-lock-contention-red.log` records the expected missing parameter and adapter contracts.
+- `benchmark-lock-contention-green.log` records ten focused checks, including eight PostgreSQL cases
+  and a 40-attempt hot-lock run that observed acquisition and contention, reconciled releases/fencing,
+  and verified an empty final lock set.
+- `benchmark-lock-contention-verify.log` records the complete benchmark-module gate: **130 tests**,
+  zero failures/errors/skips.
+- `benchmark-lock-contention-reactor-verify.log` records the selected eight-module reactor gate:
+  **509 tests**, zero failures/errors/skips, with every module successful in 1:49. PostgreSQL
+  containers and the Testcontainers cleanup helper exited after the gate.
+
+B3 remains **IN PROGRESS**. The next strict-TDD slice is deterministic scan-page workload parameters,
+real cursor traversal and completeness/duplicate verification, followed by capability diagnostics.
+
+## 31. B3 completion — scan, runtime safety and capability inventory (2026-09-13)
+
+`BenchmarkScanParameters` bounds page size to the product limit and records value/expired-entry and
+prefix choices. `BenchmarkScanOperation` prepares deterministic data, traverses real PostgreSQL
+cursors to completion, rejects cursor cycles, duplicate/unexpected/omitted keys and terminal cursors,
+and optionally verifies every payload. The integration gate traversed 23 entries in five pages.
+
+`BenchmarkRuntimePolicy` evaluates explicit heap, process-CPU and event-loop-delay limits. Missing
+required observations are failures with an unavailable reason, never zero. The versioned
+`BenchmarkCapabilityInventory` distinguishes RUNNABLE, UNSUPPORTED and OBSERVATION_UNAVAILABLE.
+Cache, counter, lock and scan are runnable in the managed local path. Managed Pub/Sub, expiry-churn
+and authorised HA-restart extensions remain explicitly unsupported; portable database-host CPU and
+storage latency remain unavailable. This honest inventory completes B3 without pretending those
+optional extensions ran.
+
+Strict-TDD evidence is retained in `target/benchmark-scan-{red,green}.log` and
+`target/benchmark-runtime-capabilities-{red,green}.log`. The RED boundaries failed because the new
+types/adapters did not exist. GREEN includes parameter tests and real PostgreSQL cursor traversal.
+
+## 32. B4 completion — versioned trend analysis and JSON-derived HTML (2026-09-13)
+
+`BenchmarkAnalysisPolicy` versions reference selection, minimum samples, latency effect size,
+persistence, recovery, adverse-outcome and pressure-growth rules. `BenchmarkTrendAnalyzer` emits
+candidate onset and confirmation offsets, measured brackets, maximum progression and recovery for
+persistent p95 deterioration; persistent adverse outcomes and growing queue pressure are separate
+findings. Isolated latency spikes remain visible without being classified as persistent change.
+Missing/low-count reference evidence produces INCONCLUSIVE, while absence of a qualifying onset is
+limited to the tested range and timeframe.
+
+`BenchmarkAnalysisPublisher` atomically inserts analysis into the authoritative final JSON and
+derives a self-contained HTML view containing the execution identity, analysis status, embedded
+result and authoritative JSON SHA-256. It refuses unfinalised evidence. The first real campaign
+exposed a synthetic-fixture naming error (`successfulServiceLatency` versus the recorder's canonical
+`successfulService`); `target/benchmark-real-schema-analysis-red.log` records the new failing
+contract and the corresponding GREEN proves both analyzer and review consume the real schema.
+Additional known-trace RED/GREEN evidence is in `target/benchmark-analysis-*` and
+`target/benchmark-detectors-*`.
+
+## 33. B0/B1 closure — complete specification and bounded persistence decision (2026-09-13)
+
+`BenchmarkSpecification` now resolves the immutable timeline, complete finite load matrix,
+repetitions/forks/seed, deterministic data scenario, runtime safety policy, evidence destination,
+capability inventory and persistence policy before launch. Its JSON manifest retains all resolved
+configurations and phase durations. Existing interval boundaries, counters, outcome distributions,
+retry identities and per-phase workload transition fields remain the run-level evidence contract.
+
+The selected version-1 long-run persistence decision deliberately retains atomic comprehensive JSON
+rather than introducing a second authoritative store. `BenchmarkPersistencePolicy` estimates final
+bytes, cumulative growing-copy bytes and the approximately two-copy peak disk requirement from the
+finite interval count and checkpoint grouping. A campaign whose estimate exceeds any declared bound
+is rejected before workload launch. This does not remove the writer's measured O(growing-history)
+publication cost and does not claim unbounded soak support; it turns that cost into an explicit,
+reviewable support boundary. B1 is complete for finite budgeted runs under this policy. A future
+segmented format would be a new policy/schema version, not an implicit change to existing evidence.
+
+RED/GREEN records: `target/benchmark-spec-persistence-{red,green}.log`. The full resolved manifest
+for the accepted local campaign is retained as `benchmark-results/characterisation-framework-final-20260913/resolved-experiment.json`.
+
+## 34. B5 completion — target-safe campaign orchestration (2026-09-13)
+
+`BenchmarkDeploymentTarget` has distinct local-Testcontainers and external identities and contains no
+credentials. External connections have explicit host, port, database, schema prefix and TLS policy;
+server ownership is always false. `BenchmarkPostgresTargetVerifier` performs read-only database,
+server-version and session-TLS verification without closing or restarting the supplied pool.
+
+`BenchmarkCampaignPlan` expands a finite declared or seeded-random order and assigns a unique bounded
+resource name to every configuration/fork/repetition. `BenchmarkCampaignRunner` verifies the target,
+publishes a live atomic campaign manifest, resets before each run, invokes managed execution,
+cleans the run-owned resource, analyzes its JSON and records its HTML path. Cleanup is attempted after
+post-reset preparation failure; cleanup failure is suppressed behind the primary failure and the
+FAILED manifest is retained. `BenchmarkLocalPostgresCampaignAdapter` scopes destructive SQL to the
+run-owned namespace and never owns its supplied pool/server.
+
+The real PostgreSQL gate verifies an externally supplied Testcontainers endpoint and successfully
+queries it afterward. A real local campaign run then proves its owned namespace is empty after cleanup.
+Lifecycle, external-path and failure-path evidence is in `target/benchmark-deployment-plan-*`,
+`target/benchmark-campaign-runner-*`, `target/benchmark-external-target-*`,
+`target/benchmark-local-campaign-*` and `target/benchmark-campaign-cleanup-*`.
+
+## 35. B6 local framework-acceptance characterisation (2026-09-13)
+
+The opt-in `benchmark-characterisation` profile and `BenchmarkLocalCampaignMain` execute the resolved
+campaign against disposable PostgreSQL, then publish `characterisation-review.json` from retained run
+JSON. The review accounts for planned/completed/loaded runs, retains per-run interval curves, onset
+brackets when present, min/max p95 variation by configuration, limitations and follow-ups.
+
+The accepted local framework campaign used PostgreSQL 18.3-alpine, cache GET/SET weight 4:1, 100
+deterministic 256-byte entries, concurrency/pool 4, offered rates 100 and 200 requests/second, three
+repetitions per rate, 1,000 ms each for baseline/load/recovery, a 2,000 ms drain and 250 ms sampling.
+All six of six runs completed, were analyzed and cleaned. The review status is
+`COMPLETE_NO_ONSET_OBSERVED`; this means only that no version-1 persistent symptom was detected in
+this short local range/timeframe. It is not production capacity, a release limit or proof of stability.
+All six final executions are `COMPLETED` and measurement-validity `VALID`. Repeat peak-p95 ranges
+were 5 ms–10 ms at both configurations,
+which is retained variation rather than averaged away. The sole campaign-level limitation states
+that the disposable local target is not external production evidence.
+
+Authoritative ignored artifacts are under
+`benchmark-results/characterisation-framework-final-20260913/`: six UUID JSON results, their six
+self-contained HTML derivatives, `campaign-manifest.json`, `resolved-experiment.json` and
+`characterisation-review.json`. Execution evidence is
+`target/benchmark-characterisation-final-artifacts.log` (`BUILD SUCCESS`). Every HTML contains actual
+successful-service-p95 and successful-rate SVG curves and the matching authoritative JSON hash.
+
+## 36. Final verification and scope boundary (2026-09-13)
+
+`target/benchmark-module-complete-gate.log` recorded 151 benchmark tests before the final detector,
+cleanup and validity cases. `target/benchmark-final-reactor-after-validity.log` is the definitive gate:
+all eleven modules succeeded in 6:07, with 713 Java tests and 168 management-UI tests (881 total),
+zero failures/errors/skips. The benchmark module contributed 155 tests, including eleven real-
+PostgreSQL scheduler/scenario/campaign tests. Source review found no Mockito use and
+`git diff --check` reported no whitespace errors. After real SVG time-series rendering was added,
+`target/benchmark-post-html-final-gate.log` passed the seven benchmark/dependency modules in 1:35:
+534 Java tests, zero failures/errors/skips.
+
+B0–B5 framework implementation is complete. B6 is complete for the declared local acceptance
+campaign. External target execution, PostgreSQL-version matrices, multi-host diagnostics, managed
+Pub/Sub/expiry/fault extensions and longer/higher-load campaigns are future explicitly scoped work;
+their absence cannot be converted into a production claim. Generated measurements remain ignored
+and local until the owner chooses an archive/publication destination.
