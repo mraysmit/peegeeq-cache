@@ -1,8 +1,9 @@
 # Parameterised performance and degradation analysis plan
 
-**Revised:** 13 September 2026
+**Revised:** 15 September 2026
 **Status:** B0–B5 COMPLETE; B6 COMPLETE FOR THE DECLARED LOCAL FRAMEWORK-ACCEPTANCE CAMPAIGN — external/production campaigns remain owner-authorised future work and no production capacity claim is made
-**Source baseline reviewed:** `2de7be1` (`Refactor code structure for improved readability and maintainability`)
+**Current implementation verified:** `f983355` (`feat(benchmarks): complete characterisation framework and campaign reporting`)
+**Original source baseline reviewed:** `2de7be1` (`Refactor code structure for improved readability and maintainability`)
 **Scope:** parameterised benchmarking across workloads, runtime configurations, timeframes and deployments
 
 ## 1. Purpose and correction to the original plan
@@ -322,13 +323,21 @@ a failed benchmark or a reason to weaken thresholds.
 
 ## 11. Immediate implementation step
 
-The implementation sequence is complete for the declared local framework scope; see §§31–36.
+The implementation sequence is complete for the declared local framework scope; see §§31–37.
 The next work is not an unimplemented framework phase: it is an owner-declared external campaign or
 a separately versioned detector/scenario extension. Before either, choose the target, authority,
 finite matrix, persistence budgets and required diagnostics. Automatic in-place restart/resume is
 deliberately unsupported; begin a new execution identity after independent owner/liveness review.
+There is no generic `benchmark-external` Maven profile or credential-loading external entry point in
+the current codebase. The first external campaign must supply a caller-owned pool to the implemented
+target verifier/campaign runner, or introduce a reviewed campaign-specific launcher.
 
 ## 12. Implementation evidence — first B0 slice (6 September 2026)
+
+> **Historical implementation diary:** Sections 12–30 preserve the status observed after each strict-
+> TDD slice. Statements such as `IN PROGRESS`, `NOT STARTED`, "remaining work" and "does not yet"
+> in those sections are checkpoint history, not current status. The phase table in §8, the immediate
+> step in §11 and the completion evidence in §§31–37 are authoritative for the current codebase.
 
 Implemented in the benchmark module:
 
@@ -1457,3 +1466,18 @@ campaign. External target execution, PostgreSQL-version matrices, multi-host dia
 Pub/Sub/expiry/fault extensions and longer/higher-load campaigns are future explicitly scoped work;
 their absence cannot be converted into a production claim. Generated measurements remain ignored
 and local until the owner chooses an archive/publication destination.
+
+## 37. Current-codebase documentation audit (2026-09-15)
+
+The completion statements above were checked against committed revision `f983355`. The audit
+confirmed the local `benchmark-characterisation` Maven profile and `BenchmarkLocalCampaignMain`,
+the implemented cache/counter/lock/scan adapters, runtime/capability/persistence policies, campaign
+orchestration, analysis/report publishing, 46 benchmark test classes and all 15 retained final-campaign
+artifacts. No generic external Maven profile or credential-loading external main class exists; only
+the caller-supplied external target/verifier path is implemented and tested.
+
+A fresh non-Docker benchmark contract run passed 130 tests with zero failures, errors or skips. A
+fresh selected-reactor integration attempt could not reach the benchmark module because this host had
+no valid Docker/Testcontainers environment; the failure occurred while starting PostgreSQL tests and
+does not supersede the successful definitive integration evidence recorded in §36. A new live
+PostgreSQL acceptance result therefore requires Docker to be available.

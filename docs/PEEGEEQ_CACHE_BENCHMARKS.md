@@ -11,6 +11,10 @@ real cache/counter/lock/scan adapters, bounded interval recording, atomic checkp
 trend analysis, explicit target/lifecycle orchestration and campaign review. The legacy regression
 profiles remain separate and unchanged in meaning.
 
+**Current status (audited 15 September 2026 at `f983355`):** B0–B5 framework implementation is
+complete and B6 is complete for the retained six-run local framework-acceptance campaign. This is
+framework/regression evidence only; no external or production-capacity campaign has been run.
+
 Each characterisation execution has one authoritative versioned JSON file. A self-contained HTML
 view is derived from the final JSON and records its SHA-256. The JSON retains resolved configuration,
 counters/rates, scalar metrics, diagnostics and six bounded latency distributions. Analysis reports
@@ -61,7 +65,7 @@ campaign orchestration and JSON-derived HTML are now connected. Growing-copy wri
 remains a measured limitation, so version-1 preflight rejects a run whose final size, cumulative
 rewrite work or two-copy peak disk estimate exceeds its declared budget.
 
-### Controlled workload engine (B2 first slice)
+### Controlled workload engine (B2 complete)
 
 `BenchmarkWorkloadScheduler` accepts typed parameters, demand duration, a rate-controlled catch-up
 cap, latency bounds and an injected monotonic clock. On each `advance()`, dispatch every returned
@@ -86,12 +90,13 @@ The scheduler and managed-execution integration tests use real PostgreSQL and ve
 stop/drain, interval rollover and checkpoint-pressure handling. They do not establish deployment
 capacity.
 
-The first B2 slice is verified. The focused gate has 21 passing checks, including three real PostgreSQL
-scheduler invocations; the selected-reactor acceptance gate has 484 tests in 76 fresh Surefire reports,
-zero failures/errors/skips, including 102 benchmark tests. A Docker runtime-socket failure and an
-automatic Docker Desktop update interrupted earlier attempts; those logs are retained as diagnostics,
-not acceptance. Docker Desktop 4.89.0 / engine 29.7.2 was healthy for the final gate. See performance-plan
-§19 for exact logs, recovery actions and the remaining managed-execution boundary.
+B2 is complete. The scheduler is connected to managed Vert.x execution, phase-specific workload
+plans, stable logical-operation/physical-attempt identity, bounded retries, generator calibration,
+finite campaign execution, live checkpoints and explicit stop/drain handling. The definitive full
+reactor gate recorded 881 tests with zero failures, errors or skips; the benchmark module contributed
+155 tests, including eleven real-PostgreSQL scheduler/scenario/campaign tests. See performance-plan
+§§19 and 24–37 for the chronological implementation evidence and final scope boundary. Historical
+checkpoint counts in those sections are not the current completion status.
 
 ## Parameterised characterisation campaign
 
@@ -138,8 +143,11 @@ for at 100 and 200 requests/second with three repetitions, and the review report
 External targets are represented explicitly by host, port, database, isolated schema prefix and TLS
 policy, without credentials. `BenchmarkPostgresTargetVerifier` verifies the actual database,
 server version and session TLS through a caller-supplied pool. External credentials and pool/server
-lifecycle remain caller-owned. Do not run an external campaign until its target, access, resource
-ownership, budget, stop conditions and disruption authority are explicitly approved.
+lifecycle remain caller-owned. The repository does not currently provide a generic
+`benchmark-external` Maven profile or credential-loading external main class: an owner-declared
+campaign must supply the pool and call the campaign framework, or add a reviewed target-specific
+launcher. Do not run an external campaign until its target, access, resource ownership, budget, stop
+conditions and disruption authority are explicitly approved.
 
 ## Repeatable captured runs
 
