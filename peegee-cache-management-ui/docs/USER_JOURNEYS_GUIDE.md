@@ -21,8 +21,8 @@ systems, follow your organization's access and change-control procedures.
 - Obtain the console address and approved authentication method from the service operator.
 - Use a supported desktop browser and layout. The reference screenshots use a 1440 × 900 viewport.
 - Confirm your identity, role, active setup, and namespace before accessing data or making changes.
-- Viewers perform permitted inspection; mutations and sensitive reveals require the appropriate
-  permissions and setup capabilities. An unavailable control is not an invitation to bypass it.
+- Viewers perform permitted inspection; mutations and sensitive reveals require the operator role.
+  A rejected action is not an invitation to bypass it.
 - Have an approved PostgreSQL setup available for data journeys. Connection settings and trust
   profiles come from the service operator; do not guess credentials or broaden target access rules.
 - For practice, use clearly identifiable disposable data, such as namespace `journey-demo` and key
@@ -47,9 +47,9 @@ revision happens to exist when the request arrives." **TTL** is the remaining li
 Where a field says milliseconds, `60000` means one minute; entering `60` would mean only 60 milliseconds.
 **Persistent** means no expiry is assigned, not that the value can never be changed or deleted.
 
-**Capability** means an operation the selected setup and server advertise as available. **Permission**
-means the authenticated user is allowed to perform it. A journey may require both. A missing mutation
-button can therefore be a correct outcome for a viewer or for a setup that does not offer that feature.
+**Permission** means the authenticated user's role allows the operation: viewers inspect and manage their own
+Pub/Sub subscriptions, operators also mutate and reveal. Every page is available for every connected setup; the server checks the role
+on each request and rejects any operation the role does not permit, whatever the page shows. (Per-setup capability advertisement was removed on 10 September 2026.)
 
 **Confirmed result** means the server returned an outcome and the user checked the relevant current
 state. A timeout leaves the outcome uncertain: a request may have reached the server even if its
@@ -333,19 +333,19 @@ restored context. If it has been detached or forgotten, a cleared selection or a
 another setup is safer and more correct than showing protected data under an obsolete scope.
 
 When moving between setups, finish or cancel open editors first and clear revealed values. Then
-select the new setup and let its capabilities load. A feature available in one setup may disappear in
-another. Do not interpret that difference as lost data until you have checked the selected setup and
-its advertised capabilities.
+select the new setup and let its details load. Setups can differ in runtime configuration and limits
+(for example Pub/Sub enablement or maximum value size); do not interpret a difference as lost data until
+you have checked the selected setup's details.
 
 **Completion record:** identify the setup and namespace used, the navigation/reload check performed,
 and whether the final context remained valid. If context was cleared, record why and what was selected
 next rather than describing the clearing itself as a failure.
 
-**Complete when:** navigation and reload retain only valid scope, with data and available controls
-matching the selected setup's capabilities.
+**Complete when:** navigation and reload retain only valid scope, with data matching the selected
+setup.
 
 **If something goes wrong:** if the setup was detached, forgotten, or is no longer accessible, select
-a valid connected setup again. Do not act on stale displayed data while scope or capabilities are
+a valid connected setup again. Do not act on stale displayed data while scope is
 being revalidated.
 
 ## 5. Investigate database health and usage
@@ -779,7 +779,7 @@ to work around a failed owner operation.
 
 **Goal:** demonstrate delivery from an authorized publication to an active subscription, then stop cleanly.
 
-**Before starting:** Pub/Sub capabilities and permissions are available; use an approved channel and
+**Before starting:** the setup has Pub/Sub enabled and your role permits publishing; use an approved channel and
 non-sensitive demonstration payload unless the actual task requires protected content.
 
 1. Open **Pub/Sub**, enter the channel and supported buffer settings, and start a subscription.
@@ -899,7 +899,7 @@ old values remain visible.
 
 **Goal:** inspect and maintain multiple explicitly identified entries through the Advanced workspace.
 
-**Before starting:** the required Advanced capabilities and permissions are available. Approve the
+**Before starting:** you have the operator role (required for batch, scan and lock operations). Approve the
 complete target list, especially when operations span namespaces.
 
 1. Open **Advanced**, confirm the setup, and check existence for a relevant entry.

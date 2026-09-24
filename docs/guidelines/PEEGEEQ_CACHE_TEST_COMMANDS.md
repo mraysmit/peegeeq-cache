@@ -1,5 +1,7 @@
 # PeeGeeQ Cache Test Commands Quick Reference
 
+**Last reconciled:** 24 September 2026 against `3ed1162`.
+
 **Platform:** Windows / PowerShell only. Always pipe with `Tee-Object`. Never use `Select-String` or `Select-Object -Last N` on the live Maven stream; read the saved log afterwards.
 **Log location and naming:** `logs\<description>-<YYYYMMDD>.log` (the `logs/` folder is git-ignored and is where every saved run belongs).
 
@@ -9,19 +11,20 @@
 
 ## Reactor shape (read this first)
 
-This reactor has no test-tag profiles. `mvn test` runs every Surefire test in the selected modules, and `mvn verify` additionally runs the Failsafe browser catalogue in `peegee-cache-rest`. Root profiles are `release-artifacts` and `central-release` only; neither filters tests.
+This reactor has no test-tag profiles. `mvn test` runs every Surefire test in the selected modules, and `mvn verify` additionally runs the Failsafe browser catalogue in `peegee-cache-rest`. Root profiles are `release-artifacts` and `central-release` only; neither filters tests. Module profiles are `benchmark`, `benchmark-capture`, `benchmark-calibration` and `benchmark-characterisation` in `peegee-cache-benchmarks` (opt-in runners, see [the benchmark guide](../PEEGEEQ_CACHE_BENCHMARKS.md)) and `playwright-observe` in `peegee-cache-rest`.
 
 | Module | Test mass | Needs Docker |
 |---|---|---|
 | `peegee-cache-api` | Model and contract unit tests | No |
 | `peegee-cache-core` | Buffer and telemetry unit tests | No |
-| `peegee-cache-test-support` | Shared Testcontainers PostgreSQL support | No tests |
+| `peegee-cache-test-support` | Shared Testcontainers PostgreSQL support; its own tests cover constants, the latency histogram and the logging-dependency contract | No |
 | `peegee-cache-pg` | Repository, service, SQL and management tests on PostgreSQL | Yes |
 | `peegee-cache-runtime` | Lifecycle, write-behind and expiry tests on PostgreSQL | Yes |
-| `peegee-cache-observability` | Telemetry adapters | No |
+| `peegee-cache-observability` | Telemetry adapters and the PostgreSQL health indicator | Yes, for the health-indicator test |
 | `peegee-cache-management-ui` | Vitest suite run by Maven under the pinned Node 22.22.2 / npm 10.9.4 toolchain | No |
-| `peegee-cache-rest` | Surefire route, registry, contract and factory tests; Failsafe Playwright catalogue (539 scenarios plus infrastructure checks) | Yes, for the factory test and every `*IT` |
-| `peegee-cache-benchmarks`, `peegee-cache-examples` | Small unit tests | No |
+| `peegee-cache-rest` | Surefire route, registry, contract and factory tests; Failsafe Playwright catalogue (`peegeeq.playwright.expectedScenarios` scenarios plus infrastructure checks) | Yes, for the PostgreSQL-backed Surefire tests and every `*IT` |
+| `peegee-cache-benchmarks` | Contract and unit tests for the benchmark framework, plus real-PostgreSQL scheduler, scenario and campaign tests | Yes, for the PostgreSQL-backed tests |
+| `peegee-cache-examples` | No tests; running an example starts Testcontainers PostgreSQL | To run examples |
 
 Docker Desktop must be running before any PostgreSQL-backed test. If `com.docker.service` is stopped, Testcontainers fails with "Could not find a valid Docker environment".
 
@@ -109,8 +112,7 @@ The browser catalogue's scenario count is enforced twice: `ManagementBrowserCove
 
 ## UI module (from `peegee-cache-management-ui/`)
 
-Maven runs these under the pinned Node toolchain. Running them with the system Node is fine for iteration; the suite is Node-version independent because `test/support/jsdom-runtime-fetch-environment.ts` keeps the runtime's `AbortController`/`AbortSignal` in the jsdom environment (undici 7, bundled from Node 24, rejects jsdom's signal in `fetch`). Note that `node
-ode.exe ...npm-cli.js run <script>` does not pin the toolchain: npm resolves `vitest` through `PATH`, so prepend `node\` to `PATH` when the pinned version matters. The Maven-run result is the one that counts.
+Maven runs these under the pinned Node toolchain. Running them with the system Node is fine for iteration; the suite is Node-version independent because `test/support/jsdom-runtime-fetch-environment.ts` keeps the runtime's `AbortController`/`AbortSignal` in the jsdom environment (undici 7, bundled from Node 24, rejects jsdom's signal in `fetch`). Note that `node\node.exe node\node_modules\npm\bin\npm-cli.js run <script>` does not pin the toolchain: npm resolves `vitest` through `PATH`, so prepend `node\` to `PATH` when the pinned version matters. The Maven-run result is the one that counts.
 
 ```powershell
 cd peegee-cache-management-ui
@@ -156,4 +158,4 @@ Quote from the saved log, never from memory:
 1. the exact command and scope;
 2. every `Tests run: N, Failures: F, Errors: E, Skipped: S -- in <Class>` line for the scope;
 3. the final `BUILD SUCCESS` or `BUILD FAILURE`;
-4. for the browser gate, the Failsafe total (539 scenarios plus the observation, runnable-artifact and screenshot checks) and that the evidence check passed.
+4. for the browser gate, the Failsafe total (the `peegeeq.playwright.expectedScenarios` scenarios plus one observation, two runnable-artifact and three screenshot checks) and that the evidence check passed.

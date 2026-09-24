@@ -20,9 +20,9 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 3001,
     proxy: {
-      '/api': 'http://127.0.0.1:8089',
+      '/api': 'http://127.0.0.1:8080',
       '/ws': {
-        target: 'ws://127.0.0.1:8089',
+        target: 'ws://127.0.0.1:8080',
         ws: true,
       },
     },

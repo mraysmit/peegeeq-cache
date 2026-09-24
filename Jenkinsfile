@@ -4,8 +4,8 @@ pipeline {
     parameters {
         choice(
             name: 'RUN_MODE',
-            choices: ['verify', 'postgresql-compatibility', 'recorder-calibration', 'benchmark-characterisation'],
-            description: 'Verification is the default. Calibration and benchmark characterisation are explicit, non-concurrent runs.'
+            choices: ['verify', 'postgresql-compatibility', 'recorder-calibration', 'legacy-benchmark-capture'],
+            description: 'Verification is the default. Calibration and legacy benchmark capture are explicit, non-concurrent runs. The JSON characterisation campaign (Maven profile benchmark-characterisation) has no Jenkins run mode yet.'
         )
         choice(
             name: 'POSTGRES_IMAGE',
@@ -26,7 +26,7 @@ pipeline {
         string(name: 'CALIBRATION_CHECKPOINT_WINDOWS', defaultValue: '10', description: 'Observation windows per persisted checkpoint (1-128).')
         string(name: 'CALIBRATION_MAX_EVIDENCE_BYTES', defaultValue: '67108864', description: 'Hard maximum bytes for one calibration evidence file.')
 
-        string(name: 'BENCHMARK_RUNS', defaultValue: '3', description: 'Sequential repetitions in the legacy characterisation capture (1-20).')
+        string(name: 'BENCHMARK_RUNS', defaultValue: '3', description: 'Sequential repetitions in the legacy benchmark capture (1-20).')
         string(name: 'BENCHMARK_CONCURRENCY', defaultValue: '8', description: 'Foreground benchmark concurrency.')
         string(name: 'BENCHMARK_POOL_SIZE', defaultValue: '12', description: 'PostgreSQL pool size; must exceed concurrency.')
         string(name: 'BENCHMARK_WARMUP_SECONDS', defaultValue: '5', description: 'Warm-up before each measured workload.')
@@ -247,8 +247,8 @@ pipeline {
             }
         }
 
-        stage('Benchmark characterisation') {
-            when { expression { params.RUN_MODE == 'benchmark-characterisation' } }
+        stage('Legacy benchmark capture') {
+            when { expression { params.RUN_MODE == 'legacy-benchmark-capture' } }
             options { timeout(time: 6, unit: 'HOURS') }
             steps {
                 sh '''
@@ -273,7 +273,7 @@ pipeline {
                         exit 2
                     fi
 
-                    output="$WORKSPACE/benchmark-results/$BUILD_TAG/legacy-characterisation"
+                    output="$WORKSPACE/benchmark-results/$BUILD_TAG/legacy-benchmark-capture"
                     mkdir -p "$output"
                     bash -o pipefail -c \
                       'mvn --batch-mode --no-transfer-progress \
@@ -294,7 +294,7 @@ pipeline {
                       -Dpeegeeq.benchmark.maximumFailoverRecoveryMillis=86400000 \
                       -Dpeegeeq.benchmark.maximumExpiryLagMillis=86400000 \
                       -Dpeegeeq.benchmark.maximumTelemetryOverheadPercent=1000000 \
-                      2>&1 | tee logs/benchmark-characterisation.log'
+                      2>&1 | tee logs/legacy-benchmark-capture.log'
                 '''
             }
         }

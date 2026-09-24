@@ -1,7 +1,7 @@
 # PeeGeeQ Cache Jenkins CI and benchmark worker
 
 **Document role:** IMPLEMENTATION AND OPERATIONS GUIDE
-**Last reconciled:** 2026-09-06
+**Last reconciled:** 2026-09-24 against `3ed1162` plus the uncommitted 24 September `Jenkinsfile` run-mode rename (pipeline definition and benchmark boundary; the live Jenkins state below was last observed on 2026-09-06 and nothing later is recorded)
 
 ## Purpose and established pattern
 
@@ -11,7 +11,7 @@ repository. Jenkins runs natively and schedules this repository only on the node
 `docker` group and `/var/run/docker.sock`. Testcontainers provisions PostgreSQL directly; ordinary
 tests do not start repository Compose environments.
 
-The repository-owned [Jenkinsfile](../../Jenkinsfile) is the job definition. The separate Jenkins
+The repository-owned [Jenkinsfile](../../Jenkinsfile) is the job definition. Jenkins is started manually; the automatic CI on every push to `master` and every pull request is the GitHub Actions workflow `.github/workflows/postgresql-compatibility.yml` (see [operations guidance](../PEEGEEQ_CACHE_OPERATIONS.md#compatibility)). The separate Jenkins
 job is named `PeeGeeQ-Cache`; it must point at this repository and must not reuse or modify the
 sibling `PeeGeeQ` job.
 
@@ -82,7 +82,7 @@ The `RUN_MODE` parameter has four fixed selections:
 | `verify` | Complete Maven `verify` using the selected PostgreSQL image | Default repository gate, including Java, UI, Playwright and Testcontainers checks |
 | `postgresql-compatibility` | Four sequential complete `verify` runs against PostgreSQL 15.17, 16.13, 17.11 and 18.3 | Compatibility evidence matching the GitHub Actions matrix; reports are copied per version before the next run |
 | `recorder-calibration` | Repeated fresh-JVM `benchmark-calibration` invocations | JSON evidence for recorder contention, allocation, bounded-memory behaviour and checkpoint growth; not database capacity evidence |
-| `benchmark-characterisation` | Parameterised legacy `benchmark-capture` invocation | Current PostgreSQL regression characterisation with deliberately non-binding sentinel gates; see the limitation below |
+| `legacy-benchmark-capture` | Parameterised legacy `benchmark-capture` invocation | PostgreSQL regression capture with deliberately non-binding sentinel gates; see the boundary below. (Named `benchmark-characterisation` until 24 September 2026.) |
 
 Every selection first performs a clean reactor rebuild with tests skipped. Test and benchmark
 commands retain Maven's failure status through `bash -o pipefail` while saving complete logs.
@@ -105,12 +105,12 @@ Jenkins validates numeric values before invoking Maven. Forks run sequentially a
 fresh JVM. JSON files are written beneath
 `benchmark-results/$BUILD_TAG/calibration/` and archived even when a later fork fails.
 
-Current database characterisation accepts repetition count, foreground concurrency, pool size,
+Legacy benchmark capture accepts repetition count, foreground concurrency, pool size,
 warm-up, duration, PostgreSQL image and a truthful deployment-topology description. The pipeline
 sets extremely permissive performance thresholds because this selection exists to observe a
 deployment's limits, not to force measurements through a preselected throughput or latency target.
 Operational or correctness failures still fail the build. Its self-contained HTML output is written
-beneath `benchmark-results/$BUILD_TAG/legacy-characterisation/`.
+beneath `benchmark-results/$BUILD_TAG/legacy-benchmark-capture/`.
 
 The environment stage records the Jenkins build/node identity, topology description, UTC time,
 kernel, exact Java/Maven/Git versions, account/group identity, Docker client/server/API versions,
@@ -121,13 +121,9 @@ JUnit XML and benchmark evidence are archived before Jenkins deletes only the al
 
 ### Current characterisation boundary
 
-The production benchmark plan's new interval JSON schema, rate-controlled scheduler and checkpoint
-writer exist, but its managed Vert.x execution adapter and campaign runner remain unfinished. The
-`benchmark-characterisation` selection therefore runs the maintained **legacy HTML capture** and
-stores it in a directory that says `legacy-characterisation`. It must not be described as the final
-parameter-matrix degradation campaign or as comprehensive per-run JSON evidence. When that adapter
-and campaign entry point are complete, this Jenkins stage must be migrated to them; do not silently
-reinterpret legacy HTML as the planned JSON schema.
+Since commit `f983355` (13 September 2026) the parameterised characterisation campaign exists: the Maven profile `benchmark-characterisation` runs `BenchmarkLocalCampaignMain`, which starts its own disposable Testcontainers PostgreSQL and writes `resolved-experiment.json`, `campaign-manifest.json`, one JSON and one derived HTML per run, and `characterisation-review.json` (see the [benchmark guide](../PEEGEEQ_CACHE_BENCHMARKS.md#parameterised-characterisation-campaign)). Jenkins does not yet run it. The Jenkins run mode that invokes the **legacy HTML capture** was renamed from `benchmark-characterisation` to `legacy-benchmark-capture` on 24 September 2026 so that the Jenkins selection and the Maven profile no longer share a name; its output directory and log were renamed to match.
+
+**Open item (JENKINS-JSON-CAMPAIGN):** add a Jenkins run mode for the JSON campaign that passes the campaign properties, the PostgreSQL image and the deployment topology, and archives the complete evidence directory. Until then, do not describe legacy HTML capture as the parameter-matrix campaign or as per-run JSON evidence.
 
 Recorder calibration already produces the new comprehensive JSON file per fork. Calibration is
 instrumentation evidence only and does not measure PostgreSQL/cache deployment capacity.
@@ -189,6 +185,6 @@ successfully.
 - [ ] Default `verify` publishes non-empty JUnit results and archived diagnostics.
 - [ ] Compatibility mode publishes evidence for all four PostgreSQL versions.
 - [ ] Calibration archives one valid JSON file per requested fork.
-- [ ] Characterisation archives its report and exact deployment record.
+- [ ] Legacy benchmark capture archives its report and exact deployment record.
 - [ ] No benchmark run overlaps host maintenance, backups, snapshots or another workload.
-- [ ] The final JSON campaign stage remains explicitly pending until the production adapter exists.
+- [ ] A Jenkins run mode for the JSON characterisation campaign exists and archives its complete evidence directory (open item JENKINS-JSON-CAMPAIGN).

@@ -1,10 +1,10 @@
 # PeeGeeQ Cache Management API
 
-> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the 18 `PW-CAPABILITY-*` degradation scenarios were deleted. Current counts are in [the coverage matrix §3](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md#3-current-result); counts inside dated history describe the runs that produced them.
 
 **Author:** Mark A Ray-Smith Cityline Ltd<br>
-**Date:** 17 August 2026<br>
-**Version:** 1.0 draft
+**First drafted:** 17 August 2026<br>
+**Last reconciled:** 24 September 2026 against `3ed1162`
 
 **Base path:** `/api/v1`
 
@@ -21,9 +21,9 @@ It is the implementation contract for:
 
 Phase 8.2 backend phases M0-M11 and Phase 8.3 production-console phases U0-U11 are complete. The implementation includes the synchronized OpenAPI/typed contract, PostgreSQL inspection and atomic administration, durable fail-closed audit, both authentication modes, setup lifecycle, the complete REST/SSE/WebSocket surface, mandatory observability, runnable packaging, operational guidance, the reference-parity React stack, independent Java Playwright journeys against the packaged application and real transports, packaged Chromium/PostgreSQL acceptance, and complete-reactor PostgreSQL 15-18 evidence. Section 19 records the implementation boundary and evidence.
 
-The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The interactive screen designs are in [UI mockups/peegeeq-cache-management-ui-mockups.html](archive/UI%20mockups/peegeeq-cache-management-ui-mockups.html).
+The associated product and screen design is in [PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md). The original interactive screen mockups are archived at [UI mockups/peegeeq-cache-management-ui-mockups.html](archive/UI%20mockups/peegeeq-cache-management-ui-mockups.html); the production console supersedes them.
 
-The reviewed exact route inventory is [PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md](archive/PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md). The accepted reactor topology and server configuration/secret-reference shapes are in [PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md](archive/PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md).
+The executable route inventory is the OpenAPI document `peegee-cache-rest/src/main/openapi/peegeeq-cache-management-v1.yaml`, checked by `ManagementOpenApiContractTest`; per-operation traceability and current counts are in [the coverage matrix](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md). The [operation manifest](archive/PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) and the [build decision](archive/PEEGEEQ_CACHE_MANAGEMENT_BUILD_DECISION.md) that preceded them are archived historical records.
 
 ## 2. Contract principles
 
@@ -477,7 +477,7 @@ The server closes the temporary connection after the response. Passwords are nev
 
 Role: operator
 
-Request includes the connection fields above plus:
+Request (`SetupRegistrationRequest`) contains the connection fields above plus `setupId`, `displayName`, and an optional `runtime` object (`SetupRuntimeConfiguration`). When `runtime` is present every field in it is required:
 
 ```json
 {
@@ -491,9 +491,27 @@ Request includes the connection fields above plus:
   "password": "secret",
   "sslMode": "VERIFY_FULL",
   "trustProfileId": "corp-ca",
-  "poolMaxSize": 10
+  "poolMaxSize": 10,
+  "runtime": {
+    "defaultTtlMillis": null,
+    "expirySweeperEnabled": false,
+    "expirySweepIntervalMillis": 30000,
+    "expirySweepBatchSize": 500,
+    "writeBehindEnabled": false,
+    "writeBehindFlushIntervalMillis": 500,
+    "writeBehindMaxBufferSize": 10000,
+    "writeBehindFlushBatchSize": 500,
+    "writeBehindMaxRetries": 3,
+    "writeBehindShutdownDrainTimeoutMillis": 5000,
+    "pubSubChannelPrefix": "peegee_cache",
+    "pubSubEnabled": true,
+    "schemaBootstrapMode": "EXTERNAL",
+    "telemetryMode": "NOOP"
+  }
 }
 ```
+
+`sslMode` accepts only `VERIFY_FULL`; `poolMaxSize` is 1–100; `writeBehindMaxBufferSize` is at least 100; `schemaBootstrapMode` is `EXTERNAL` or `APPLY`; `telemetryMode` is `NOOP`. The TTL, sweeper, write-behind and channel-prefix values in the example are the library defaults (`PeeGeeCacheConfig.defaults()`, `WriteBehindConfig.disabled()`, `PgCacheStoreConfig.defaults()`); `pubSubEnabled`, `schemaBootstrapMode` and `telemetryMode` are illustrative. The OpenAPI schema is authoritative for bounds.
 
 Response `201`: `SetupSummary` with `source: UI_SESSION` and `state: CONNECTED`.
 
@@ -511,11 +529,26 @@ Response `200`:
 {
   "setup": {},
   "migrationVersion": "1",
+  "limits": {
+    "pubSubChannelMaxBytes": 49,
+    "pubSubPayloadMaxBytes": 7500,
+    "maximumValueBytes": 10485760
+  },
   "runtime": {
     "defaultTtlMillis": null,
-    "expirySweeperEnabled": true,
+    "expirySweeperEnabled": false,
     "expirySweepIntervalMillis": 30000,
-    "expirySweepBatchSize": 1000,
+    "expirySweepBatchSize": 500,
+    "writeBehindEnabled": false,
+    "writeBehindFlushIntervalMillis": 500,
+    "writeBehindMaxBufferSize": 10000,
+    "writeBehindFlushBatchSize": 500,
+    "writeBehindMaxRetries": 3,
+    "writeBehindShutdownDrainTimeoutMillis": 5000,
+    "pubSubChannelPrefix": "peegee_cache",
+    "pubSubEnabled": true,
+    "schemaBootstrapMode": "EXTERNAL",
+    "telemetryMode": "NOOP",
     "poolMaxSize": 10
   },
   "registeredAt": "2026-08-16T10:40:00.000Z",
@@ -523,7 +556,7 @@ Response `200`:
 }
 ```
 
-`setup` is the complete `SetupSummary`. Runtime fields are safe display configuration only. The response excludes usernames, passwords, secret references, trust-store paths, tokens, and pool connection strings.
+`setup` is the complete `SetupSummary`. `limits` is the `SetupLimits` object described in §7.9. Runtime fields are safe display configuration only. The response excludes usernames, passwords, secret references, trust-store paths, tokens, and pool connection strings.
 
 ### 7.5 Connect detached setup
 
@@ -952,6 +985,46 @@ Response `200`:
 
 Changed entries are not deleted. The token becomes used before execution begins and cannot be replayed, including after partial failure.
 
+### 9.9 Entry existence
+
+`GET /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/entries/{encodedKey}/exists`
+
+Role: viewer (`VIEW`)
+
+Response `200`: `{ "exists": true }`. The check discloses nothing but presence and is not audited.
+
+### 9.10 Batch get
+
+`POST /api/v1/setups/{setupId}/entries/batch-get`
+
+Role: operator (`REVEAL`; audited, `Cache-Control: no-store`)
+
+Request: `keys` (1–1000 `{ "namespace", "key" }` pairs, which may span namespaces) and a required `reason` (≤240 characters). Response `200`: `items`, one per requested key, each with `namespace`, `key`, `found` and `entry` (a `CacheEntrySnapshot` including the value, or `null`).
+
+### 9.11 Batch set
+
+`POST /api/v1/setups/{setupId}/entries/batch-set`
+
+Role: operator (`OPERATE`; audited)
+
+Request: `entries` (1–1000), each with `namespace`, `key`, `value` (§6.2), `ttlMillis` (≥1 or `null`), `setMode` (`UPSERT`, `ONLY_IF_ABSENT`, `ONLY_IF_PRESENT` or `ONLY_IF_VERSION_MATCHES`), `expectedVersion` and `returnPreviousValue`. Response `200`: `items`, one per entry, each with `namespace`, `key`, `applied`, `newVersion` and `previousEntry` (present only when requested and applicable). Each item is evaluated with the same semantics as `CacheService.setMany`; a condition that fails reports `applied: false` for that item.
+
+### 9.12 Batch delete
+
+`POST /api/v1/setups/{setupId}/entries/batch-delete`
+
+Role: operator (`OPERATE`; audited)
+
+Request: `keys` (1–1000 `{ "namespace", "key" }` pairs). Response `200`: `{ "deletedCount": "2" }`. Unlike §9.7–9.8 this is not version-checked and needs no preview token; it maps directly to `CacheService.deleteMany`.
+
+### 9.13 Scan
+
+`POST /api/v1/setups/{setupId}/entries/scan`
+
+Role: operator (`REVEAL`; audited, `Cache-Control: no-store`)
+
+Request: `namespace`, `prefix` (nullable), `cursor` (nullable, opaque), `limit` (1–200), `includeValues`, `includeExpired`, and a required `reason`. Response `200`: `entries` (`CacheEntrySnapshot`, at most `limit`, values present only when `includeValues` is true), `nextCursor` (nullable) and `hasMore`. This preserves every `ScanRequest` option; the metadata-only key browser in §9.1 remains the default browsing path.
+
 ## 10. Counter API
 
 ### 10.1 List counters
@@ -1112,7 +1185,18 @@ Requires exact `If-Match` and request:
 
 The confirmation must exactly match the decoded key. `reason` is optional and, when supplied, must contain 3–240 characters. The PostgreSQL operation deletes only the row whose namespace, key, and version match. Response `204`; stale version returns `412`.
 
-The management API does not expose lock acquire or renew in V1.
+### 11.5 Owner-token lock operations
+
+These operations call `LockService` for an application lock identified by namespace and key and the caller's owner token. They are the management surface's equivalent of an application acquiring, renewing, releasing, or checking its own lease; they are unrelated to the version-checked administrative force release above. All four are operator-only, audited, and return `Cache-Control: no-store`. The console exposes them on the Advanced operations page.
+
+| Operation | Method and path | Security profile | Request | Response `200` |
+|---|---|---|---|---|
+| `acquireLock` | `POST /api/v1/setups/{setupId}/namespaces/{encodedNamespace}/locks/{encodedKey}/acquire` | `OPERATE` | `ownerToken` (≤4096 chars), `leaseTtlMillis` (≥1), `reentrantForSameOwner`, `issueFencingToken` | `acquired`, `namespace`, `key`, `ownerToken` (nullable), `fencingToken` (nullable decimal string), `leaseExpiresAt` (nullable) |
+| `renewLock` | `POST …/locks/{encodedKey}/renew` | `OPERATE` | `ownerToken`, `leaseTtlMillis` | `renewed` |
+| `releaseLock` | `POST …/locks/{encodedKey}/release` | `OPERATE` | `ownerToken` | `released` |
+| `checkLockOwnership` | `POST …/locks/{encodedKey}/ownership` | `REVEAL` | `ownerToken` | `heldByOwner` |
+
+The ownership check returns only `heldByOwner` and never discloses the current owner. Failures use the problem contract in §5.
 
 ## 12. Pub/Sub API
 
@@ -1131,7 +1215,7 @@ Request:
 }
 ```
 
-The fully qualified PostgreSQL channel is `{configuredPrefix}__{channel}` and must not exceed PostgreSQL's 63-byte identifier limit. The caller-supplied channel must therefore contain 1 through `63 - utf8Bytes(configuredPrefix) - 2` UTF-8 bytes and must not contain NUL. A configured prefix that leaves no byte for a channel is rejected during setup validation. The effective maximum is returned by the setup capabilities endpoint. `bufferLimit` defaults to 200 and is capped at 500.
+The fully qualified PostgreSQL channel is `{configuredPrefix}__{channel}` and must not exceed PostgreSQL's 63-byte identifier limit. The caller-supplied channel must therefore contain 1 through `63 - utf8Bytes(configuredPrefix) - 2` UTF-8 bytes and must not contain NUL. A configured prefix that leaves no byte for a channel is rejected during setup validation. The effective maximum is `limits.pubSubChannelMaxBytes` in the setup details response (§7.4). `bufferLimit` defaults to 200 and is capped at 500.
 
 Response `201`:
 
@@ -1257,12 +1341,12 @@ Response `200`:
 {
   "scope": "MANAGEMENT_RUNTIME",
   "observedAt": "2026-08-16T10:42:18.000Z",
-  "started": true,
+  "lifecycleState": "RUNNING",
   "pool": {
-    "active": "2",
-    "idle": "8",
-    "pending": "0",
-    "maximum": "10"
+    "active": { "availability": "UNAVAILABLE", "reason": "The configured Vert.x pool does not expose this metric", "value": null },
+    "idle": { "availability": "UNAVAILABLE", "reason": "The configured Vert.x pool does not expose this metric", "value": null },
+    "pending": { "availability": "UNAVAILABLE", "reason": "The configured Vert.x pool does not expose this metric", "value": null },
+    "maximum": { "availability": "AVAILABLE", "reason": null, "value": "10" }
   },
   "activeOperations": "1",
   "pubSubSubscriptions": "3",
@@ -1334,6 +1418,14 @@ Activity event:
 ```
 
 The bounded activity API is a convenience view from the current management process. It may return raw identifiers to an authorized viewer because it is setup-scoped, but those raw identifiers are not copied into structured server logs. The protected structured audit stream is the authoritative audit output.
+
+### 13.5 Cache operation metrics
+
+`GET /api/v1/setups/{setupId}/cache-metrics`
+
+Role: viewer (`VIEW`)
+
+Response `200` is the exact `MetricsSnapshot` of the setup's cache runtime as decimal strings: `cacheGets`, `cacheHits`, `cacheMisses`, `cacheSets`, `cacheSetsApplied`, `cacheDeletes`, `counterIncrements`, `counterSets`, `counterDeletes`, `lockAcquires`, `lockAcquiresGranted`, `lockRenewals`, `lockReleases`, `publishes` and `subscribes`. The console shows it on the Advanced operations page.
 
 ## 14. Monitoring WebSocket
 
@@ -1432,6 +1524,8 @@ Future<ManagementOverview> overview();
 Future<ManagementDatabaseMonitoring> databaseMonitoring();
 
 Future<AdminPage<NamespaceStats>> namespaces(NamespaceQuery query);
+
+Future<NamespaceDetails> namespace(String namespace);
 
 Future<AdminPage<ManagementEntryMetadata>> entries(EntryQuery query);
 
@@ -1576,6 +1670,7 @@ interface ManagementEventService {
 | Counters | list/detail, set, increment, TTL, persist, delete |
 | Selected counter deletion | bulk counter preview and execute |
 | Locks | list/detail, owner reveal, force release |
+| Advanced operations | entry exists, batch get/set/delete, scan, cache metrics, owner-token acquire/renew/release/ownership check (§9.9–9.13, §11.5, §13.5) |
 | Pub/Sub subscription | create, SSE stream, payload reveal, delete |
 | Pub/Sub publish | `POST /pubsub/publish` |
 | Monitoring | database/runtime endpoints and metrics SSE |
@@ -1584,7 +1679,7 @@ interface ManagementEventService {
 | Settings connectivity | `/session`, setup health, setup-details limits, live connection state |
 | Display preferences | Browser-local; no server API |
 
-Every control in the approved mockups is covered. V1 intentionally has no API for database/schema drop, namespace-wide multi-resource purge, bulk lock release, lock acquisition/renewal, or persistent user preferences.
+Every page of the production console is covered. V1 intentionally has no API for database/schema drop, namespace-wide multi-resource purge, bulk lock release, or persistent user preferences.
 
 ## 18. Contract verification
 
@@ -1625,13 +1720,13 @@ Tests cover:
 
 ### 18.3 End-to-end acceptance
 
-The backend plan owns a minimal non-production browser harness served only from test resources. Playwright runs that harness against the real REST server to prove the local bootstrap/session flow, cookie attributes, CSRF/Fetch-Metadata rejection, no-store behavior, browser storage exclusion, and static-route isolation. Trusted-proxy identity/session behavior is verified through running-server protocol tests; end-to-end browser-to-proxy TLS termination belongs to production deployment acceptance. The harness is not packaged in the runnable artifact and is not presented as the production console.
+`peegee-cache-rest` keeps a minimal non-production browser harness served only from test resources. Playwright runs that harness against the real REST server to prove the local bootstrap/session flow, cookie attributes, CSRF/Fetch-Metadata rejection, no-store behavior, browser storage exclusion, and static-route isolation. Trusted-proxy identity/session behavior is verified through running-server protocol tests; end-to-end browser-to-proxy TLS termination belongs to production deployment acceptance. The harness is not packaged in the runnable artifact and is not presented as the production console.
 
-Phase 8.3 owns the production React console and its full-browser journeys for setup lifecycle and target policy, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, quotas, accessibility, and cleanup. Its authoritative execution sequence is [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md). Both suites inspect browser storage, URLs, responses, structured audit output, and ordinary logs for forbidden sensitive data and raw user-controlled identifiers.
+Phase 8.3 owns the production React console and its full-browser journeys for setup lifecycle and target policy, browsing, reveal, mutation, concurrency, bulk operations, pub/sub, monitoring, permissions, reconnect behavior, quotas, accessibility, and cleanup. The current catalogue is defined executably by `ManagementBrowserCoverageTest`; the archived [UI implementation plan](archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md) is the historical record of how it was built. Both suites inspect browser storage, URLs, responses, structured audit output, and ordinary logs for forbidden sensitive data and raw user-controlled identifiers.
 
 ## 19. Implementation state and module ownership
 
-Status: **M0-M11 BACKEND AND U0-U11 PRODUCTION UI COMPLETE**. M0-M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared sampler per setup, a Prometheus scrape, a Java 21 shaded artifact, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. M11 closes the independently inventoried 32-method data-service surface and 30-method management surface through ten additional REST/UI operations and complete runtime configuration. The desktop-only production React console retains deterministic packaging, strict runtime DTO/event validation, reference-parity Ant Design/Recharts/RTK Query/Zustand architecture, and independent packaged Chromium/PostgreSQL acceptance without request interception. The browser catalogue declares exactly 557 desktop Java Playwright scenarios, 17 named journey owners, 18 independently degraded capability paths, 13 isolated real-PostgreSQL product journeys, and a separate executable ownership contract for all 60 OpenAPI management operations. On 5 September 2026 the merged U11 working tree passed 557/557 scenarios plus all three runnable-artifact/evidence checks and complete 11-module reactors on PostgreSQL 15.17, 16.13, 17.11, and 18.3, with final log/leakage/banned-pattern review clean.
+Status: **M0-M11 BACKEND AND U0-U11 PRODUCTION UI COMPLETE**. M0-M8 provide the synchronized contract, typed API, real PostgreSQL inspection and atomic administration, fail-closed durable audit, security, lifecycle, and complete REST read/mutation surface. M9 closes audited pub/sub and bounded live transports, process-local durable-audit-derived events, health transitions, deterministic cleanup, and runtime resource gauges. M10 supplies both executable authentication configurations, mandatory bounded Micrometer/Prometheus HTTP/security/audit/resource/PostgreSQL telemetry, one shared sampler per setup, a Prometheus scrape, a Java 21 shaded artifact, packaged OpenAPI/static resources, one SLF4J provider, packaged startup/readiness/shutdown evidence, the management operations runbook, and a non-production real-browser security harness. M11 closes the independently inventoried data-service and management surfaces through ten additional REST/UI operations (§9.9–9.13, §11.5, §13.5) and complete runtime configuration (§7.3). The desktop-only production React console retains deterministic packaging, strict runtime DTO/event validation, reference-parity Ant Design/Recharts/RTK Query/Zustand architecture, and independent packaged Chromium/PostgreSQL acceptance without request interception. Current operation, method, journey and scenario counts, and the latest recorded complete gate, are in [the coverage matrix §3](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md#3-current-result).
 
 Ownership is:
 
@@ -1642,49 +1737,30 @@ Ownership is:
 - `peegee-cache-observability`: reuse of the existing telemetry and logging standards; management lifecycle, HTTP, stream, audit-queue, and resource-saturation signals are mandatory production scope, not optional extras;
 - `peegee-cache-test-support`: reusable real-PostgreSQL, server, authentication, SSE, and WebSocket fixtures where they avoid duplication without replacing end-to-end coverage.
 
-Required implementation order:
-
-1. complete Phase M0 contract closure and approve the Maven module graph;
-2. commit and validate the OpenAPI 3.1 contract and transport extensions;
-3. implement typed management API models and failing unit tests;
-4. implement PostgreSQL inspection and mutation behavior through strict Testcontainers TDD;
-5. implement authentication, audit, setup policy, and REST handlers;
-6. implement bounded SSE/WebSocket infrastructure and observability;
-7. pass backend protocol and backend-owned browser-harness acceptance gates before changing the backend status;
-8. implement the production UI under the separately tracked Phase 8.3 plan against generated/validated DTOs — COMPLETE.
+The M0–M11 and U0–U11 phase sequence that produced this state is recorded in the archived [management API implementation plan](archive/PEEGEEQ_CACHE_MANAGEMENT_API_IMPLEMENTATION_PLAN.md) and [UI implementation plan](archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
 ## 20. OpenAPI implementation requirement
 
-Before endpoint implementation begins, encode this contract as OpenAPI 3.1 under:
+This contract is encoded as OpenAPI 3.1 in:
 
 ```text
 peegee-cache-rest/src/main/openapi/peegeeq-cache-management-v1.yaml
 ```
 
-The OpenAPI document is generated or maintained as the machine-readable companion to this design. CI must validate it, compare implemented routes with declared operations, and prevent undocumented response DTOs or error codes.
+The OpenAPI document is maintained by hand as the machine-readable contract and is authoritative where it and this narrative differ. `ManagementOpenApiContractTest` validates it and compares implemented routes, parameters and responses with the declared operations; `BackendFunctionalityInventoryTest` maps every public backend method to an operation; the UI generates its types from it (`npm run generate:openapi`).
 
 SSE and WebSocket message schemas belong in OpenAPI component schemas with descriptive transport extensions, even though OpenAPI does not fully model their connection lifecycle.
 
 ### 20.1 Contract-closure gate
 
-Before the first OpenAPI file is accepted, Phase M0 produces the reviewed [management operation manifest](archive/PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) for every REST route. Each manifest row contains:
-
-- exact method and complete path, with no abbreviated `...` form;
-- unique operation identifier and owning service method;
-- authentication mode, minimum role, management-session, Origin, and CSRF requirements, including the sole local-bootstrap exception;
-- path, query, header, cookie, content-type, accept, and request-size rules;
-- complete request schema and every success response schema/status/header;
-- endpoint-specific problem codes, rate/resource limits, audit requirement, and retry/idempotency behavior;
-- whether the route can expose sensitive data and its required cache/redaction policy.
-
-The same closure pass replaces remaining prose-only aggregate models with component schemas, explicitly fixes touch at a stable version, and resolves wildcard-precondition outcomes. An OpenAPI completeness test compares this reviewed manifest with the document before route implementation; passing YAML syntax alone is insufficient.
+Every operation in the OpenAPI document declares its exact method and path, a unique `operationId`, an `x-security-profile` (authentication, role, session, Origin and CSRF requirements follow from it), complete request and response schemas with headers, and the shared problem response. Adding, removing or changing an operation updates the OpenAPI document, the contract tests above, the browser ownership registry in `ManagementBrowserCoverageTest`, this document and the coverage matrix in the same change. Passing YAML syntax alone is insufficient. The M0 [operation manifest](archive/PEEGEEQ_CACHE_MANAGEMENT_OPERATION_MANIFEST.md) that first closed the contract is archived.
 
 ## 21. Compatibility policy
 
 - `/api/v1` is additive within V1.
 - New optional response fields may be added.
 - Existing fields, enum meanings, status codes, and authorization requirements are not silently changed.
-- New enum values require tolerant server/client rollout or a minor API capability gate.
+- New enum values require a tolerant server/client rollout, announced by a minor `apiVersion` change.
 - Removing or changing a field, changing its representation, or weakening a security invariant requires `/api/v2`.
 - `serverVersion` and `apiVersion` are exposed by `/session` and WebSocket `connection.ready`.
 - The UI checks API compatibility before enabling mutations.

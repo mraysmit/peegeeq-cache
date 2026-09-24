@@ -1,21 +1,23 @@
 # Native PostgreSQL API
 
+**Last reconciled:** 24 September 2026 against `3ed1162` (signatures checked against `V001__create_peegee_cache_schema.sql`).
+
 The supported native SQL surface consists of the functions and read-only views listed here. Application code must not write directly to the backing tables: their layout is an internal persistence detail and may evolve through bundled migrations.
 
 ## Write and coordination functions
 
 Function identity includes every input type, including parameters that have defaults.
 
-| Function signature | Result columns |
-|---|---|
-| `acquire_lock(text, text, text, bigint, boolean, boolean)` | `acquired boolean, owner_token text, fencing_token bigint, lease_expires_at timestamptz` |
-| `renew_lock(text, text, text, bigint)` | `renewed boolean, lease_expires_at timestamptz` |
-| `release_lock(text, text, text)` | `released boolean` |
-| `increment_counter(text, text, bigint, bigint, text, boolean)` | `counter_value bigint, version bigint` |
-| `set_counter(text, text, bigint, bigint)` | `counter_value bigint, version bigint` |
-| `delete_counter(text, text)` | `deleted boolean` |
-| `set_entry(text, text, text, bytea, bigint, bigint, text, bigint)` | `applied boolean, version bigint` |
-| `delete_entry(text, text)` | `deleted boolean` |
+| Function signature | Parameters with defaults | Result columns |
+|---|---|---|
+| `acquire_lock(text, text, text, bigint, boolean, boolean)` | `p_reentrant` (`FALSE`), `p_issue_fencing_token` (`TRUE`) | `acquired boolean, owner_token text, fencing_token bigint, lease_expires_at timestamptz` |
+| `renew_lock(text, text, text, bigint)` | none | `renewed boolean, lease_expires_at timestamptz` |
+| `release_lock(text, text, text)` | none | `released boolean` |
+| `increment_counter(text, text, bigint, bigint, text, boolean)` | `p_ttl_millis` (`NULL`), `p_ttl_mode` (`'PRESERVE_EXISTING'`), `p_create_if_missing` (`TRUE`) | `counter_value bigint, version bigint` |
+| `set_counter(text, text, bigint, bigint)` | `p_ttl_millis` | `counter_value bigint, version bigint` |
+| `delete_counter(text, text)` | none | `deleted boolean` |
+| `set_entry(text, text, text, bytea, bigint, bigint, text, bigint)` | `p_ttl_millis`, `p_mode`, `p_expected_version` | `applied boolean, version bigint` |
+| `delete_entry(text, text)` | none | `deleted boolean` |
 
 `set_entry` accepts modes `UPSERT`, `ONLY_IF_ABSENT`, `ONLY_IF_PRESENT`, and `ONLY_IF_VERSION_MATCHES`. `increment_counter` accepts TTL modes `PRESERVE_EXISTING`, `REPLACE`, and `REMOVE`. TTL values are milliseconds; `NULL` means no requested TTL value where permitted by the selected mode.
 

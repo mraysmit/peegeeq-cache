@@ -1,11 +1,11 @@
 # PeeGeeQ Cache Management UI
 
-> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the 18 `PW-CAPABILITY-*` degradation scenarios were deleted. Current counts are in [the coverage matrix §3](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md#3-current-result); counts inside dated history describe the runs that produced them.
 
 **Author:** Mark A Ray-Smith Cityline Ltd  
-**Status:** Approved and implemented through Phase 8.3 U11; final browser, reactor, leakage, and PostgreSQL 15-18 acceptance green on 5 September 2026
-**Date:** August 2026  
-**Version:** 0.2
+**Status:** Approved and implemented (Phase 8.3 U0–U11 complete; capability gating removed 10 September 2026). Current counts and the latest recorded gate are in [the coverage matrix §3](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md#3-current-result).  
+**First drafted:** August 2026  
+**Last reconciled:** 24 September 2026 against `3ed1162` plus the uncommitted 24 September changes to `Jenkinsfile` and `peegee-cache-management-ui/vite.config.ts`
 
 
 ## 1. Purpose
@@ -14,18 +14,18 @@ This document defines the product, interaction, API, security, implementation, a
 
 The console follows the existing PeeGeeQ Management UI as its reference implementation. It reuses that product's visual language, frontend toolchain, embedded Vert.x serving model, setup-scoping pattern, live-status behavior, notifications, and real PostgreSQL end-to-end test architecture. Cache-specific workflows replace queue- and event-store-specific workflows.
 
-PeeGeeQ Cache is currently a library, not a daemon. A usable browser console therefore requires two new modules:
+PeeGeeQ Cache is a library, not a daemon, so the browser console is delivered by two application modules:
 
 - `peegee-cache-management-ui`: the React application.
-- `peegee-cache-rest`: the Vert.x management API and static UI host.
+- `peegee-cache-rest`: the Vert.x management API, static UI host and runnable jar.
 
 The first release manages multiple PostgreSQL cache setups, exposes authoritative database state, supports guarded administrative operations, and keeps sensitive values masked unless an authorized operator explicitly reveals them.
 
-The corresponding interactive screen designs are available in [the management UI mockups](archive/UI%20mockups/peegeeq-cache-management-ui-mockups.html). The complete REST, streaming, security, error, and Java service contracts are defined in [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md).
+The original interactive screen mockups are archived at [the management UI mockups](archive/UI%20mockups/peegeeq-cache-management-ui-mockups.html); the production console supersedes them. The complete REST, streaming, security, error, and Java service contracts are defined in [PEEGEEQ_CACHE_MANAGEMENT_API.md](PEEGEEQ_CACHE_MANAGEMENT_API.md).
 
-Phase 8.3 execution, red/green gates, module ownership, and evidence requirements are defined by [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
+The Phase 8.3 execution record (red/green gates and evidence) is the archived [UI implementation plan](archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md); it is a historical record, not a current authority.
 
-The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The Playwright catalogue declares 539 independently identified desktop browser scenarios, including 17 canonical operation-owning journeys and 13 isolated packaged Chromium journeys against real PostgreSQL, with no product-request interception. On 5 September 2026 the merged U11 working tree passed all 557 scenarios plus three runnable-artifact/evidence checks and the complete 11-module reactor on PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+The production boundary is a desktop-only Maven-packaged React console. Mobile and tablet layouts, touch interaction, and narrow-viewport behavior are explicitly unsupported. The Java Playwright catalogue in `peegee-cache-rest` exercises the packaged console against real PostgreSQL with no product-request interception; its scenario and journey counts are in [the coverage matrix §3](PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md#3-current-result).
 
 ## 2. Fixed decisions
 
@@ -51,7 +51,7 @@ The following decisions are part of the approved design:
 
 The cache console must look and behave like the desktop PeeGeeQ Management UI. It uses the same dark collapsible sidebar, light content area, page header, connection indicator, manual refresh control, notification drawer, Ant Design cards and tables, destructive confirmation patterns, setup scope selector, and embedded `/ui/*` deployment shape.
 
-> **Mandated (3 September 2026).** All UI controls are Ant Design 5 components and all charts are Recharts components. Hand-written equivalents of tables, forms, dialogs, drawers, selects, tags, notifications, statistics, or charts are prohibited. `src/components/common` may only compose Ant Design primitives into the reference's shared pieces (`StatCard`, `SetupScopeBar`, `FilterBar`, `ConfirmDialog`, `ConnectionStatus`, `ErrorBoundary`). Plain CSS is limited to layout tokens and `ConfigProvider` theme overrides. A guard test in the UI module enforces this.
+> **Mandated (3 September 2026).** All UI controls are Ant Design 5 components and all charts are Recharts components. Hand-written equivalents of tables, forms, dialogs, drawers, selects, tags, notifications, statistics, or charts are prohibited. `src/components/common` may only compose Ant Design primitives into the reference's shared pieces (currently `StatCard`, `SetupScopeBar`, `ConnectionStatus`, and `ValueSelect`, the Select wrapper whose `data-value` attributes the Java Playwright locators rely on). Plain CSS is limited to layout tokens and `ConfigProvider` theme overrides. A guard test in the UI module enforces this.
 
 Consistency does not require copying accidental implementation fragmentation. The cache console uses one clear owner for each class of state:
 
@@ -188,13 +188,14 @@ The shell is structurally identical to the PeeGeeQ Management UI:
 │ PeeGeeQ Cache    │ Page title      Setup / Namespace     ● Connected  ↻  🔔 │
 │                  ├───────────────────────────────────────────────────────────┤
 │ Overview         │                                                           │
-│ Cache Setups     │                    Page content                           │
+│ Setups           │                    Page content                           │
 │ Namespaces       │                                                           │
-│ Key Browser      │                                                           │
+│ Keys             │                                                           │
 │ Counters         │                                                           │
 │ Locks            │                                                           │
 │ Pub/Sub          │                                                           │
 │ Monitoring       │                                                           │
+│ Advanced         │                                                           │
 │ Settings         │                                                           │
 └──────────────────┴───────────────────────────────────────────────────────────┘
 ```
@@ -215,6 +216,7 @@ The desktop sidebar may collapse to icons through its explicit control. The head
 | `/locks` | Locks |
 | `/pubsub` | Pub/Sub |
 | `/monitoring` | Monitoring |
+| `/advanced` | Advanced operations |
 | `/settings` | Settings |
 
 Keys and namespaces in route segments use unpadded Base64 URL encoding of their UTF-8 bytes through one shared, tested helper. This preserves arbitrary identifiers without treating `/`, `%`, `+`, or `:` as route syntax. Raw values and owner tokens never enter URLs.
@@ -268,7 +270,7 @@ The setup table contains:
 - last successful health check;
 - actions allowed by role and source.
 
-Setup registration asks for host, port, database, username, password, schema, SSL mode, and pool limits. It performs a connection and schema-readiness test before registration completes.
+Setup registration asks for the setup identifier and display name, host, port, database, username, password, schema, SSL mode (`VERIFY_FULL` only), trust profile and pool size, plus the runtime configuration: default TTL, expiry sweeper, write-behind, Pub/Sub channel prefix and enablement, schema bootstrap mode (`EXTERNAL` or `APPLY`) and telemetry mode. It performs a connection and schema-readiness test before registration completes. Setup details show the same runtime configuration and the effective limits.
 
 Passwords:
 
@@ -380,7 +382,7 @@ Forced release requires:
 - the observed lock version;
 - a server-side `DELETE ... WHERE namespace = ? AND lock_key = ? AND version = ?` equivalent.
 
-A changed version returns a conflict and leaves the lock untouched. The console does not acquire or renew application locks in V1.
+A changed version returns a conflict and leaves the lock untouched. Owner-token acquire, renew, release and ownership checks are on the Advanced operations page (§7.12).
 
 ### 7.8 Pub/Sub
 
@@ -407,9 +409,9 @@ Database-wide sections:
 
 Console-runtime sections:
 
-- runtime started state;
+- runtime lifecycle state;
 - active management operations;
-- management pool active, idle, pending, and maximum connections;
+- management pool maximum connections (active, idle and pending are shown as unavailable because the Vert.x pool does not expose them);
 - active console pub/sub subscriptions;
 - expiry sweeper state and last run;
 - local operation counts and timings;
@@ -447,6 +449,19 @@ Settings displays:
 
 Security-critical policy is server-configured and read-only in the browser.
 
+### 7.12 Advanced operations
+
+The Advanced operations page exposes the core-service operations that have no natural home on the resource pages. It requires a selected setup and shows these panels:
+
+- **Existence and scan**: entry existence check (viewer) and a bounded value scan with namespace, prefix, cursor, limit, include-values and include-expired options (operator reveal with a reason);
+- **Batch get**: up to 1,000 keys across namespaces (operator reveal with a reason);
+- **Batch set**: per-item set mode, TTL, expected version and previous-value option;
+- **Cross-namespace batch delete**;
+- **Exact core metrics**: the setup runtime's `MetricsSnapshot`;
+- **Owner lock lifecycle**: acquire, renew, release and ownership check with an owner token held only in component memory.
+
+The API contract for these operations is in [the management API §9.9–9.13, §11.5 and §13.5](PEEGEEQ_CACHE_MANAGEMENT_API.md).
+
 ## 8. Frontend implementation
 
 ### 8.1 Stack
@@ -463,10 +478,10 @@ Use the same major frontend stack and build shape as `peegeeq-management-ui`:
 - Zod;
 - Recharts;
 - Vitest and Testing Library;
-- Playwright;
+- Java Playwright in `peegee-cache-rest` for the packaged-browser catalogue (not a UI dependency);
 - Node 22.22.2 and npm 10.9.4, deliberately advanced within the Node 22 LTS major, installed by Maven, and used with a committed lockfile and `npm ci`.
 
-Every item above is mandatory, not aspirational: a declared dependency that `src/` does not import is a defect, and a feature page that does not use the mandated library for its controls, charts, or REST state is a defect. The 3 September 2026 review found U1-U10 delivered without Ant Design, Recharts, or RTK Query; the U11 phase of the implementation plan corrects this.
+Every item above is mandatory, not aspirational: a declared dependency that `src/` does not import is a defect, and a feature page that does not use the mandated library for its controls, charts, or REST state is a defect. The 3 September 2026 review found U1-U10 delivered without Ant Design, Recharts, or RTK Query; U11 (completed 5 September 2026) replaced them, and the `test/quality` guards enforce the rule.
 
 ### 8.2 State ownership
 
@@ -479,7 +494,7 @@ Every item above is mandatory, not aspirational: a declared dependency that `src
 | Revealed sensitive value | Detail component memory only |
 | Form input | Form/component state |
 
-There are no direct page-level Axios calls. The API layer defines tags for `Setup`, `Overview`, `Namespace`, `Entry`, `Counter`, `Lock`, and `Monitoring`.
+Pages do not call the transport directly: cached REST state goes through RTK Query endpoints, and reveal and other no-store operations go through the typed clients from `useManagementClients()`, so sensitive values never enter the RTK Query cache. The API layer defines tags for `Setup`, `Overview`, `Monitoring`, `Activity`, `Namespace`, `Entry`, `Counter`, `Lock`, and `Subscription`.
 
 ### 8.3 Error behavior
 
@@ -529,13 +544,13 @@ The static host treats `/ui` and valid client routes as no-store application-ent
 
 ### 9.2 Default ports and paths
 
-- REST/static server: `127.0.0.1:8089`
+- REST/static server: `127.0.0.1:8080` (`PEEGEEQ_MANAGEMENT_PORT`)
 - Vite development server: `127.0.0.1:3001`
 - REST prefix: `/api/v1`
 - UI: `/ui/*`
 - WebSocket: `/ws/monitoring`
 
-Vite proxies `/api` and `/ws` to port `8089` in development.
+Vite proxies `/api` and `/ws` to `127.0.0.1:8080` in development, so `npm run dev` works against a management server started with default settings.
 
 ### 9.3 Setup registry
 
@@ -592,9 +607,7 @@ Setup details `limits` object:
 }
 ```
 
-Health/setup detail also reports migration version decimal string `"1"`, corresponding to the current V001 baseline. Later versions are reported from the migration ledger rather than inferred from table presence. Every feature flag is derived from the connected runtime and its management service; runtime configuration may narrow support further, such as disabling Pub/Sub.
-
-The UI hides unavailable navigation destinations and disables unavailable actions. Authorization remains independently enforced.
+Health/setup detail also reports migration version decimal string `"1"`, corresponding to the current V001 baseline. Later versions are reported from the migration ledger rather than inferred from table presence. There are no feature flags: every page is reachable for every connected setup, and the server decides each request by role. Runtime configuration (for example `pubSubEnabled`) is applied by the server when it builds the setup runtime.
 
 ### 10.3 Overview and inspection endpoints
 
@@ -607,6 +620,7 @@ The UI hides unavailable navigation destinations and disables unavailable action
 | `GET` | `/api/v1/setups/:setupId/monitoring/database` | PostgreSQL state |
 | `GET` | `/api/v1/setups/:setupId/monitoring/runtime` | Console-local runtime state |
 | `GET` | `/api/v1/setups/:setupId/activity` | Bounded sanitized activity |
+| `GET` | `/api/v1/setups/:setupId/cache-metrics` | Exact core `MetricsSnapshot` (Advanced operations) |
 
 ### 10.4 Entry endpoints
 
@@ -622,6 +636,11 @@ The UI hides unavailable navigation destinations and disables unavailable action
 | `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/entries/:encodedKey/touch` | operator | Touch or refresh TTL |
 | `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/entries/bulk-delete/preview` | operator | Resolve and preview exact targets |
 | `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/entries/bulk-delete/execute` | operator | Execute confirmed preview |
+| `GET` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/entries/:encodedKey/exists` | viewer | Existence check (Advanced operations) |
+| `POST` | `/api/v1/setups/:setupId/entries/batch-get` | operator | Cross-namespace batch get with values; reveal, audited |
+| `POST` | `/api/v1/setups/:setupId/entries/batch-set` | operator | Per-item conditional batch set; audited |
+| `POST` | `/api/v1/setups/:setupId/entries/batch-delete` | operator | Cross-namespace batch delete; audited |
+| `POST` | `/api/v1/setups/:setupId/entries/scan` | operator | Bounded scan with optional values; reveal, audited |
 
 Individual deletion requires the version observed by the details or browser response in an `If-Match` header. A changed version returns `412 Precondition Failed` and leaves the entry untouched.
 
@@ -651,6 +670,10 @@ Counter values are operational numeric state, not masked cache payloads.
 | `GET` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/locks/:encodedKey` | viewer | Current lock metadata |
 | `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/locks/:encodedKey/owner/reveal` | operator | Reveal owner token and audit |
 | `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/locks/:encodedKey/force-release` | operator | Version-checked forced release |
+| `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/locks/:encodedKey/acquire` | operator | Owner-token acquire (Advanced operations); audited |
+| `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/locks/:encodedKey/renew` | operator | Owner-token renew; audited |
+| `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/locks/:encodedKey/release` | operator | Owner-token release; audited |
+| `POST` | `/api/v1/setups/:setupId/namespaces/:encodedNamespace/locks/:encodedKey/ownership` | operator | Non-disclosing ownership check; audited |
 
 ### 10.7 Pub/sub and live endpoints
 
@@ -811,7 +834,7 @@ Automated checks must prove:
 
 ## 14. Implementation phases
 
-The four product phases below remain the design-level grouping. The authoritative execution sequence is the finer-grained U0-U10 strict-TDD plan in [PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md](archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
+All four phases are complete. They are kept as the design-level grouping; the finer-grained U0–U11 strict-TDD execution record is the archived [UI implementation plan](archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md).
 
 ### Phase 1: Foundation
 
@@ -870,7 +893,6 @@ The management UI is complete when:
 - Database or cache-schema drop operations.
 - One-click deletion of every resource in a namespace.
 - Bulk lock release.
-- Acquiring or renewing application locks from the console.
 - Redis command compatibility, CLI, or SQL workbench.
 - Eviction-policy, memory-limit, shard, topology, partition, or rebalancing controls.
 - Retained pub/sub history or discovery of all channels across clients.

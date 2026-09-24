@@ -1,6 +1,8 @@
 # Release and Maven Central publication
 
-The reactor produces these library artifacts:
+**Last reconciled:** 24 September 2026 against `3ed1162`.
+
+The reactor has ten modules. Six are library artifacts:
 
 - `peegee-cache-api`: stable public service and model contracts;
 - `peegee-cache-core`: validation, in-memory snapshots, and vendor-neutral telemetry SPI;
@@ -9,7 +11,13 @@ The reactor produces these library artifacts:
 - `peegee-cache-observability`: Micrometer, OpenTelemetry, and health adapters;
 - `peegee-cache-test-support`: reusable Testcontainers and benchmark fixtures.
 
-`peegee-cache-examples` and `peegee-cache-benchmarks` are runnable verification artifacts, not application dependencies.
+The other four are applications, not dependencies for consuming code:
+
+- `peegee-cache-management-ui`: the React console, packaged as a jar of static assets under `ui/`;
+- `peegee-cache-rest`: the management server; it also attaches a shaded `runnable` classifier jar that bundles the console and one SLF4J provider (see [management operations](PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md));
+- `peegee-cache-examples` and `peegee-cache-benchmarks`: runnable verification artifacts.
+
+**Open decision: what is uploaded to Central.** Neither the parent POM nor any module sets `maven.deploy.skip` or a Central Portal exclusion, so nothing in the configuration keeps the four applications out of the `central-release` bundle. This has not been confirmed by a deploy dry run. Decide whether the applications are published (the management server's runnable jar may be worth publishing; the examples and benchmarks probably are not) and configure the exclusions before the first release.
 
 The `release-artifacts` Maven profile attaches source and Javadoc JARs:
 
@@ -17,7 +25,9 @@ The `release-artifacts` Maven profile attaches source and Javadoc JARs:
 mvn -Prelease-artifacts clean package
 ```
 
-Every build enforces Maven 3.9.x, build JDK 21–26, Java 21 bytecode compatibility, dependency convergence, and duplicate dependency declarations. A release candidate must also pass `mvn clean verify`, the benchmark thresholds appropriate to its target environment, and the PostgreSQL compatibility matrix.
+(`mvn clean verify -Prelease-artifacts`, under Release commands, is the same profile with the tests and verification checks; use it for a release candidate.)
+
+Every build enforces Maven 3.9.x, build JDK 21–26, Java 21 bytecode compatibility, dependency convergence, and duplicate dependency declarations. A release candidate must also pass `mvn clean verify`, the benchmark thresholds appropriate to its target environment, and the PostgreSQL compatibility matrix (see [operations guidance](PEEGEEQ_CACHE_OPERATIONS.md#compatibility)).
 
 ## Default publication configuration
 

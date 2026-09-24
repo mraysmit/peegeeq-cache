@@ -1,5 +1,7 @@
 # peegee-cache operations and observability
 
+**Last reconciled:** 24 September 2026 against `3ed1162`.
+
 Observability is a required production component of peegee-cache. The managed runtime accepts the vendor-neutral `CacheTelemetry` contract; `peegee-cache-observability` supplies Micrometer and OpenTelemetry implementations and a PostgreSQL readiness indicator.
 
 Logs are governed by the [peegee-cache logging standard](PEEGEEQ_CACHE_LOGGING.md): consuming applications own the SLF4J provider, lifecycle and degraded/recovery transitions are structured, recurring failures are suppressed and summarized, per-operation detail is TRACE-only, and user-controlled data is omitted or fingerprinted.
@@ -57,11 +59,11 @@ Applied versions are recorded in `<schema>.schema_migrations`. Rollback is opera
 | Java | Build JDK 21 through 26; enforced by Maven Enforcer. Published artifacts target Java 21. |
 | Maven | 3.9.x; enforced by Maven Enforcer |
 | Vert.x | 5.0.8 dependency baseline |
-| PostgreSQL | 15+; full-reactor validation completed on 15.17, 16.13, 17.11, and 18.3 |
+| PostgreSQL | 15+; full-reactor validation on 15.17, 16.13, 17.11 and 18.3 (see below) |
 | Micrometer | 1.17.0 |
 | OpenTelemetry Java API | 1.64.0 BOM |
 
-The Testcontainers image is selected with `peegeeq.test.postgres.image`. The 2026-08-16 manual release matrix ran the complete 269-test reactor successfully on every supported major version:
+The Testcontainers image is selected with `peegeeq.test.postgres.image` (default `postgres:18.3-alpine`). Run the matrix with:
 
 ```shell
 mvn verify '-Dpeegeeq.test.postgres.image=postgres:15.17-alpine'
@@ -70,4 +72,12 @@ mvn verify '-Dpeegeeq.test.postgres.image=postgres:17.11-alpine'
 mvn verify '-Dpeegeeq.test.postgres.image=postgres:18.3-alpine'
 ```
 
-Each full-reactor matrix run completed with 269 tests, zero failures, zero errors, and zero skips. The subsequently added real-PostgreSQL pool-headroom/sweeper regression passed separately on all four majors; the current PostgreSQL 18.3 reactor contains 286 tests, including the logging safety, concurrent failure-suppression, and provider-isolation contracts. `.github/workflows/postgresql-compatibility.yml` now repeats the complete reactor against the four fixed image tags for every pull request, every push to `master`, and manual dispatches.
+On Windows, pipe each run through `Tee-Object` as described in [`PEEGEEQ_CACHE_TEST_COMMANDS.md`](guidelines/PEEGEEQ_CACHE_TEST_COMMANDS.md).
+
+Recorded evidence, oldest first:
+
+- 16 August 2026: the library-only reactor (269 tests, before the management modules existed) passed on all four versions; a later pool-headroom/sweeper regression passed separately on all four.
+- 5 September 2026: the complete reactor, including the management server, console and browser catalogue, passed on all four versions (see the [coverage matrix §3](design/PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md#3-current-result)).
+- 10 September 2026: the complete reactor passed on PostgreSQL 18.3 after the capability-gating removal (log `logs/capability-gating-removal-verify-20260910.log`). No four-version run is recorded for the current code.
+
+Two CI definitions run the matrix: the GitHub Actions workflow `.github/workflows/postgresql-compatibility.yml` runs `mvn verify` against the four image tags on every pull request, every push to `master` and manual dispatch (each job has a 30-minute timeout); the manually started Jenkins `postgresql-compatibility` run mode runs `mvn verify` against all four images in sequence ([Jenkins setup](design/PEEGEEQ_CACHE_JENKINS_CI_SETUP.md)). Neither has a recorded result in this repository's documentation.

@@ -1,10 +1,13 @@
 # Performance and resilience benchmarks
 
+**Last reconciled:** 24 September 2026 against `3ed1162`.
+
 `peegee-cache-benchmarks` is an opt-in, executable PostgreSQL benchmark rather than a unit-test microbenchmark. It measures combined library and database behavior.
 
-For planned parameterised workload/timeframe experiments, interval statistics, performance trends
-and degradation-onset/recovery analysis, see the
-[performance characterisation plan](design/PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md).
+The design of the parameterised workload/timeframe experiments, interval statistics, trend and
+degradation-onset/recovery analysis, and the open items, are in the
+[performance characterisation plan](design/PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md); its dated
+implementation evidence is in the [implementation log](design/archive/PEEGEEQ_CACHE_BENCHMARK_IMPLEMENTATION_LOG_2026-09.md).
 The parameterised characterisation framework is implemented end to end: immutable finite
 specification, closed-loop/rate-controlled scheduling, phase/workload transitions, managed retries,
 real cache/counter/lock/scan adapters, bounded interval recording, atomic checkpoints, versioned
@@ -58,9 +61,9 @@ of a crash. Inspection neither resumes a workload nor changes the file, and is n
 validation or integrity check. Establish that the old owner has stopped before beginning a replacement
 execution with a fresh identity. Automated restart/resume is not implemented.
 
-A local single-thread recorder-cost probe is recorded in performance-plan §16. The repeatable
-concurrent/fork calibration runner is now implemented separately (§18); the earlier probe is not
-promoted to production evidence. Cadence/recovery evidence is in §17. Managed scheduler integration,
+A local single-thread recorder-cost probe is recorded in [implementation log](design/archive/PEEGEEQ_CACHE_BENCHMARK_IMPLEMENTATION_LOG_2026-09.md) §16. The repeatable
+concurrent/fork calibration runner is implemented separately (log §18); the earlier probe is not
+promoted to production evidence. Cadence/recovery evidence is in log §17. Managed scheduler integration,
 campaign orchestration and JSON-derived HTML are now connected. Growing-copy write amplification
 remains a measured limitation, so version-1 preflight rejects a run whose final size, cumulative
 rewrite work or two-copy peak disk estimate exceeds its declared budget.
@@ -84,7 +87,7 @@ Collect actual-boundary `checkpoint()` samples with `statistics().metrics()` for
 The statistics include cumulative generator misses, admission rejections, late/duplicate completions,
 maximum arrival-detection/deadline-detection lag, and current physical/queue populations. Preserve
 these even when logical outstanding work is zero. Record demand duration, driver cadence and the
-catch-up cap in the run manifest. See performance-plan §19 for precise accounting and limitations.
+catch-up cap in the run manifest. See [implementation log](design/archive/PEEGEEQ_CACHE_BENCHMARK_IMPLEMENTATION_LOG_2026-09.md) §19 for precise accounting and limitations.
 
 The scheduler and managed-execution integration tests use real PostgreSQL and verify phase changes,
 stop/drain, interval rollover and checkpoint-pressure handling. They do not establish deployment
@@ -92,11 +95,12 @@ capacity.
 
 B2 is complete. The scheduler is connected to managed Vert.x execution, phase-specific workload
 plans, stable logical-operation/physical-attempt identity, bounded retries, generator calibration,
-finite campaign execution, live checkpoints and explicit stop/drain handling. The definitive full
-reactor gate recorded 881 tests with zero failures, errors or skips; the benchmark module contributed
-155 tests, including eleven real-PostgreSQL scheduler/scenario/campaign tests. See performance-plan
-§§19 and 24–37 for the chronological implementation evidence and final scope boundary. Historical
-checkpoint counts in those sections are not the current completion status.
+finite campaign execution, live checkpoints and explicit stop/drain handling. The 13 September
+reactor run (`logs/benchmark-final-reactor-after-validity-20260913.log`, Surefire and Vitest only, no
+Failsafe browser catalogue) recorded 881 tests with zero failures, errors or skips; the benchmark
+module contributed 155. See [implementation log](design/archive/PEEGEEQ_CACHE_BENCHMARK_IMPLEMENTATION_LOG_2026-09.md) §§19 and 24–36 for the chronological evidence
+and the [plan's current status](design/PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md#current-status-and-evidence).
+Historical checkpoint counts in the log are not the current completion status.
 
 ## Parameterised characterisation campaign
 
@@ -131,14 +135,30 @@ cleanup SQL is scoped to those namespaces. The supplied pool and database are ne
 adapter; the local entry point alone owns and stops its disposable Testcontainers fixture.
 
 The review reports matrix completeness, per-run curves, onset brackets, repeat min/max p95,
-limitations and follow-ups. `NO_ONSET_OBSERVED` is limited to the declared rates and durations.
-`INCONCLUSIVE` is a valid review outcome when samples or required observations are insufficient.
+limitations and follow-ups. Its status is, for example, `COMPLETE_NO_ONSET_OBSERVED` (limited to the
+declared rates and durations) or `COMPLETE_INCONCLUSIVE` (a valid outcome when samples or required
+observations are insufficient).
 These local results are framework/regression evidence, not production capacity.
 
 The accepted implementation campaign is retained under
 `benchmark-results/characterisation-framework-final-20260913/`: six of six VALID runs were accounted
 for at 100 and 200 requests/second with three repetitions, and the review reports
-`COMPLETE_NO_ONSET_OBSERVED`. See performance-plan §§31–36 for scope and verification.
+`COMPLETE_NO_ONSET_OBSERVED`. Its `resolved-experiment.json` shows the defaults above except for the
+rates and the sampling interval, so this command should reproduce its configuration with a new output
+directory (derived from that file; the command itself has not been re-run):
+
+```powershell
+mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-characterisation -DskipTests `
+    '-Dpeegeeq.campaign.rates=100,200' '-Dpeegeeq.campaign.sampleMillis=250' `
+    '-Dpeegeeq.campaign.outputDirectory=benchmark-results/characterisation-local' 2>&1 |
+    Tee-Object -FilePath logs\benchmark-characterisation-<YYYYMMDD>.log
+```
+
+The 0.9 target hit ratio, the uniform key distribution and the campaign seed `20260913` are fixed in
+`BenchmarkLocalCampaignMain`, and the operation mix (cache GET/SET weighted 4:1) in
+`BenchmarkLocalPostgresCampaignAdapter`; none of them is a property. The other
+`characterisation-framework-*-20260913` directories are earlier runs and are not evidence (see the [plan's current status](design/PEEGEEQ_CACHE_PRODUCTION_BENCHMARK_PLAN.md#current-status-and-evidence)).
+See [implementation log](design/archive/PEEGEEQ_CACHE_BENCHMARK_IMPLEMENTATION_LOG_2026-09.md) §§31–36 for scope and verification.
 
 External targets are represented explicitly by host, port, database, isolated schema prefix and TLS
 policy, without credentials. `BenchmarkPostgresTargetVerifier` verifies the actual database,
@@ -164,6 +184,8 @@ mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-calibration -Ds
 
 The second command launches one fresh JVM and writes one versioned JSON file under the benchmark
 module's `benchmark-results/calibration/` directory (or the supplied absolute output directory).
+The retained B1 calibration evidence (three JSON files from 6 September 2026) is in the
+repository-root `benchmark-results/calibration-b1-20260906/`.
 It does not change the legacy benchmark/capture profiles. Override these calibration properties:
 
 | Property prefix `peegeeq.calibration.` | Default | Meaning |
@@ -330,7 +352,9 @@ PowerShell users should quote Maven `-D` arguments whose property names contain 
 
 ## 2026-08-16 full-duration validation
 
-The default benchmark was executed repeatedly on PostgreSQL 18.3. The local host used an Intel Core Ultra 9 185H (16 cores/22 logical processors), Windows 11, Java 25, and Docker Desktop 29.7.2 with 8 CPUs and approximately 46.7 GiB of memory allocated. PostgreSQL ran in the same Docker Desktop VM as the benchmark client, so this is a strong single-host regression baseline, not evidence for remote or managed-database network and storage behavior.
+*No run identifiers, reports or logs are cited for the figures below. The only legacy capture report retained from that period is `benchmark-results/20260817T091309430Z-0f724a84ebfc.html` (17 August); whether it belongs to these runs was not established.*
+
+The default benchmark was executed repeatedly on PostgreSQL 18.3. The local host used an Intel Core Ultra 9 185H (16 cores/22 logical processors), Windows 11, Java 25, and Docker Desktop (Docker engine 29.7.2) with 8 CPUs and approximately 46.7 GiB of memory allocated. PostgreSQL ran in the same Docker Desktop VM as the benchmark client, so this is a strong single-host regression baseline, not evidence for remote or managed-database network and storage behavior.
 
 ### Pre-fix diagnosis
 

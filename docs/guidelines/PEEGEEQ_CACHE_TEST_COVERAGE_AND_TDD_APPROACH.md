@@ -1,5 +1,7 @@
 # peegee-cache Test Coverage and TDD Approach
 
+**Last reconciled:** 24 September 2026 against `3ed1162`.
+
 This document is the normative testing standard for `peegeeq-cache`. Requirements stated with
 **must**, **must not**, or **mandated** apply to all new and modified tests unless an exception is
 defined explicitly here.
@@ -76,37 +78,28 @@ For behavior that depends on **Vert.x runtime semantics**:
 
 **Framework:** JUnit Jupiter 5.x + `VertxExtension` + Testcontainers. All tests use Vert.x facilities — no `CompletableFuture.join()`, no raw thread blocking on the event loop.
 
-## 3. Current test inventory
+## 3. Test inventory
 
-Last verified: 2026-08-17 with `mvn verify` after a clean full-reactor baseline.
+The inventory is not maintained by hand. It is whatever the latest saved full-reactor log reports; read the per-module `Tests run:` lines from that log instead of copying numbers into documents. The two most recent recorded runs are:
 
-| Module | Tests | Scope |
-|---|---:|---|
-| `peegee-cache-api` | 34 | Keys, values, and exception contracts |
-| `peegee-cache-core` | 14 | Validation, in-memory metrics, telemetry isolation, and async observation |
-| `peegee-cache-pg` | 194 | Consolidated baseline bootstrap, migration-runner safety, repositories, services, native SQL, adversarial pub/sub, recovery, contention, and safe log identifier formatting |
-| `peegee-cache-runtime` | 23 | Lifecycle, external/managed schema policy, custom schemas, complete operation telemetry, default TTL, physical expiry sweeping, and sequential/concurrent recurring failure-episode suppression |
-| `peegee-cache-observability` | 4 | Micrometer export, OpenTelemetry spans, and complete/partial-schema PostgreSQL readiness |
-| `peegee-cache-test-support` | 4 | Latency percentile/throughput calculation, configurable PostgreSQL matrix image selection, and published-module logging dependency policy |
-| `peegee-cache-benchmarks` | 13 | Benchmark configuration, typed results, self-contained HTML evidence generation, exact pool headroom, runtime layout, timeout diagnostics, and real-PostgreSQL pool-headroom/sweeper regression |
-| **Total** | **286** | Full reactor green on PostgreSQL 18.3; the 269-test pre-fix reactor and the added pool regression are both validated on PostgreSQL 15–18 |
+| Module | Surefire / Vitest, 13 September 2026 | Failsafe, 10 September 2026 |
+|---|---:|---:|
+| `peegee-cache-api` | 59 | — |
+| `peegee-cache-core` | 20 | — |
+| `peegee-cache-test-support` | 4 | — |
+| `peegee-cache-pg` | 243 | — |
+| `peegee-cache-runtime` | 48 | — |
+| `peegee-cache-observability` | 5 | — |
+| `peegee-cache-management-ui` | 168 Vitest tests in 36 files | — |
+| `peegee-cache-rest` | 179 | 545 (browser scenarios plus six infrastructure checks) |
+| `peegee-cache-benchmarks` | 155 | — |
+| `peegee-cache-examples` | 0 | — |
 
-### peegee-cache-api (34 tests)
+The 13 September column is `logs/benchmark-final-reactor-after-validity-20260913.log`, a Surefire and Vitest reactor run on PostgreSQL 18.3 without the Failsafe phase (6:07). The Failsafe column is the complete `clean verify` in `logs/capability-gating-removal-verify-20260910.log` (29:58). Both logs are local: `logs/` is git-ignored. Modules whose tests need Docker are listed in [`PEEGEEQ_CACHE_TEST_COMMANDS.md`](PEEGEEQ_CACHE_TEST_COMMANDS.md).
 
-| Test class | Tests | What it verifies |
-|---|---|---|
-| `CacheKeyTest` | 8 | Null rejection (`NullPointerException`), blank rejection (`IllegalArgumentException`), equality, `asQualifiedKey()` format |
-| `CacheValueTest` | 13 | Typed factory methods, accessor type guards, compact constructor payload exclusivity, null rejection |
-| `LockKeyTest` | 7 | Null rejection (`NullPointerException`), blank rejection (`IllegalArgumentException`), equality, `asQualifiedKey()` format |
-| `ExceptionHierarchyTest` | 6 | Catchability contract (`catch CacheException` catches all subtypes), unchecked status, `CacheStoreException` rejects null cause, `LockNotHeldException` independent catchability |
+## 4. Phase 3 test plan — Repository and SQL statement catalogue (historical)
 
-### Initial peegee-cache-pg bootstrap slice (27 tests)
-
-| Test class | Tests | What it verifies |
-|---|---|---|
-| `BootstrapSmokeTest` | 27 | Schema creation, table columns/types, primary keys, check constraints (value type, payload exclusivity, lease sanity), sequence monotonicity, all 5 indexes, constraint enforcement (rejects invalid data, accepts valid data) |
-
-## 4. Phase 3 test plan — Repository and SQL statement catalogue
+*This is the test-first plan that was followed for the PostgreSQL repositories; the tests exist and are part of the `peegee-cache-pg` suite. It is kept as a record of the contracts each repository test covers.*
 
 Each repository method gets a Testcontainers integration test against real PostgreSQL. Tests are written first, run red, then implementation proceeds.
 
@@ -202,6 +195,20 @@ Playwright execution selectors. Those values must remain stable for the lifetime
 must be copied into immutable configuration before concurrent test work begins. A test must not
 change them after startup.
 
+The only exception to this rule is a test whose subject is the thin system-property adapter itself. Such a test
+must:
+
+1. lock the JVM system-properties resource for its entire execution so it cannot run concurrently
+   with another property-mutating test;
+2. save every affected property's exact original state and restore it in `finally` or guaranteed
+   teardown;
+3. change the complete property set atomically from the test's perspective, never leaving a
+   partially configured object visible; and
+4. keep all behavioral parsing and validation tests on an injected property source.
+
+This rule is required for all new and modified tests. Existing global-property tests are migration
+debt and must be converted when touched; cleanup alone is not considered compliance.
+
 ### Browser viewport scope
 
 > **Mandated: the PeeGeeQ Cache management UI is desktop-only.**
@@ -229,7 +236,7 @@ The focused target is an explicit scenario locator or the visible dialog, alert,
 surface. Additional checkpoints may capture intermediate states before a workflow dismisses them.
 
 Capture passing and failing scenarios. Publish the complete passing catalogue to the UI module's
-flat `docs/screenshots/` directory with descriptive feature/behavior filenames and a visible gallery,
+flat `docs/screenshots/` directory (the PNGs are git-ignored local output; only its `README.md` is tracked) with descriptive feature/behavior filenames and a visible gallery,
 following the sibling UI documentation screenshot convention. Scenario IDs are internal traceability,
 not the user-facing screenshot organization. Raw diagnostic captures may retain a distinct run
 directory and scenario ID plus sequence; link both images to their owning scenario in the portable HTML report. Passing
@@ -242,8 +249,7 @@ redaction overlays, text-suppression styles, replacement values, or canary-based
 This applies to every control and value, including passwords, editors, revealed values, and tokens.
 Do not clear form values or mutate application state to produce evidence. The application's own
 password inputs and explicit reveal/hide behavior remain unchanged; screenshot capture must neither
-hide visible content nor reveal content the application has not displayed. This explicit user
-requirement supersedes the earlier blanket screenshot-masking rule.
+hide visible content nor reveal content the application has not displayed.
 Screenshot infrastructure tests use real Chromium and a local HTTP fixture to verify PNG dimensions,
 pixel equality with native browser screenshots, unchanged field values, and file-write failure propagation. They receive no product-scenario
 credit. Generated screenshots and reports remain ignored output, including the published documentation
@@ -275,20 +281,6 @@ read, mutation, accessibility, privacy, navigation, and monitoring scenarios mus
 setup. Executable fixture-policy tests must fail if a lifecycle-mutating operation is accidentally
 routed through the shared setup.
 
-The only exception is a test whose subject is the thin system-property adapter itself. Such a test
-must:
-
-1. lock the JVM system-properties resource for its entire execution so it cannot run concurrently
-   with another property-mutating test;
-2. save every affected property's exact original state and restore it in `finally` or guaranteed
-   teardown;
-3. change the complete property set atomically from the test's perspective, never leaving a
-   partially configured object visible; and
-4. keep all behavioral parsing and validation tests on an injected property source.
-
-This rule is required for all new and modified tests. Existing global-property tests are migration
-debt and must be converted when touched; cleanup alone is not considered compliance.
-
 ### Management UI component and client tests
 
 > **Mandated: no test doubles in `peegee-cache-management-ui`.**
@@ -315,7 +307,9 @@ The following `test/quality` guard tests run in the default Vitest gate and must
 `no-direct-transport.guard.test.ts`, `zod-fixture.guard.test.ts`, and
 `sensitive-dto.guard.test.ts`. `@vitest/coverage-v8` enforces at least 80 percent branch coverage
 on `src/api/**` and `src/state/**`. The Java Playwright catalogue continues to locate elements by
-role and label; `data-testid` attributes are not introduced.
+role and label; `data-testid` attributes are not introduced. The one deliberate DOM hook is the
+`data-value` attribute that `ValueSelect` stamps on Select options and selections, which the Java
+`AntSelect` helper uses to choose by value.
 
 ### Testcontainers setup
 
@@ -328,13 +322,16 @@ bootstrap SQL through `BootstrapSqlRenderer` before exercising the database cont
 
 ### Module install order
 
-Before running `peegee-cache-pg` tests:
-```
-mvn install -N -q
-mvn install -pl peegee-cache-api,peegee-cache-core -q
+Before running a module's tests, rebuild and install that module and everything upstream of it, as `CLAUDE.md` requires (never with `-q`):
+
+```powershell
+mvn clean install -DskipTests -pl :peegee-cache-pg -am 2>&1 |
+    Tee-Object -FilePath logs\rebuild-pg-<YYYYMMDD>.log
 ```
 
-### Vert.x test pattern (Phase 4+)
+`-am` installs the parent, `peegee-cache-api`, `peegee-cache-core` and `peegee-cache-test-support`, which the PostgreSQL tests depend on.
+
+### Vert.x test pattern
 
 ```java
 @ExtendWith(VertxExtension.class)

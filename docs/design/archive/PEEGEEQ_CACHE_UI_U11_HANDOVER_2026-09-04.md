@@ -9,7 +9,7 @@
 **Repository:** `peegeeq-cache` — module `peegee-cache-management-ui`, plus the Java Playwright suite in `peegee-cache-rest/src/test/java/dev/mars/peegeeq/cache/rest/server`
 **Checkout:** `C:\Users\mraysmit\dev\idea-projects\peegeeq-cache` (branch `master`, base HEAD `3305c30` "feat(management-ui): complete U11 parity and harden browser verification", plus the uncommitted 5 September remediation and evidence-documentation working tree described here)
 **Reference implementation:** `C:\Users\mraysmit\dev\idea-projects\peegeeq\peegeeq-management-ui`
-**Governing documents:** `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md` (phase U11, §4.1 pinning rule, evidence blocks U11.0-U11.9, §9 status table, §10 completion definition); `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md` §3.1 (antd/Recharts mandate) and §8.1/§8.2 (state ownership, sensitive data); `docs/guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md` §5 (management UI component and client tests)
+**Governing documents:** `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md` (now `docs/design/archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md`; phase U11, §4.1 pinning rule, evidence blocks U11.0-U11.9, §9 status table, §10 completion definition); `docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md` §3.1 (antd/Recharts mandate) and §8.1/§8.2 (state ownership, sensitive data); `docs/guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md` §5 (management UI component and client tests)
 
 ---
 

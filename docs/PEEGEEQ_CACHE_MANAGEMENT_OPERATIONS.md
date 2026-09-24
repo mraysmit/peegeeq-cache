@@ -1,19 +1,25 @@
 # PeeGeeQ Cache management server operations
 
+**Last reconciled:** 24 September 2026 against `3ed1162`.
+
+> **Capability gating removed (10 September 2026).** There is no per-setup capability endpoint or capability-gated UI; role checks are the only authorization gate and effective byte limits are carried by setup details. Current management counts are in [the coverage matrix §3](design/PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md#3-current-result).
+
 The management server is a security-sensitive operational component. It owns database credentials, a durable audit journal, browser sessions, PostgreSQL pools, live streams, and mandatory Prometheus telemetry. Defaults bind only to loopback and startup fails if the audit fingerprint key is absent or shorter than 32 UTF-8 bytes.
 
 ## Build and artifact
 
-Build and verify with OpenJDK 26.0.2 while retaining Java 21 bytecode compatibility:
+Build with any JDK the enforcer accepts (21 through 26); the bytecode target is Java 21. Build the runnable jar without the browser catalogue:
 
 ```powershell
-$env:JAVA_HOME = 'C:\Users\mraysmit\.jdks\openjdk-26.0.2'
-mvn -pl peegee-cache-rest -am verify
+mvn clean install -DskipTests -Dmaven.antrun.skip=true -pl :peegee-cache-rest -am 2>&1 |
+    Tee-Object -FilePath logs\rebuild-rest-<YYYYMMDD>.log
 ```
 
-The executable is `peegee-cache-rest/target/peegee-cache-rest-0.1.0-SNAPSHOT-runnable.jar`. Verification covers its manifest, Java 21 class-file version, OpenAPI at `openapi/peegeeq-cache-management-v1.yaml`, fallback page at `ui/index.html`, single SLF4J provider, exclusion of test fixtures, startup, readiness, Prometheus scrape, and startup log.
+`mvn verify -pl peegee-cache-rest` additionally runs the Failsafe browser catalogue and the runnable-artifact checks against Docker PostgreSQL (about 25 minutes); it is an owner-run gate. Use the commands and log rules in [`PEEGEEQ_CACHE_TEST_COMMANDS.md`](guidelines/PEEGEEQ_CACHE_TEST_COMMANDS.md).
 
-The U11 implementation acceptance completed on 5 September 2026: Phase 8.3 U0-U11 is complete, the packaged browser gate passed 557/557 reportable scenarios plus all three then-existing infrastructure checks, and the full 11-module reactor passed on PostgreSQL 15.17, 16.13, 17.11, and 18.3. Subsequent P7 screenshot acceptance passed a fresh PostgreSQL 18.3 reactor with 563 browser/infrastructure tests, all 557 scenarios captured, and 1,122 PNGs embedded in the portable report. The owning [Playwright plan](design/archive/PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md) records exact evidence and distinguishes that fresh run from the earlier four-version baseline.
+The executable is `peegee-cache-rest/target/peegee-cache-rest-0.1.0-SNAPSHOT-runnable.jar`. Verification covers its manifest, Java 21 class-file version, OpenAPI at `openapi/peegeeq-cache-management-v1.yaml`, the packaged console at `ui/index.html` (from `peegee-cache-management-ui`), single SLF4J provider, exclusion of test fixtures, startup, readiness, Prometheus scrape, and startup log.
+
+The latest recorded complete gate and the earlier acceptance history are in [the coverage matrix §3](design/PEEGEEQ_CACHE_FUNCTIONALITY_COVERAGE_MATRIX.md#3-current-result). The archived [Playwright plan](design/archive/PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md) is the historical record of how the catalogue was built.
 
 ## Startup configuration
 

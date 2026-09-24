@@ -1,10 +1,12 @@
 # peegee-cache logging standard
 
-Logging is part of the peegee-cache production observability contract. Metrics and traces describe aggregate behavior; logs describe lifecycle transitions, degraded states, recovery, and diagnostic detail. The rules below apply to library code, runnable examples, benchmarks, and future modules.
+**Last reconciled:** 24 September 2026 against `3ed1162`.
+
+Logging is part of the peegee-cache production observability contract. Metrics and traces describe aggregate behavior; logs describe lifecycle transitions, degraded states, recovery, and diagnostic detail. The rules below apply to library code, the management server, runnable examples, benchmarks, and future modules.
 
 ## SLF4J ownership
 
-Published peegee-cache libraries depend on `slf4j-api` 2.0.18 and do not select a logging provider. The consuming application must supply exactly one SLF4J 2.x provider, normally its existing Logback or Log4j 2 integration. `slf4j-simple` is limited to tests and the standalone example and benchmark processes.
+Published peegee-cache libraries depend on `slf4j-api` 2.0.18 and do not select a logging provider. The consuming application must supply exactly one SLF4J 2.x provider, normally its existing Logback or Log4j 2 integration. `slf4j-simple` is limited to tests and to the application modules: the standalone example and benchmark processes, and the management server. `peegee-cache-rest` declares `slf4j-simple` at `runtime` scope, so its runnable jar contains exactly that one provider (see [management operations](PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md)); the React console in `peegee-cache-management-ui` has no Java logging.
 
 For example, an application using Logback may add:
 
@@ -17,7 +19,7 @@ For example, an application using Logback may add:
 </dependency>
 ```
 
-Do not add a provider to any published peegee-cache library module. `LoggingDependencyContractTest` enforces this boundary and the selected SLF4J API baseline.
+Do not add a provider to any library module. `LoggingDependencyContractTest` (in `peegee-cache-test-support`) enforces this boundary for the six library modules (api, core, pg, runtime, observability, test-support) and the selected SLF4J API baseline; it does not check the application modules.
 
 ## Vert.x routing
 
@@ -27,7 +29,7 @@ Runnable processes must route Vert.x internal logs through SLF4J so application 
 -Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory
 ```
 
-The example and benchmark Maven launchers set this property explicitly. Deploying applications should set it in their JVM options before Vert.x initializes.
+The example and benchmark Maven launchers set this property explicitly. Deploying applications should set it in their JVM options before Vert.x initializes. The management server's runnable jar does not set it itself; start it with `java -Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory -jar …` if Vert.x internal logs should use the same provider.
 
 ## Level policy
 

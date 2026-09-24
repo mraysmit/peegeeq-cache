@@ -9,10 +9,16 @@
 
 **PostgreSQL-backed caching and coordination for Java/Vert.x systems.**
 
+*Last reconciled: 24 September 2026 against `3ed1162`.*
+
 Management-server deployment, security, audit, Prometheus, and recovery procedures are in [docs/PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md](docs/PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md).
 
-Jenkins verification, PostgreSQL compatibility, recorder calibration, and controlled benchmark
-execution are defined in the repository [Jenkinsfile](Jenkinsfile) and documented in
+Continuous integration has two parts. The GitHub Actions workflow
+[`.github/workflows/postgresql-compatibility.yml`](.github/workflows/postgresql-compatibility.yml)
+runs `mvn verify` for the whole reactor against PostgreSQL 15.17, 16.13, 17.11 and 18.3 on every
+push to `master` and every pull request. The [Jenkinsfile](Jenkinsfile) defines a manually started
+job for verification, the PostgreSQL compatibility matrix, recorder calibration and legacy benchmark
+capture; it is documented in
 [docs/design/PEEGEEQ_CACHE_JENKINS_CI_SETUP.md](docs/design/PEEGEEQ_CACHE_JENKINS_CI_SETUP.md).
 
 peegee-cache is a library-first cache and coordination library that runs on PostgreSQL. It provides key/value storage, TTL expiry, atomic counters, distributed locks, conditional writes, namespaces, scanning, and lightweight pub/sub inside the same transactional envelope as your business data.
@@ -37,21 +43,40 @@ PostgreSQL's shared buffer caching, prepared statement plan reuse, HOT updates, 
 |---|---|
 | Key/value cache | GET, SET, DELETE, EXISTS with `BYTEA` values |
 | TTL / expiry | Per-key/default TTL, touch, persist, optional background sweeper |
-| Conditional writes | IF_ABSENT, IF_EXISTS, version-guarded CAS |
-| Atomic counters | INCREMENT, DECREMENT, GET, RESET with namespace isolation |
+| Conditional writes | `SetMode` `UPSERT`, `ONLY_IF_ABSENT`, `ONLY_IF_PRESENT`, `ONLY_IF_VERSION_MATCHES` (version-guarded CAS) |
+| Atomic counters | Increment, decrement, get, set, TTL and delete with namespace isolation |
 | Distributed locks | Lease-based with fencing tokens, owner tracking, renewal |
 | Namespaces | Logical isolation for all cache, counter, and lock operations |
 | Bulk operations | Multi-get, multi-set, multi-delete |
 | Scan / iteration | Cursor-based listing by namespace and key prefix |
 | Lightweight pub/sub | PostgreSQL `LISTEN/NOTIFY` for cache invalidation when listener connection options are supplied |
 | Production observability | Micrometer metrics, OpenTelemetry metrics/traces, readiness health, bounded operation tags, expiry lag, contention, reconnect and lifecycle signals |
+| Write-behind (opt-in) | Buffered `CacheService` writes with bounded flush, retry and shutdown drain; counters and locks stay synchronous |
+| Management console | A Vert.x management server with a REST/SSE/WebSocket API and a React console for inspecting and administering cache setups (see below) |
 
 
 ## Requirements
 
 - **Java** 21–26 (enforced by the build; artifacts target Java 21)
 - **Vert.x** 5.0.8
-- **PostgreSQL** 15+; the full reactor was manually validated against PostgreSQL 15.17, 16.13, 17.11, and 18.3, and CI repeats that four-version matrix for every pull request and `master` push
+- **PostgreSQL** 15+; the complete reactor was last validated against PostgreSQL 15.17, 16.13, 17.11 and 18.3 on 5 September 2026 (see [operations guidance](docs/PEEGEEQ_CACHE_OPERATIONS.md#compatibility) for the history), and the GitHub Actions workflow repeats that four-version matrix for every pull request and `master` push
+
+## Modules
+
+| Module | Purpose |
+|---|---|
+| `peegee-cache-api` | Public service interfaces and models (`CacheService`, `CounterService`, `LockService`, `ScanService`, `PubSubService`, `AdminService`, `ManagementService`) |
+| `peegee-cache-core` | Shared implementation support, the write-behind buffer, and the `CacheTelemetry` SPI with `CompositeCacheTelemetry` |
+| `peegee-cache-pg` | PostgreSQL implementation, bundled schema migration and native SQL |
+| `peegee-cache-runtime` | Managed runtime: `PeeGeeCaches`, `PeeGeeCacheManager`, configuration records, expiry sweeper, write-behind |
+| `peegee-cache-observability` | Micrometer and OpenTelemetry telemetry adapters and `PgCacheHealthIndicator` |
+| `peegee-cache-test-support` | Testcontainers PostgreSQL fixtures shared by the test suites |
+| `peegee-cache-management-ui` | React management console, packaged as static assets |
+| `peegee-cache-rest` | Management server (REST, SSE, WebSocket, audit, security) and runnable jar; see [management operations](docs/PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md) |
+| `peegee-cache-benchmarks` | Opt-in benchmark, calibration and characterisation runners |
+| `peegee-cache-examples` | Runnable examples |
+
+The first six are the libraries (see [release packaging](docs/PEEGEEQ_CACHE_RELEASE_PACKAGING.md) for what is published); the dependency rules are in the [development guidelines](docs/guidelines/PEEGEEQ_CACHE_DEV_GUIDELINES.md).
 
 ## Quick start
 
@@ -102,7 +127,7 @@ pool.query(BootstrapSqlRenderer.loadBootstrapSql()).execute()
 
 Enable physical expiry cleanup with a `PeeGeeCacheConfig` whose `enableExpirySweeper` value is `true`. Logical expiry remains authoritative even when the sweeper is disabled. Pub/sub publishing and subscribing require `PgConnectOptions`; the default two-argument `PeeGeeCaches.create(vertx, pool)` path intentionally leaves pub/sub unavailable.
 
-Schema provisioning is external by default. Embedded deployments may opt into applying bundled, transactionally versioned migrations during `startReactive()` by setting `SchemaBootstrapMode.APPLY` in `PeeGeeCacheBootstrapOptions`. See the [native PostgreSQL API and upgrade contract](docs/PEEGEEQ_CACHE_NATIVE_SQL_API.md).
+Schema provisioning is external by default. Embedded deployments may opt into applying bundled, transactionally versioned migrations during `startReactive()` by setting `SchemaBootstrapMode.APPLY` in `PeeGeeCacheBootstrapOptions`. See the [native PostgreSQL API and upgrade contract](docs/design/PEEGEEQ_CACHE_NATIVE_SQL_API.md).
 
 ## Observability
 
@@ -128,13 +153,7 @@ All public APIs return `io.vertx.core.Future<T>` — compose with `.compose()`, 
 
 ## Benchmarks
 
-Run three captured 30-second repetitions and produce one self-contained HTML report containing results, hardware, Docker, JVM, Git, and raw-log evidence:
-
-```shell
-mvn -pl peegee-cache-benchmarks -am integration-test -Pbenchmark-capture -DskipTests
-```
-
-See the [benchmark guide](docs/PEEGEEQ_CACHE_BENCHMARKS.md) for report contents, release-evidence options, and comparison discipline.
+`peegee-cache-benchmarks` has four opt-in Maven profiles: `benchmark` (one direct run with pass/fail thresholds), `benchmark-capture` (repeated regression capture with one HTML report), `benchmark-calibration` (recorder and checkpoint calibration) and `benchmark-characterisation` (the parameterised characterisation campaign with authoritative JSON results). The [benchmark guide](docs/PEEGEEQ_CACHE_BENCHMARKS.md) has the commands, properties, outputs and the limits of what local results show.
 
 ## License
 

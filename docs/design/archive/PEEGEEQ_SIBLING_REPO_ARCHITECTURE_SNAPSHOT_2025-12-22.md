@@ -1,3 +1,5 @@
+> **Archived 24 September 2026.** Formerly `docs/prompt.md`. An architecture snapshot of the sibling PeeGeeQ queue repository (22 December 2025); nothing in it describes peegee-cache and no current document depends on it. Retained as historical reference only.
+
 ## Architecture Analysis Reference
 
 Imported reference note:

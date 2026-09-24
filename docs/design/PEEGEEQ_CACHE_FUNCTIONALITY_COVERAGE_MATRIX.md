@@ -1,8 +1,10 @@
 # PeeGeeQ Cache Backend-to-REST-to-UI Functionality Coverage Matrix
 
-> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the browser catalogue is 539 scenarios (the 18 `PW-CAPABILITY-*` degradation cases are gone). Scenario and operation counts quoted in dated evidence below (557 scenarios, 60 operations, 62 inventory methods) describe the runs that produced them and are not restated.
+> **Capability gating removed (10 September 2026).** The per-setup capability advertisement (`GET /api/v1/setups/{setupId}/capabilities`, `SetupCapabilities`, `AdminCapabilities`, `ManagementCapability`, the session `features` block, and the UI capability gates) was removed by [the capability gating removal plan](archive/PEEGEEQ_CACHE_CAPABILITY_GATING_REMOVAL_PLAN_2026-09-04.md). Role checks are the only authorization gate, effective byte limits are carried by setup details, and the 18 `PW-CAPABILITY-*` degradation scenarios were deleted. Current counts are in [§3](#3-current-result); counts inside dated history describe the runs that produced them.
 
-**Status:** COMPLETE — 100% VERIFIED
+**Status:** COMPLETE — every public data-service method and every OpenAPI management operation has a reviewed owner and executable evidence (§3).
+
+**Last reconciled:** 24 September 2026 against `3ed1162`.
 
 **Product boundary:** Desktop management console only
 
@@ -10,7 +12,7 @@
 
 ## 1. Purpose
 
-This is the authoritative traceability matrix for backend functionality coverage. It starts with the public backend service contracts, not with the REST operation inventory. The 60-operation OpenAPI contract is checked against that independent backend inventory; neither inventory is accepted as proof in isolation.
+This is the authoritative traceability matrix for backend functionality coverage. It starts with the public backend service contracts, not with the REST operation inventory. The OpenAPI contract (§3 gives the current operation count) is checked against that independent backend inventory; neither inventory is accepted as proof in isolation.
 
 A backend capability is `COMPLETE` only when all of the following are present:
 
@@ -39,7 +41,7 @@ Evidence codes used below:
 | Code | Required evidence |
 |---|---|
 | `B` | Backend implementation/integration test against PostgreSQL where applicable. |
-| `O` | OpenAPI and reviewed operation-manifest contract test. |
+| `O` | OpenAPI contract tests (`ManagementOpenApiContractTest`, `BackendFunctionalityInventoryTest`). |
 | `R` | Production REST route/protocol test. |
 | `U` | Production UI client/component/page test. |
 | `P` | Packaged desktop Playwright product journey with observed operation and committed-state assertions for mutations. |
@@ -48,9 +50,19 @@ Evidence codes used below:
 
 ## 3. Current result
 
-The implementation has **100% method-level backend functionality coverage**, and the final cumulative PostgreSQL 18.3 reactor gate is green.
+This section is the only document that restates the management-surface counts. Each number below is read from the code named beside it; other documents link here instead of repeating them.
 
-Strictly counting the 32 public data-service methods in `CacheService`, `CounterService`, `LockService`, `PubSubService`/`Subscription`, `ScanService`, and `AdminService`:
+| Count | Value | Source of truth |
+|---|---:|---|
+| Public data-service methods (`CacheService`, `CounterService`, `LockService`, `PubSubService`/`Subscription`, `ScanService`, `AdminService`) | 32 | `BackendFunctionalityInventoryTest` |
+| `ManagementService` methods | 29 | `peegee-cache-api/.../management/ManagementService.java` |
+| Combined reviewed backend inventory | 61 | `BackendFunctionalityInventoryTest` (`assertEquals(61, ...)`) |
+| OpenAPI management operations | 59 | `operationId`s in `peegee-cache-rest/src/main/openapi/peegeeq-cache-management-v1.yaml` |
+| Named operation-owning browser journeys | 17 | `ManagementBrowserCoverageTest.REQUIRED_JOURNEYS` |
+| Desktop browser scenarios | 539 | `ManagementBrowserCoverageTest.CURRENT_SCENARIO_COUNT` and `peegeeq.playwright.expectedScenarios` in `peegee-cache-rest/pom.xml` |
+| Failsafe infrastructure checks alongside the scenarios | 6 | one observation, two runnable-artifact and three screenshot checks (10 September 2026 log below) |
+
+Method-level result for the 32 data-service methods:
 
 | Result | Count | Percentage |
 |---|---:|---:|
@@ -59,19 +71,13 @@ Strictly counting the 32 public data-service methods in `CacheService`, `Counter
 | `MISSING` | 0 | 0% |
 | **Total** | **32** | **100%** |
 
-The percentages above are method-level traceability, not a weighted score. `BackendFunctionalityInventoryTest` independently reflects all seven public data-service contracts plus `ManagementService`, asserts the exact 61-method combined inventory (32 data-service and 29 management methods), and fails if any public method lacks a reviewed OpenAPI mapping.
+The percentages are method-level traceability, not a weighted score. `BackendFunctionalityInventoryTest` independently reflects all seven public data-service contracts plus `ManagementService` and fails if any public method lacks a reviewed OpenAPI mapping. The OpenAPI operations are separately checked by `ManagementBrowserCoverageTest` for production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence.
 
-The 59 OpenAPI management operations are separately checked for production UI ownership, browser-journey ownership, runtime request observation, and mutation/audit/sensitive-state evidence. The merged desktop-only browser catalogue declares 539 scenarios, 17 named operation-owning journeys, and 13 isolated packaged Chromium/PostgreSQL journeys.
+**Latest recorded complete gate.** `mvn --batch-mode --no-transfer-progress clean verify` on the 10 September 2026 working tree after the capability-gating removal, PostgreSQL 18.3, 29:58, log `logs/capability-gating-removal-verify-20260910.log` (local, git-ignored): every module `SUCCESS`, zero failures, errors or skips; `peegee-cache-rest` Surefire 179 and Failsafe 545 (539 scenarios plus the six infrastructure checks) with the evidence check passed; the management UI 36 files / 168 Vitest tests. That run predates commits `6e5b74d`, `2de7be1` and `f983355`; no complete browser gate is recorded for `3ed1162`.
 
-The capability-remediation parent passed 557/557 packaged desktop-browser scenarios plus 3/3 runnable-artifact/evidence checks on PostgreSQL 18.3 on 2 September 2026, and the fixture-lifecycle parent subsequently passed its then-current 550-scenario catalogue on 3 September. The merged U11 working tree completed the fresh cumulative gate on 5 September: 557/557 reportable browser scenarios plus all three infrastructure checks, with complete 11-module reactors green on PostgreSQL 15.17, 16.13, 17.11, and 18.3.
+**Earlier evidence (historical; counts are those of the catalogue at the time).** The capability-remediation parent passed 557/557 packaged desktop-browser scenarios plus the three infrastructure checks that then existed on PostgreSQL 18.3 on 2 September 2026; the fixture-lifecycle parent passed its then-current 550-scenario catalogue on 3 September; the merged U11 working tree passed 557/557 plus three checks with reactors green on PostgreSQL 15.17, 16.13, 17.11 and 18.3 on 5 September. P7 screenshot acceptance later on 5 September added three screenshot checks (563 Failsafe tests: 557 scenarios plus six checks) and 1,122 PNGs embedded in the portable report. The 18 `PW-CAPABILITY-*` scenarios were removed on 10 September, giving 539.
 
 ## 4. Source authorities
-
-P7 screenshot acceptance on 5 September adds visual evidence without changing the 557-scenario
-catalogue: all scenarios have viewport/focused captures, with 1,122 PNGs embedded in the portable
-report. The fresh PostgreSQL 18.3 reactor passed 563 Failsafe tests (557 scenarios plus six
-infrastructure checks). The preceding PostgreSQL 15–18 matrix is the pre-P7 baseline; see §18 of
-[the Playwright implementation plan](archive/PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md).
 
 The matrix is derived from these implementation sources:
 
@@ -140,7 +146,7 @@ When the implementation and a planning/status document disagree, source plus exe
 
 ## 9. ManagementService traceability
 
-These are management-specific capabilities layered over the core services. Their completeness does not erase the core gaps above.
+These are management-specific capabilities layered over the core services. They are tracked separately from the core-service rows above; every core row is `COMPLETE`.
 
 | Management method | OpenAPI operation(s) | Production desktop workflow | Required evidence | Status |
 |---|---|---|---|---|
@@ -198,10 +204,10 @@ These operations make the management application usable but are not substitutes 
 | Session | `getSession`, `exchangeLocalToken`, `deleteLocalSession` | Login/bootstrap, shell identity, logout/expiry cleanup | `COMPLETE` |
 | Setup registry | `listSetups`, `registerSetup`, `getSetup`, `forgetSetup` | Setups list, registration, details, forget | `COMPLETE` |
 | Setup validation/lifecycle | `testUnregisteredSetup`, `connectSetup`, `testRegisteredSetup`, `detachSetup` | Test form/setup, connect, retest, detach | `COMPLETE` |
-| Setup state | `getSetupHealth` | Setup health/details and effective limits | `COMPLETE` |
+| Setup state | `getSetupHealth` | Setup health (effective limits are carried by `getSetup` as `limits`) | `COMPLETE` |
 | Runtime monitoring | `getRuntimeMonitoring`, `streamMetrics`, `listActivity`, `monitoringWebSocket` | Monitoring, activity, live state, shell notifications | `COMPLETE` |
 
-The 60-operation accountability contract proves that every declared OpenAPI operation has a production owner and is observed in its claimed browser journey. `BackendFunctionalityInventoryTest` supplies the independent reverse check from all 32 public data-service methods and all 30 `ManagementService` methods into those operations.
+The operation accountability contract (`ManagementBrowserCoverageTest`; count in §3) proves that every declared OpenAPI operation has a production owner and is observed in its claimed browser journey. `BackendFunctionalityInventoryTest` supplies the independent reverse check from all public data-service and `ManagementService` methods (counts in §3) into those operations.
 
 ## 11. Runtime, configuration, and lifecycle matrix
 
@@ -232,7 +238,7 @@ The 60-operation accountability contract proves that every declared OpenAPI oper
 | `GAP-COUNTER-001` | Added create-if-missing signed adjustment with optional creation TTL. | Route tests, page tests, and `PW-COUNTER-001` committed PostgreSQL assertion. |
 | `GAP-SCAN-001` | Added bounded privileged value scan preserving every `ScanRequest` option/result. | Backend scan suite, route/client/page tests, `PW-BACKEND-001`. |
 | `GAP-ADMIN-001` | Added exact `MetricsSnapshot` endpoint and UI panel. | Exact-field/precision route and UI tests plus `PW-BACKEND-001`. |
-| `GAP-PARITY-001`–`005` | Corrected the false-complete mappings for cross-namespace `deleteMany`, per-item `setMany`, Pub/Sub `contentType`, namespace TTL-state counts, and exact database/expiry aggregate fields. | Strengthened 62-method inventory, exact OpenAPI schema assertions, route/client/component tests, real PostgreSQL Pub/Sub tests, and `PW-BACKEND-001`. |
+| `GAP-PARITY-001`–`005` | Corrected the false-complete mappings for cross-namespace `deleteMany`, per-item `setMany`, Pub/Sub `contentType`, namespace TTL-state counts, and exact database/expiry aggregate fields. | Strengthened backend inventory (then 62 methods; 61 since the capability method was removed from `ManagementService` on 10 September 2026), exact OpenAPI schema assertions, route/client/component tests, real PostgreSQL Pub/Sub tests, and `PW-BACKEND-001`. |
 | `GAP-RUNTIME-001`–`005` | Added complete runtime configuration contract, factory wiring, setup UI/details, prefix-aware limit derivation, and supported telemetry mode. | Configuration mapping/validation tests, real PostgreSQL effect/retest/cleanup tests, setup UI tests, and packaged setup journey. |
 
 ## 13. Required closure gates
@@ -247,12 +253,12 @@ The objective can be marked complete only when all of these gates pass:
 6. **Workflow-to-browser gate:** each capability has an independently named packaged-application journey that observes its real request/transport and, for mutations, verifies committed PostgreSQL state.
 7. **Semantic parity gate:** all request options, result variants, precision, TTL, conditional, concurrency, security, and lifecycle semantics are either exposed or documented as an explicitly approved product invariant. Silent omission is a failure.
 8. **Zero-gap gate:** no row remains `PARTIAL`, `REST ONLY`, `MISSING`, or `DECISION REQUIRED`.
-9. **Documentation gate:** implementation plans, operation manifest, API/UI designs, operations guide, and this matrix report the same evidence-backed status.
+9. **Documentation gate:** the API and UI designs, the operations guides and this matrix report the same evidence-backed status, and management counts are restated only in §3.
 
 ## 14. Maintenance rules
 
 - Any public backend method, option, enum value, or result-field addition must update this matrix in the same change.
-- Any REST operation addition/removal must update the operation manifest, OpenAPI accountability test, UI owner registry, and this matrix.
+- Any REST operation addition/removal must update the OpenAPI document, `ManagementOpenApiContractTest`, the `ManagementBrowserCoverageTest` owner registry, the UI owner registry, the API design, and this matrix (including §3).
 - A status may move to `COMPLETE` only in the same change that adds the required executable evidence.
 - A passing test may not justify `COMPLETE` if it exercises a mock, request interception, test-only route, or unreachable UI control instead of the packaged production workflow.
 - Desktop presentation and accessibility are quality constraints on the required workflows; they are not additional backend functionality and do not add rows to this matrix.

@@ -9,8 +9,21 @@ PostgreSQL-Backed Cache and Coordination Library
 ```
 
 **Author**: Mark A Ray-Smith Cityline Ltd.
-**Date**: March 2026
-**Version**: 0.1
+**First drafted**: March 2026
+**Status banner added**: 24 September 2026 against `3ed1162` (the body was annotated where it conflicts with the code, not reconciled)
+
+> **Document status.** This is the original design record for the library. Parts I to IV (design, modules and schema, API specification, SQL catalogue) state the design intent and remain the rationale for the product; Part V (implementation guidance) is largely historical and Part VI is examples; where a section conflicts with the documents below, those documents and the code are authoritative and this record is not. Sections marked *historical* describe plans that have been carried out.
+>
+> | Topic in this record | Authoritative source |
+> |---|---|
+> | Module list and dependencies (§13, §27) | [Development guidelines §1](../guidelines/PEEGEEQ_CACHE_DEV_GUIDELINES.md#1-module-layering) and the module poms |
+> | Schema, native SQL functions and views, migrations (§15, §16, §28) | [`PEEGEEQ_CACHE_NATIVE_SQL_API.md`](PEEGEEQ_CACHE_NATIVE_SQL_API.md) and `peegee-cache-pg/src/main/resources/db/bootstrap/V001__create_peegee_cache_schema.sql` |
+> | Bootstrap records, factory methods and schema bootstrap mode (§19) | The [README quick start](../../README.md) and `peegee-cache-runtime` |
+> | Metrics and tracing (§11, §20) | [`PEEGEEQ_CACHE_OPERATIONS.md`](../PEEGEEQ_CACHE_OPERATIONS.md) and the `CacheTelemetry` SPI |
+> | Management server, REST API and console (not covered here) | [`PEEGEEQ_CACHE_MANAGEMENT_API.md`](PEEGEEQ_CACHE_MANAGEMENT_API.md) and [`PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md`](PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md) |
+> | Benchmarks | [`PEEGEEQ_CACHE_BENCHMARKS.md`](../PEEGEEQ_CACHE_BENCHMARKS.md) |
+>
+> Phase names used below ("Phase 1", "Phase 6", "Phase 8.1", "V2") come from the archived [implementation plan](archive/PEEGEEQ_CACHE_IMPLEMENTATION_PLAN.md).
 
 
 # Design Document
@@ -354,7 +367,7 @@ That means:
 - the **Java API** is the product,
 - PostgreSQL is the first implementation,
 - Vert.x is the async/runtime substrate,
-- any HTTP or TCP server is just an adapter later.
+- any HTTP or TCP server is just an adapter later. *(The management server, `peegee-cache-rest`, has since been added as such an adapter.)*
 
 This avoids the common mistake of building a network daemon first and ending up with a terrible internal API.
 
@@ -439,7 +452,7 @@ Use SQL transactions instead.
 If queue semantics are needed, build a proper queue module later.
 
 ### Do not try to build protocol compatibility first
-Build the Java library first. Network/server adapters can come later.
+Build the Java library first. Network/server adapters can come later. *(The management server was added later in exactly this way.)*
 
 ### Align with PeeGeeQ runtime patterns
 Correct:
@@ -902,10 +915,10 @@ The lifecycle contract is: data acknowledged by write-behind mode is **best-effo
 The following constraints are non-negotiable and must be enforced in the implementation:
 
 1. **`LockService` and `CounterService` MUST NOT be buffered.** Only `CacheService` write operations are eligible.
-2. **UNLOGGED + write-behind is explicitly valid.** Both independently reduce durability guarantees for cache data; combining them is intentional for maximum write throughput on reconstructable entries.
+2. **UNLOGGED + write-behind is explicitly valid.** *(Design intent only: the bundled migration creates logged tables; see §15.)* Both independently reduce durability guarantees for cache data; combining them is intentional for maximum write throughput on reconstructable entries.
 3. **TTL clock starts at buffer-entry time, not flush time.** The flusher adjusts `expires_at` to account for time elapsed in the buffer. Entries whose TTL expires before flush are silently dropped.
-4. **Flush interval must be configured significantly smaller than the minimum TTL of buffered keys.** A flush interval of 500 ms against keys with a TTL of 100 ms is an invalid configuration. The bootstrap options must validate and reject `flushIntervalMillis > minimumTtlMillis` when a minimum TTL is available.
-5. **Shutdown must drain the buffer.** `stopReactive()` must perform a best-effort synchronous drain of all pending writes before closing the pool. Remaining entries that cannot be flushed before a configurable shutdown drain timeout are discarded with a WARNING log.
+4. **Flush interval must be configured significantly smaller than the minimum TTL of buffered keys.** A flush interval of 500 ms against keys with a TTL of 100 ms is an invalid configuration. The bootstrap options must validate and reject `flushIntervalMillis > minimumTtlMillis` when a minimum TTL is available. *(Not implemented: `WriteBehindConfig` carries no minimum TTL, so operators must choose the flush interval themselves.)*
+5. **Shutdown must drain the buffer.** `stopReactive()` must perform a best-effort drain of all pending writes before it completes; the caller-owned pool is closed by the caller afterwards (§12a.9). Remaining entries that cannot be flushed before a configurable shutdown drain timeout are discarded with a WARNING log.
 6. **Concurrent writes to the same key from different callers must not corrupt buffer state.** The buffer must be thread-safe; `ConcurrentHashMap` is the minimum acceptable implementation.
 
 ### 12a.7 API surface
@@ -1025,7 +1038,10 @@ public record WriteBehindConfig(
 - UNLOGGED table deployments where cache data is already explicitly non-durable
 - systems where reducing PostgreSQL write IOPS is a concrete operational requirement
 
-### 12a.11 TDD implementation order
+### 12a.11 TDD implementation order (historical)
+
+*Write-behind is implemented (`WriteBehindBuffer` in `peegee-cache-core`, `WriteBehindConfig` and `WriteBehindCacheService` in `peegee-cache-runtime`); the order below is the plan that was followed.*
+
 
 Strict TDD order for V2 implementation. Each step must pass before the next begins.
 
@@ -1069,16 +1085,23 @@ Strict TDD order for V2 implementation. Each step must pass before the next begi
 
 ---
 
-## 13. Phase 1 module structure
+# Part II — Modules, Schema and Native SQL
+
+## 13. Module structure
+
+The Phase 1 design had seven modules. The reactor now has ten; the three added later are the management console, the management server and the benchmark runners (see [development guidelines §1](../guidelines/PEEGEEQ_CACHE_DEV_GUIDELINES.md#1-module-layering) for the dependency table):
 
 ```text
 peegee-cache-parent
 ├── peegee-cache-api
 ├── peegee-cache-core
+├── peegee-cache-test-support
 ├── peegee-cache-pg
 ├── peegee-cache-runtime
 ├── peegee-cache-observability
-├── peegee-cache-test-support
+├── peegee-cache-management-ui   (added: React management console)
+├── peegee-cache-rest            (added: management server and runnable jar)
+├── peegee-cache-benchmarks      (added: opt-in benchmark runners)
 └── peegee-cache-examples
 ```
 
@@ -1231,6 +1254,8 @@ Use:
 
 ## 15. PostgreSQL schema (Phase 1)
 
+*The shipped schema also contains the migration ledger `schema_migrations`, the mutation functions and the read views `live_entries`, `live_counters` and `active_locks`; [`PEEGEEQ_CACHE_NATIVE_SQL_API.md`](PEEGEEQ_CACHE_NATIVE_SQL_API.md) is the supported contract.*
+
 Use a dedicated schema:
 
 ```sql
@@ -1249,9 +1274,11 @@ Optional later:
 - `peegee_cache.zset_entries`
 - `peegee_cache.queue_entries`
 
-### 14.1 `cache_entries`
+### 15.1 `cache_entries`
 
 For disposable cache data, this table may be created as `UNLOGGED` when the operator explicitly chooses write speed and WAL reduction over crash persistence. That matches real cache semantics well: logically reconstructable data can be lost on crash without violating system truth.
+
+*The bundled `V001` migration creates every table as logged (see §19 and [`PEEGEEQ_CACHE_OPERATIONS.md`](../PEEGEEQ_CACHE_OPERATIONS.md)); there is no supported path to `UNLOGGED`. The recommendation below is the original design intent.*
 
 Default recommendation:
 
@@ -1315,7 +1342,7 @@ The payload `CHECK` is intentionally exclusive, not just permissive:
 - `BYTES` / `STRING` / `JSON` rows must use `value_bytes` only
 - mixed payload rows are rejected at the database layer rather than relying on application discipline
 
-### 14.2 `cache_entries` indexes
+### 15.2 `cache_entries` indexes
 
 Expiry index:
 
@@ -1332,7 +1359,7 @@ CREATE INDEX IF NOT EXISTS idx_cache_entries_namespace_key_pattern
     ON peegee_cache.cache_entries (namespace, cache_key text_pattern_ops);
 ```
 
-### 14.3 `cache_counters`
+### 15.3 `cache_counters`
 
 Counters should not be stuffed into the generic cache table if heavy counter usage is expected.
 
@@ -1364,7 +1391,7 @@ CREATE INDEX IF NOT EXISTS idx_cache_counters_namespace_key_pattern
     ON peegee_cache.cache_counters (namespace, counter_key text_pattern_ops);
 ```
 
-### 14.4 `cache_locks`
+### 15.4 `cache_locks`
 
 Locks are not just cache entries with TTL. They need proper ownership and lease semantics.
 
@@ -1395,7 +1422,7 @@ CREATE INDEX IF NOT EXISTS idx_cache_locks_lease_expires_at
     ON peegee_cache.cache_locks (lease_expires_at);
 ```
 
-### 14.5 Lock fencing token sequence
+### 15.5 Lock fencing token sequence
 
 ```sql
 CREATE SEQUENCE IF NOT EXISTS peegee_cache.lock_fencing_seq;
@@ -1404,6 +1431,8 @@ CREATE SEQUENCE IF NOT EXISTS peegee_cache.lock_fencing_seq;
 ---
 
 ## 16. Native SQL interface
+
+*Superseded by [`PEEGEEQ_CACHE_NATIVE_SQL_API.md`](PEEGEEQ_CACHE_NATIVE_SQL_API.md), which matches the shipped `V001`: the supported read contract is the three views (not the backing tables), and the function set and signatures differ from the list below (for example `acquire_lock` and `increment_counter` each take six parameters, and there are no `get_entry`, `expire_entry`, `persist_entry` or `publish` functions). This section is kept as the original design rationale.*
 
 `peegee-cache` should expose a **native PostgreSQL interface out of the box**, but the support boundary must be explicit.
 
@@ -1527,7 +1556,7 @@ That gives operators and other languages a native SQL path without weakening the
 
 These are the first-cut interfaces for the library.
 
-### 16.1 `CacheService`
+### 17.1 `CacheService`
 
 ```java
 package dev.mars.peegeeq.cache.api.cache;
@@ -1571,7 +1600,7 @@ public interface CacheService {
 }
 ```
 
-### 16.2 `CounterService`
+### 17.2 `CounterService`
 
 ```java
 package dev.mars.peegeeq.cache.api.counter;
@@ -1610,7 +1639,7 @@ public interface CounterService {
 
 **Design note on `CacheKey` reuse:** `CounterService` uses `CacheKey` rather than introducing a separate `CounterKey` type. This is intentional. `CacheKey` is structurally just `(namespace, key)` — a general-purpose composite identifier. Counters and cache entries live in separate tables, so there is no key-space collision. Introducing `CounterKey` with an identical `(namespace, key)` structure would add a type without adding meaning. If counter identity diverges structurally from cache identity in a later phase, a dedicated key type can be introduced then.
 
-### 16.3 `LockService`
+### 17.3 `LockService`
 
 ```java
 package dev.mars.peegeeq.cache.api.lock;
@@ -1639,7 +1668,7 @@ public interface LockService {
 }
 ```
 
-### 16.4 `ScanService`
+### 17.4 `ScanService`
 
 ```java
 package dev.mars.peegeeq.cache.api.scan;
@@ -1656,7 +1685,7 @@ public interface ScanService {
 
 **Scope note:** `ScanService` in Phase 1 covers `cache_entries` only. Scanning counters and locks is deferred to V1 completion (Phase 6) since operational inspection of those tables is lower-frequency. If needed earlier, direct SQL reads against `cache_counters` and `cache_locks` are explicitly supported (see section 16).
 
-### 16.5 `PubSubService`
+### 17.5 `PubSubService`
 
 ```java
 package dev.mars.peegeeq.cache.api.pubsub;
@@ -1718,7 +1747,7 @@ public interface PeeGeeCache {
 
 ## 18. Core public models
 
-### 17.1 `CacheKey`
+### 18.1 `CacheKey`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1745,7 +1774,7 @@ public record CacheKey(String namespace, String key) {
 }
 ```
 
-### 17.2 `LockKey`
+### 18.2 `LockKey`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1766,7 +1795,7 @@ public record LockKey(String namespace, String key) {
 }
 ```
 
-### 17.3 `CacheValue` and `ValueType`
+### 18.3 `CacheValue` and `ValueType`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1837,7 +1866,7 @@ public enum ValueType {
 }
 ```
 
-### 17.4 `CacheEntry`
+### 18.4 `CacheEntry`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1860,7 +1889,7 @@ public record CacheEntry(
 }
 ```
 
-### 17.4a TTL result model
+### 18.4a TTL result model
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1893,7 +1922,7 @@ public record TtlResult(
 }
 ```
 
-### 17.5 `SetMode`
+### 18.5 `SetMode`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1906,7 +1935,7 @@ public enum SetMode {
 }
 ```
 
-### 17.6 `CacheSetRequest`
+### 18.6 `CacheSetRequest`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1923,7 +1952,7 @@ public record CacheSetRequest(
 ) {}
 ```
 
-### 17.7 `CacheSetResult`
+### 18.7 `CacheSetResult`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1937,7 +1966,7 @@ public record CacheSetResult(
 
 `previousEntry` is nullable. When `CacheSetRequest.returnPreviousValue` is false or there was no previous entry, it is null.
 
-### 17.8 `TouchResult`
+### 18.8 `TouchResult`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1948,7 +1977,7 @@ public record TouchResult(
 ) {}
 ```
 
-### 17.9 `CounterOptions`
+### 18.9 `CounterOptions`
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -1976,7 +2005,7 @@ public enum CounterTtlMode {
 }
 ```
 
-### 17.10 Lock models
+### 18.10 Lock models
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -2043,7 +2072,7 @@ public record LockReleaseRequest(
 ) {}
 ```
 
-### 17.11 Scan models
+### 18.11 Scan models
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -2070,7 +2099,7 @@ public record ScanResult(
 ) {}
 ```
 
-### 17.12 Pub/sub models
+### 18.12 Pub/sub models
 
 ```java
 package dev.mars.peegeeq.cache.api.model;
@@ -2093,7 +2122,7 @@ public interface Subscription {
 }
 ```
 
-### 17.13 Exception types
+### 18.13 Exception types
 
 The `dev.mars.peegeeq.cache.api.exception` package should define the following exception hierarchy:
 
@@ -2142,6 +2171,8 @@ Design rules:
 ---
 
 ## 19. Bootstrap and configuration
+
+*The shipped API differs from this Phase 1 design: `PeeGeeCaches.create(vertx, pool)` and `create(vertx, pool, options)` exist; `PeeGeeCacheBootstrapOptions` has five components (`runtimeConfig`, `storeConfig`, `connectOptions`, `telemetry`, `schemaBootstrapMode`) with two-, three- and four-argument constructors and `defaults()`; `PeeGeeCacheConfig` has a fifth component, `WriteBehindConfig writeBehind`; `PeeGeeCacheConfig`, `PgCacheStoreConfig` and the bootstrap options have `defaults()` factories; `SchemaBootstrapMode` is `EXTERNAL` or `APPLY`; `PgPeeGeeCacheManager` lives in `peegee-cache-runtime`. The [README quick start](../../README.md) shows current usage.*
 
 ### Recommended runtime bootstrap shape
 
@@ -2235,7 +2266,8 @@ public record PeeGeeCacheConfig(
         Duration defaultTtl,
         Duration expirySweepInterval,
         int expirySweepBatchSize,
-        boolean enableExpirySweeper
+        boolean enableExpirySweeper,
+        WriteBehindConfig writeBehind
 ) {}
 ```
 
@@ -2280,7 +2312,9 @@ The Phase 1 bootstrap creates logged tables. Any future logged/unlogged choice i
 
 ---
 
-## 20. Internal SPI ideas
+## 20. Internal SPI ideas (historical)
+
+*Superseded. Telemetry is the `CacheTelemetry` SPI in `peegee-cache-core` with Micrometer and OpenTelemetry adapters in `peegee-cache-observability`; metric attributes never include namespaces or keys ([`PEEGEEQ_CACHE_OPERATIONS.md`](../PEEGEEQ_CACHE_OPERATIONS.md)). There is no `MetricsRecorder` or `dev.mars.peegeeq.cache.spi` package.*
 
 These should remain internal or semi-internal, not part of the main business API.
 
@@ -2312,7 +2346,7 @@ public interface MetricsRecorder {
 
 ## 21. Core SQL operations
 
-### 20.1 GET cache entry
+### 21.1 GET cache entry
 
 ```sql
 SELECT
@@ -2333,7 +2367,7 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 20.2 EXISTS
+### 21.2 EXISTS
 
 ```sql
 SELECT EXISTS (
@@ -2345,7 +2379,7 @@ SELECT EXISTS (
 );
 ```
 
-### 20.3 DELETE
+### 21.3 DELETE
 
 ```sql
 DELETE FROM peegee_cache.cache_entries
@@ -2353,7 +2387,7 @@ WHERE namespace = $1
   AND cache_key = $2;
 ```
 
-### 20.4 UPSERT set
+### 21.4 UPSERT set
 
 ```sql
 INSERT INTO peegee_cache.cache_entries (
@@ -2407,7 +2441,7 @@ Step 2: perform the upsert as above.
 
 Both steps must run inside the same database transaction. The repository layer should only execute step 1 when `returnPreviousValue = true` to avoid unnecessary row-locking overhead.
 
-### 20.5 SET if absent (`NX` semantics)
+### 21.5 SET if absent (`NX` semantics)
 
 Naive insert:
 
@@ -2447,7 +2481,7 @@ WHERE namespace = $1
 
 Then insert in the same transaction.
 
-### 20.6 SET only if present (`XX` semantics)
+### 21.6 SET only if present (`XX` semantics)
 
 ```sql
 UPDATE peegee_cache.cache_entries
@@ -2464,7 +2498,7 @@ WHERE namespace = $1
 RETURNING version;
 ```
 
-### 20.7 SET only if version matches
+### 21.7 SET only if version matches
 
 ```sql
 UPDATE peegee_cache.cache_entries
@@ -2482,7 +2516,7 @@ WHERE namespace = $1
 RETURNING version;
 ```
 
-### 20.8 TTL lookup
+### 21.8 TTL lookup
 
 ```sql
 SELECT
@@ -2502,7 +2536,7 @@ This query maps directly to `TtlResult`:
 - row returned with `expires_at IS NULL` -> `TtlResult.persistent()`
 - row returned with positive remaining time -> `TtlResult.expiring(ttlMillis)`
 
-### 20.9 EXPIRE existing key
+### 21.9 EXPIRE existing key
 
 ```sql
 UPDATE peegee_cache.cache_entries
@@ -2515,7 +2549,7 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 20.10 PERSIST existing key
+### 21.10 PERSIST existing key
 
 ```sql
 UPDATE peegee_cache.cache_entries
@@ -2528,7 +2562,7 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 20.11 TOUCH existing key
+### 21.11 TOUCH existing key
 
 `touch()` resets both the TTL to the provided duration and updates `last_accessed_at`. It does **not** change the stored value, value type, or version. It is a lightweight metadata-only update used for keep-alive and access-tracking scenarios.
 
@@ -2559,7 +2593,7 @@ Return mapping:
 
 If `$3` (ttl millis) is `NULL`, the existing TTL is preserved and only `last_accessed_at` is refreshed.
 
-### 20.12 SCAN by namespace/prefix
+### 21.12 SCAN by namespace/prefix
 
 Do **not** use offset pagination.
 
@@ -2591,7 +2625,7 @@ Cursor should be opaque to callers, even if internally it carries namespace/pref
 
 ## 22. Counter SQL operations
 
-### 21.1 GET counter
+### 22.1 GET counter
 
 ```sql
 SELECT counter_value
@@ -2601,7 +2635,7 @@ WHERE namespace = $1
   AND (expires_at IS NULL OR expires_at > NOW());
 ```
 
-### 21.2 INCREMENT with create-if-missing
+### 22.2 INCREMENT with create-if-missing
 
 Counter TTL policy is **not** implicit. It is controlled by `CounterOptions.ttlMode`.
 
@@ -2650,7 +2684,7 @@ expires_at = NULL
 
 If `ttlMode = REPLACE`, the API should reject null `ttl` rather than silently converting that case into `REMOVE`.
 
-### 21.2a INCREMENT without create (`createIfMissing = false`)
+### 22.2a INCREMENT without create (`createIfMissing = false`)
 
 When `CounterOptions.createIfMissing` is `false`, use a pure `UPDATE` with no insert fallback. If the counter does not exist, zero rows are affected and the operation returns empty.
 
@@ -2668,7 +2702,7 @@ RETURNING counter_value, version;
 
 The caller should treat zero affected rows as "counter does not exist" and fail the future with an appropriate error or return `Optional.empty()` depending on the API contract.
 
-### 21.3 Delete expired counter then increment
+### 22.3 Delete expired counter then increment
 
 For correct semantics:
 
@@ -2684,7 +2718,7 @@ Then do the upsert in the same transaction.
 
 **Concurrency note:** When two transactions concurrently encounter an expired counter row, both may attempt the delete-then-upsert sequence. One transaction will delete the expired row and insert a fresh counter. The other will find the row already gone (delete affects zero rows) and also insert, hitting the `ON CONFLICT` clause and updating. The net effect is correct — both increments are applied — but the counter resets to the new initial value before the second increment rather than continuing from the old expired value. This is the intended semantic: an expired counter is logically absent, so concurrent post-expiry increments both start from the initial value.
 
-### 21.4 Set exact counter value
+### 22.4 Set exact counter value
 
 ```sql
 INSERT INTO peegee_cache.cache_counters (
@@ -2714,7 +2748,7 @@ RETURNING counter_value, version;
 
 Locks should be lease-based only. No permanent locks.
 
-### 22.1 Acquire lock if absent or expired
+### 23.1 Acquire lock if absent or expired
 
 Use a positive lease TTL parameter, not a caller-computed absolute timestamp. That keeps lock correctness tied to the database clock and avoids skew between application nodes.
 
@@ -2778,7 +2812,7 @@ ON CONFLICT (namespace, lock_key) DO NOTHING
 RETURNING namespace, lock_key, owner_token, fencing_token, lease_expires_at;
 ```
 
-### 22.2 Reentrant acquire by same owner (optional)
+### 23.2 Reentrant acquire by same owner (optional)
 
 ```sql
 UPDATE peegee_cache.cache_locks
@@ -2793,7 +2827,7 @@ WHERE namespace = $1
 RETURNING namespace, lock_key, owner_token, fencing_token, lease_expires_at;
 ```
 
-### 22.3 Renew lease only by owner
+### 23.3 Renew lease only by owner
 
 ```sql
 UPDATE peegee_cache.cache_locks
@@ -2808,7 +2842,7 @@ WHERE namespace = $1
 RETURNING lease_expires_at;
 ```
 
-### 22.4 Release only by owner
+### 23.4 Release only by owner
 
 ```sql
 DELETE FROM peegee_cache.cache_locks
@@ -2817,7 +2851,7 @@ WHERE namespace = $1
   AND owner_token = $3;
 ```
 
-### 22.5 Read current lock if active
+### 23.5 Read current lock if active
 
 ```sql
 SELECT
@@ -2939,7 +2973,9 @@ Practical meaning:
 
 ---
 
-## 27. First-cut PostgreSQL implementation classes
+## 27. First-cut PostgreSQL implementation classes (historical)
+
+*The plan below predates the implementation; for example `PgPeeGeeCacheManager` lives in `peegee-cache-runtime`, not `peegee-cache-pg`.*
 
 Expected classes in `peegee-cache-pg`:
 
@@ -2974,7 +3010,9 @@ PeeGeeCacheLifecycle
 
 ---
 
-## 28. Bootstrap file structure
+## 28. Bootstrap file structure (historical)
+
+*The six planned files were consolidated before release into one baseline, `peegee-cache-pg/src/main/resources/db/bootstrap/V001__create_peegee_cache_schema.sql`, applied by `PgSchemaMigrator` in `APPLY` mode; see [`PEEGEEQ_CACHE_NATIVE_SQL_API.md`](PEEGEEQ_CACHE_NATIVE_SQL_API.md).*
 
 Recommended bootstrap files:
 
@@ -2991,7 +3029,9 @@ That is cleaner than a single giant bootstrap script.
 
 ---
 
-## 29. Recommended next steps
+## 29. Recommended next steps (historical)
+
+*All of these steps have been carried out; the list is kept as a record of the original sequence.*
 
 The design work should proceed in this order:
 
@@ -3149,6 +3189,8 @@ It is a **transactional cache + lock + counter + lightweight coordination servic
 
 ---
 # Appendix A - Real World Views
+
+*Reviewer commentary on the design, not part of the design.*
 
 **Real-world views**
 
