@@ -1139,5 +1139,6 @@ Related documents:
 
 - [Screenshot publication and regeneration](screenshots/README.md)
 - [Management server operations](../../docs/PEEGEEQ_CACHE_MANAGEMENT_OPERATIONS.md)
-- [Management UI implementation plan](../../docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md)
-- [Browser verification and screenshot evidence](../../docs/design/PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md)
+- [Management UI design](../../docs/design/PEEGEEQ_CACHE_MANAGEMENT_UI_DESIGN.md)
+- [Browser screenshot evidence rules](../../docs/guidelines/PEEGEEQ_CACHE_TEST_COVERAGE_AND_TDD_APPROACH.md#browser-screenshot-evidence)
+- Historical: [UI implementation plan](../../docs/design/archive/PEEGEEQ_CACHE_MANAGEMENT_UI_IMPLEMENTATION_PLAN.md) and [Playwright implementation plan](../../docs/design/archive/PEEGEEQ_CACHE_PLAYWRIGHT_IMPLEMENTATION_PLAN.md) (archived)
