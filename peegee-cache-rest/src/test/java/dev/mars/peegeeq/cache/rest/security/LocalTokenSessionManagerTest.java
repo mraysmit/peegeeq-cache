@@ -34,6 +34,8 @@ class LocalTokenSessionManagerTest {
 
         assertEquals("local-operator", session.identity().actor());
         assertEquals(java.util.Set.of("operator", "viewer"), session.identity().roles());
+        assertEquals(InetAddress.getLoopbackAddress().getHostAddress(), session.identity().sourceAddress());
+        assertTrue(InetAddress.getByName(session.identity().sourceAddress()).isLoopbackAddress());
         assertTrue(session.cookie().httpOnly());
         assertTrue(session.cookie().secure());
         assertEquals("Strict", session.cookie().sameSite());

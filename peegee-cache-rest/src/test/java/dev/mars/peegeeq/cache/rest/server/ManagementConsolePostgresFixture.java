@@ -314,14 +314,15 @@ final class ManagementConsolePostgresFixture {
                 int managementPort = freePort();
                 String origin = "http://127.0.0.1:" + managementPort;
                 ManagementSecretReference auditKey = new ManagementSecretReference("audit-key");
+                InetAddress databaseAddress = InetAddress.getByName(postgres.getHost());
                 SetupTargetPolicy targetPolicy = new SetupTargetPolicy(
                         Set.of("internal.example"),
-                        Set.of("127.0.0.0/8"),
+                        Set.of(exactAddressCidr(databaseAddress)),
                         Set.of(postgres.getMappedPort(5432)),
                         true,
-                        false,
-                        false,
-                        false,
+                        true,
+                        true,
+                        true,
                         Set.of("test-ca"));
                 boolean trustedProxy = !trustedProxyHeaders.isEmpty();
                 ManagementServerConfiguration configuration = trustedProxy
@@ -332,7 +333,6 @@ final class ManagementConsolePostgresFixture {
                         targetPolicy, auditPath, auditKey)
                         : ManagementServerConfiguration.localToken(
                         "127.0.0.1", managementPort, origin, targetPolicy, auditPath, auditKey);
-                InetAddress databaseAddress = InetAddress.getByName(postgres.getHost());
                 Buffer serverCertificate = certificate();
                 application = await(ManagementServerApplication.start(
                         configuration,
@@ -738,6 +738,10 @@ final class ManagementConsolePostgresFixture {
         try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             return socket.getLocalPort();
         }
+    }
+
+    private static String exactAddressCidr(InetAddress address) {
+        return address.getHostAddress() + "/" + address.getAddress().length * Byte.SIZE;
     }
 
     private static <T> T await(Future<T> future) throws Exception {

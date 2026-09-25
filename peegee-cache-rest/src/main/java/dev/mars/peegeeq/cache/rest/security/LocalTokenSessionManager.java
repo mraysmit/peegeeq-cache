@@ -75,7 +75,8 @@ public final class LocalTokenSessionManager implements AutoCloseable {
                 csrfSecret,
                 now,
                 now,
-                secureTransport);
+                secureTransport,
+                immediatePeer.getHostAddress());
         return snapshot(rawSession, session);
     }
 
@@ -152,7 +153,7 @@ public final class LocalTokenSessionManager implements AutoCloseable {
                 "Strict",
                 idleExpiry);
         AuthenticatedManagementIdentity identity = new AuthenticatedManagementIdentity(
-                "local-operator", Set.of("operator", "viewer"), "loopback");
+                "local-operator", Set.of("operator", "viewer"), state.sourceAddress);
         return new LocalManagementSession(
                 identity,
                 ManagementAuthenticationMode.LOCAL_TOKEN,
@@ -221,18 +222,21 @@ public final class LocalTokenSessionManager implements AutoCloseable {
         private final Instant createdAt;
         private Instant lastSeenAt;
         private final boolean secureTransport;
+        private final String sourceAddress;
 
         private SessionState(
                 byte[] sessionDigest,
                 byte[] csrfSecret,
                 Instant createdAt,
                 Instant lastSeenAt,
-                boolean secureTransport) {
+                boolean secureTransport,
+                String sourceAddress) {
             this.sessionDigest = sessionDigest;
             this.csrfSecret = csrfSecret;
             this.createdAt = createdAt;
             this.lastSeenAt = lastSeenAt;
             this.secureTransport = secureTransport;
+            this.sourceAddress = sourceAddress;
         }
     }
 }
