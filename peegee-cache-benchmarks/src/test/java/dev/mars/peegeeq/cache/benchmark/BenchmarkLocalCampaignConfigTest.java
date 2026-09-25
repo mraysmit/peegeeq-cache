@@ -27,9 +27,9 @@ class BenchmarkLocalCampaignConfigTest {
         assertEquals(List.of(25.0, 50.5), config.offeredRates());
         assertEquals(Duration.ofMillis(200), config.phaseDuration());
         assertEquals(2, config.repetitions());
-        assertEquals(Path.of("C:/repo/benchmark-results/test-run").normalize(),
-                BenchmarkLocalCampaignMain.resolveOutputDirectory(config,
-                        Path.of("C:/repo").toAbsolutePath().normalize()));
+        Path repositoryRoot = Path.of("repo").toAbsolutePath().normalize();
+        assertEquals(repositoryRoot.resolve("benchmark-results/test-run"),
+                BenchmarkLocalCampaignMain.resolveOutputDirectory(config, repositoryRoot));
     }
 
     @Test
