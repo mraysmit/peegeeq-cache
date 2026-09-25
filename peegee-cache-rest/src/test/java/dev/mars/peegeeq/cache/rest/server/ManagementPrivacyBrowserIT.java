@@ -7,11 +7,15 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
+
+import javax.imageio.ImageIO;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -117,7 +121,7 @@ class ManagementPrivacyBrowserIT {
             case 9 -> {
                 page.evaluate("document.activeElement.blur()");
                 byte[] afterHide = page.locator(".value-panel").screenshot();
-                assertArrayEquals(maskedScreenshot, afterHide,
+                assertArrayEquals(pixels(maskedScreenshot), pixels(afterHide),
                         "The sensitive panel must return to its exact masked visual state");
             }
             case 10 -> {
@@ -134,6 +138,11 @@ class ManagementPrivacyBrowserIT {
             }
             default -> throw new IllegalArgumentException("Unknown privacy scenario " + index);
         }
+    }
+
+    private static int[] pixels(byte[] png) throws Exception {
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(png));
+        return image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
     }
 
     private static void openEntry(Page page) {

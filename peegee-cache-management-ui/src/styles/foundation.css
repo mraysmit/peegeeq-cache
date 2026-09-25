@@ -169,6 +169,10 @@ body {
   color: #246b18;
 }
 
+.console .ant-tag-gold {
+  color: #874d00;
+}
+
 .console time {
   color: var(--muted);
 }

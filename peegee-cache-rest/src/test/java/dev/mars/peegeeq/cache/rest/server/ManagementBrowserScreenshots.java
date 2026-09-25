@@ -78,18 +78,30 @@ final class ManagementBrowserScreenshots {
         }
         try {
             Files.createDirectories(directory);
-            focus.scrollIntoViewIfNeeded();
+            settleRenderedPixels(page);
             Path viewport = directory.resolve(stem + "-viewport.png");
             Path element = directory.resolve(stem + "-element.png");
             page.screenshot(new Page.ScreenshotOptions().setPath(viewport).setFullPage(false)
                     .setAnimations(ScreenshotAnimations.DISABLED));
-            focus.screenshot(new Locator.ScreenshotOptions().setPath(element)
-                    .setAnimations(ScreenshotAnimations.DISABLED));
+            if (focus.isVisible()) {
+                focus.scrollIntoViewIfNeeded();
+                focus.screenshot(new Locator.ScreenshotOptions().setPath(element)
+                        .setAnimations(ScreenshotAnimations.DISABLED));
+            } else {
+                Files.copy(viewport, element);
+            }
             return List.of(new ManagementBrowserEvidenceReport.Screenshot("viewport", viewport),
                     new ManagementBrowserEvidenceReport.Screenshot("element", element));
         } catch (IOException failure) {
             throw new UncheckedIOException("Could not save scenario screenshots", failure);
         }
+    }
+
+    private static void settleRenderedPixels(Page page) {
+        page.evaluate("""
+                () => new Promise(resolve => requestAnimationFrame(() =>
+                  requestAnimationFrame(resolve)))
+                """);
     }
 
     static final class CaptureScope implements AutoCloseable {

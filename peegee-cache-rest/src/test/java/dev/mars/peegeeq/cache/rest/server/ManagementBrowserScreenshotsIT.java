@@ -112,6 +112,25 @@ class ManagementBrowserScreenshotsIT {
     }
 
     @Test
+    void usesStableViewportPixelsWhenFocusedEvidenceIsNotVisible() throws Exception {
+        try (Fixture fixture = new Fixture("<main style=\"display:none\">Hidden</main>");
+             BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext(
+                     new Browser.NewContextOptions().setViewportSize(1440, 900))) {
+            var page = context.newPage();
+            page.navigate(fixture.url());
+
+            var images = ManagementBrowserScreenshots.capture(page, page.locator("main"),
+                    directory, "PW-TEST-004-01");
+
+            assertEquals(2, images.size());
+            assertEquals("viewport", images.getFirst().kind());
+            assertEquals("element", images.getLast().kind());
+            assertArrayEquals(Files.readAllBytes(images.getFirst().path()),
+                    Files.readAllBytes(images.getLast().path()));
+        }
+    }
+
+    @Test
     void artifactWriteFailureIsAnAcceptanceFailure() throws Exception {
         try (Fixture fixture = new Fixture("<main>Ready</main>");
              BrowserContext context = ManagementBrowserPlaywrightSuite.browser().newContext()) {
