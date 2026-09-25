@@ -27,7 +27,7 @@ class ManagementBrowserScreenshotsIT {
     @Test
     void capturesActualBrowserPixelsWithoutMaskingOrChangingDomState() throws Exception {
         try (Fixture fixture = new Fixture("""
-                    <main style="width:500px;height:500px"><h1>Capture fixture</h1>
+                    <main style="width:500px;height:500px;background:#fff"><h1>Capture fixture</h1>
                     <input type="password" value="password-canary">
                     <textarea>payload-canary</textarea><pre>revealed-canary</pre>
                     <p id="secret">token-canary-AA</p>
@@ -72,6 +72,7 @@ class ManagementBrowserScreenshotsIT {
             page.locator("pre").evaluate("element => element.textContent = 'different-reveal'");
             page.locator(".json-tree dd").evaluate("element => element.textContent = 'private-BB'");
             page.locator(".value-formatter code").evaluate("element => element.textContent = 'scalar-BB'");
+            page.locator("main").evaluate("element => element.style.backgroundColor = 'rgb(255, 0, 255)'");
             page.locator("button").focus();
             page.locator("button").evaluate("element => element.blur()");
             var changed = ManagementBrowserScreenshots.capture(page, page.locator("main"),
